@@ -1,0 +1,130 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * script-ui serve [folder] [--host=127.0.0.1] [--port=8765]
+ *
+ * Serves the PHP files of a folder as tools, with PHP's built-in web server.
+ * Meant for your own machine. On a real server, call Runio\ScriptUi\serve() from a
+ * script behind your web server and give it a login check.
+ */
+
+if (PHP_SAPI !== 'cli') {
+    exit(1);
+}
+
+$autoload = null;
+foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $candidate) {
+    if (is_file($candidate)) {
+        $autoload = (string) realpath($candidate);
+        break;
+    }
+}
+
+$fail = static function (string $message): never {
+    fwrite(STDERR, $message . PHP_EOL);
+    exit(1);
+};
+
+$usage = <<<'TEXT'
+    Usage: script-ui serve [folder] [--host=127.0.0.1] [--port=8765]
+
+      folder   the folder with your tool files (default: ./tools)
+      --host   the address to listen on (default: 127.0.0.1, this computer only)
+      --port   the port to listen on (default: 8765)
+
+    TEXT;
+
+$arguments = array_slice($argv, 1);
+$command = array_shift($arguments);
+
+if ($command === null || in_array($command, ['help', '--help', '-h'], true)) {
+    echo $usage;
+    exit(0);
+}
+if ($command !== 'serve') {
+    $fail('Unknown command "' . $command . '".' . PHP_EOL . PHP_EOL . $usage);
+}
+if ($autoload === null) {
+    $fail('The Composer autoloader was not found. Run "composer install" first.');
+}
+
+$folder = 'tools';
+$host = '127.0.0.1';
+$port = 8765;
+
+foreach ($arguments as $argument) {
+    if (preg_match('/^--port=(\d{1,5})$/D', $argument, $match) === 1) {
+        $port = (int) $match[1];
+    } elseif (preg_match('/^--host=([A-Za-z0-9.:\[\]-]+)$/D', $argument, $match) === 1) {
+        $host = $match[1];
+    } elseif (!str_starts_with($argument, '-')) {
+        $folder = $argument;
+    } else {
+        $fail('Unknown option "' . $argument . '".' . PHP_EOL . PHP_EOL . $usage);
+    }
+}
+
+if ($port < 1 || $port > 65535) {
+    $fail('The port has to be between 1 and 65535.');
+}
+
+$directory = realpath($folder);
+if ($directory === false || !is_dir($directory)) {
+    $fail('The folder "' . $folder . '" does not exist.');
+}
+
+putenv('SCRIPT_UI_TOOLS=' . $directory);
+putenv('SCRIPT_UI_AUTOLOAD=' . $autoload);
+
+$command = [PHP_BINARY, '-S', $host . ':' . $port];
+
+// Browsers send a cookie to every port of a host. With PHP's usual cookie name,
+// this server and every other PHP site on localhost would keep replacing each
+// other's session, and you would be logged out there and get "expired" pages here.
+$command[] = '-d';
+$command[] = 'session.name=script_ui_' . $port;
+
+// Sessions need a place this user may write to.
+$sessions = session_save_path();
+if ($sessions === '' || !is_writable($sessions)) {
+    $owner = function_exists('posix_geteuid') ? posix_geteuid() : null;
+    $sessions = sys_get_temp_dir() . '/script-ui-sessions-' . ($owner === null ? '' : $owner . '-') . substr(hash('sha256', $directory), 0, 12);
+    if (!is_dir($sessions) && !@mkdir($sessions, 0700, true) && !is_dir($sessions)) {
+        $fail('Could not create a folder for sessions at ' . $sessions);
+    }
+    // Session files decide who is who. A folder that somebody else prepared is not used.
+    if (is_link($sessions) || ($owner !== null && fileowner($sessions) !== $owner)) {
+        $fail('The folder for sessions at ' . $sessions . ' was not made by you. Remove it, or set session.save_path in php.ini.');
+    }
+    @chmod($sessions, 0700);
+    $command[] = '-d';
+    $command[] = 'session.save_path=' . $sessions;
+}
+
+$command[] = (string) realpath(__DIR__ . '/../resources/router.php');
+
+$local = in_array($host, ['127.0.0.1', 'localhost', '::1', '[::1]'], true);
+
+echo 'Script UI is serving ' . $directory . PHP_EOL;
+echo '  http://' . ($local ? 'localhost' : $host) . ':' . $port . PHP_EOL . PHP_EOL;
+echo ($local
+    ? 'Only this computer can open it.'
+    : 'Listening on ' . $host . '. Without a login check the tools still only answer to this computer.') . PHP_EOL;
+echo 'Add a login check (auth) before you put a proxy or a tunnel in front of it.' . PHP_EOL;
+echo 'Press Ctrl+C to stop.' . PHP_EOL . PHP_EOL;
+
+// Become the web server where the system allows it. Then Ctrl+C and a kill signal
+// reach the server itself and no helper process is left behind.
+if (function_exists('pcntl_exec')) {
+    pcntl_exec($command[0], array_slice($command, 1));
+}
+
+$process = proc_open($command, [STDIN, STDOUT, STDERR], $pipes);
+if (!is_resource($process)) {
+    $fail('Could not start the PHP web server.');
+}
+
+exit(proc_close($process));

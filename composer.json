@@ -39,8 +39,15 @@
             "Runio\\ScriptUi\\Tests\\": "tests/"
         }
     },
+    "bin": [
+        "bin/script-ui"
+    ],
     "scripts": {
-        "test": "phpunit"
+        "test": "phpunit",
+        "serve": [
+            "Composer\\Config::disableProcessTimeout",
+            "@php bin/script-ui serve examples/tools"
+        ]
     },
     "config": {
         "sort-packages": true

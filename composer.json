@@ -1,0 +1,45 @@
+{
+    "name": "runio/script-ui",
+    "description": "Turn one PHP script into an internal tool with a web UI. No HTML, no JavaScript, no controller.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "internal-tools",
+        "admin",
+        "back-office",
+        "dashboard",
+        "ui",
+        "script",
+        "rtl",
+        "arabic"
+    ],
+    "homepage": "https://github.com/RunIO-dev/runio-script-ui",
+    "support": {
+        "issues": "https://github.com/RunIO-dev/runio-script-ui/issues",
+        "source": "https://github.com/RunIO-dev/runio-script-ui"
+    },
+    "require": {
+        "php": ">=8.2",
+        "ext-mbstring": "*",
+        "ext-session": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.5 || ^12.0 || ^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Runio\\ScriptUi\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Runio\\ScriptUi\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "config": {
+        "sort-packages": true
+    }
+}

@@ -1,0 +1,4 @@
+/vendor/
+/.phpunit.cache/
+/examples/var/
+composer.lock

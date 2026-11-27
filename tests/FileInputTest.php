@@ -924,6 +924,46 @@ final class FileInputTest extends ToolTestCase
         self::assertSame('row 500', $this->texts($less, '//table//tbody/tr[1]/td')[0]);
     }
 
+    // --------------------------------------------------------------- the rows
+
+    public function testAnUploadedCsvFileIsReadAsRows(): void
+    {
+        $rows = null;
+        $tool = function () use (&$rows): void {
+            $file = file_input('Report', types: ['csv']);
+            $rows = $file?->rows();
+        };
+
+        // As a German Excel saves it: semicolons, a mark at the start, Windows line ends.
+        $this->post($tool, files: ['report' => $this->arrived('orders.csv', "\xEF\xBB\xBFemail;Betrag\r\nava@example.com;1,50\r\n\r\n")]);
+
+        self::assertSame([['email' => 'ava@example.com', 'Betrag' => '1,50']], $rows);
+    }
+
+    public function testTheSeparatorAndTheEncodingOfTheRowsCanBeNamed(): void
+    {
+        $rows = null;
+        $tool = function () use (&$rows): void {
+            $rows = file_input('Report')?->rows(separator: '|', encoding: 'ISO-8859-1');
+        };
+
+        $this->post($tool, files: ['report' => $this->arrived('names.txt', "name|ort\nM\xFCller|K\xF6ln\n")]);
+
+        self::assertSame([['name' => 'Müller', 'ort' => 'Köln']], $rows);
+    }
+
+    public function testAnUploadThatIsNotTextHasNoRows(): void
+    {
+        $rows = null;
+        $tool = function () use (&$rows): void {
+            $rows = file_input('Report')?->rows();
+        };
+
+        $this->post($tool, files: ['report' => $this->arrived('photo.csv', "\x89PNG\r\n\x1A\n\0\0\0\rIHDR")]);
+
+        self::assertSame([], $rows);
+    }
+
     // ---------------------------------------------------------------- the log
 
     public function testTheLogSaysWhichFileAButtonGot(): void

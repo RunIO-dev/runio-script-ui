@@ -47,6 +47,41 @@ final class Upload
     }
 
     /**
+     * The rows of a CSV file: the first line names the columns, and every other
+     * line becomes one row, name => text.
+     *
+     *     foreach ($file->rows() as $row) {
+     *         $orders->add($row['email'], (float) $row['total']);
+     *     }
+     *
+     * It reads what spreadsheets write: cells apart by ",", ";" or a tab, with or
+     * without the mark for UTF-8, in UTF-8, in UTF-16 or in the Western Windows
+     * encoding of older versions of Excel. Empty lines are left out, and a line
+     * that ends early gets empty cells. Every cell is text and stays as it is
+     * in the file: "007" is not 7, and "1,50" is not a number yet.
+     *
+     * A file that is not text has no rows. The file comes from a user, so look
+     * whether the columns you need are there before you use them.
+     *
+     * The whole file is read into memory. Read a very large file from path
+     * yourself, line by line.
+     *
+     * @param string|null $separator what stands between two cells: ",", ";", "|", ":" or a tab.
+     *                               null: found out from the first lines
+     * @param string|null $encoding  for a file in another encoding, such as "Windows-1256" for
+     *                               Arabic from an older Excel. null: found out as far as that goes
+     *
+     * @return list<array<array-key,string>>
+     *
+     * @throws \RuntimeException         when the file is no longer there
+     * @throws \InvalidArgumentException for a separator or an encoding that cannot be used
+     */
+    public function rows(?string $separator = null, ?string $encoding = null): array
+    {
+        return Csv::read($this->contents(), $separator, $encoding);
+    }
+
+    /**
      * Copies the file to a place where it stays.
      *
      * The name of the new file is yours to choose. When you build it from the

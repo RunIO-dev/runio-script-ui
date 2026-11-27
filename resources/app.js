@@ -108,6 +108,20 @@
     }
   };
 
+  // Hands a file to the browser to save, as if the user had followed a download link.
+  const save = (blob, name) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = name;
+    link.hidden = true;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    // The browser needs the address until it has started saving.
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  };
+
   const run = (submitter) => {
     const action = Boolean(submitter && submitter.name);
 
@@ -142,9 +156,35 @@
       // Ask for the content of the page only, without the frame around it.
       headers: { 'X-Script-Ui': 'fragment' },
     })
-      .then((response) => response.text().then((html) => ({ response, html })))
-      .then(({ response, html }) => {
+      .then((response) => {
+        // A download button was pressed and the answer is the file, not the page.
+        const file = response.headers.get('X-Script-Ui-Download');
+        return file === null
+          ? response.text().then((html) => ({ response, html }))
+          : response.blob().then((blob) => ({ response, blob, file }));
+      })
+      .then(({ response, html, blob, file }) => {
         if (id !== serial) return;
+
+        if (blob) {
+          let name = 'download';
+          try {
+            name = decodeURIComponent(file) || name;
+          } catch (error) { /* keep the plain name */ }
+
+          offline(false);
+          save(blob, name);
+
+          // The page was locked while the file was made. Give the focus back to the button.
+          body.inert = false;
+          const pressed = origin && document.getElementById(origin.id);
+          if (pressed) pressed.focus({ preventScroll: true });
+
+          // The file was made from what the form holds now. If the page still shows
+          // an older answer, the run below brings it up to date.
+          queued = true;
+          return;
+        }
 
         if (response.headers.get('X-Script-Ui-Fragment') !== '1') {
           // Not the content of a tool: the session expired or access was taken away.

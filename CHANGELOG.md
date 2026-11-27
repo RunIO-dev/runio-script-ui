@@ -13,6 +13,7 @@ First version. Requires PHP 8.2+ with the mbstring and session extensions, and n
 - Inputs that return their current value: `text`, `textarea`, `number`, `select`, `checkbox`, `date_input`.
 - `table` with sorting and rows you can tick, and `chart` with bar and line charts drawn as SVG.
 - `button` with an optional question before it acts, plus `columns`, `stop` and `rerun`.
+- `download` hands the user a file: rows as CSV or JSON, or any text. `csv` writes rows as CSV with a choice of columns and separator. Cells that a spreadsheet would run as a formula are defused.
 - `serve()` for a folder of tools with an index page, `configure()` for a script on its own, and the `script-ui serve` command for local use.
 - A login check and an audit log (`auth`, `log`), protection against forged requests, a strict Content-Security-Policy, and local-only access while no login check is set.
 - Pages update in place with JavaScript and work as plain forms without it. A title in Arabic or Hebrew turns the page right to left.

@@ -4,7 +4,7 @@
 
 require_once __DIR__ . '/_shop.php';
 
-use function Runio\ScriptUi\{title, heading, columns, text, select, number, checkbox, date_input, table, json, link, note};
+use function Runio\ScriptUi\{title, heading, columns, text, select, number, checkbox, date_input, table, download, json, link, note};
 
 $shop = Shop::open();
 $customers = $shop->customers();
@@ -45,6 +45,11 @@ $picked = table(
     rowKey: 'email',   // a customer has no id column; the email tells them apart
     empty: 'No customer matches these filters.',
 );
+
+// The file holds what the filters above leave, with every column.
+if ($found !== []) {
+    download('Download as CSV', $found, 'customers.csv');
+}
 
 if (count($picked) === 1) {
     $customer = $picked[0];

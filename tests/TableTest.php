@@ -85,6 +85,16 @@ final class TableTest extends ToolTestCase
         self::assertStringContainsString('sui-num', (string) $this->attr($response, '//table//tbody/tr[1]/td[5]', 'class'));
     }
 
+    public function testNumbersThatAreNoNumbersAreShownAsSuch(): void
+    {
+        // PHP 8.5 warns when "not a number" is turned into text. The table names it without a warning.
+        $response = $this->get(function (): void {
+            table([['ratio' => NAN, 'up' => INF, 'down' => -INF]]);
+        });
+
+        self::assertSame(['NAN', 'INF', '-INF'], $this->texts($response, '//table//tbody/tr[1]/td'));
+    }
+
     public function testCellsAreEscaped(): void
     {
         $response = $this->get(function (): void {

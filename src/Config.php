@@ -16,7 +16,10 @@ final class Config
      */
     public readonly ?\Closure $auth;
 
-    /** Called once for every button a user presses, with an array describing the action. */
+    /**
+     * Called once for every button a user presses and every file a user downloads, with an array describing the action.
+     * When it throws or returns false, the entry counts as not written, and a download is not sent.
+     */
     public readonly ?\Closure $log;
 
     /**

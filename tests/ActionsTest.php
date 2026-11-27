@@ -258,6 +258,7 @@ final class ActionsTest extends ToolTestCase
         self::assertFalse($entry['confirmed']);
         self::assertSame(['customer-email' => 'ava@example.com'], $entry['inputs']);
         self::assertNull($entry['error']);
+        self::assertNull($entry['download'], 'a button hands out no file');
     }
 
     public function testNothingIsLoggedUntilTheQuestionIsAnswered(): void

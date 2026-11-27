@@ -477,6 +477,16 @@ input[type="checkbox"] {
   cursor: progress;
 }
 
+/* A download button shows an arrow onto a line before its label. */
+.sui-btn-download::before {
+  content: "\2193";
+  display: inline-block;
+  margin-inline-end: 8px;
+  border-bottom: 2px solid currentColor;
+  font-weight: 400;
+  line-height: 1;
+}
+
 .sui-confirm {
   display: flex;
   flex-direction: column;

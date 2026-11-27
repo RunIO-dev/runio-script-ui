@@ -1,13 +1,13 @@
 <?php
 // Audit log
-// Every button press, who pressed it and with which inputs.
+// Every button press and every download, who it was and with which inputs.
 
 require_once __DIR__ . '/_shop.php';
 
 use function Runio\ScriptUi\{title, note, table, button, success, rerun};
 
 title('Audit log');
-note('The "log" setting in _config.php is called for every button a user presses. This demo writes one line per action to examples/var/audit.log.');
+note('The "log" setting in _config.php is called for every button a user presses and for every file a user downloads. This demo writes one line per action to examples/var/audit.log.');
 
 $file = __DIR__ . '/../var/audit.log';
 $entries = [];
@@ -21,6 +21,7 @@ foreach (is_file($file) ? array_reverse(file($file, FILE_IGNORE_NEW_LINES | FILE
             'tool' => $entry['tool'],
             'action' => $entry['action'],
             'confirmed' => $entry['confirmed'],
+            'file' => $entry['download']['file'] ?? null,
             'inputs' => $entry['inputs'],
         ];
     }

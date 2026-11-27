@@ -238,6 +238,58 @@ function button(
     return Runtime::page()->button($label, $style, $confirm, $yes, $no, $key);
 }
 
+/**
+ * A button that hands the user a file.
+ *
+ *     download('Download CSV', $orders, 'orders.csv');
+ *
+ * Rows become a CSV file, or JSON when the name ends in ".json". Text is sent as
+ * it is. A function is called only when the user asks for the file, so a slow
+ * query does not run on every page view:
+ *
+ *     download('Export all', fn () => $db->fetchAll('SELECT * FROM orders'), 'orders.csv');
+ *
+ * The run ends where the file is made, as after stop(). A download is written to
+ * the log like a pressed button, with the name and the size of the file. When the
+ * log cannot be written (the callback throws or returns false), the file is not sent.
+ *
+ * The file is made in memory. No rows give an empty file: to still write the names
+ * of the columns, pass csv($rows, columns: [...]).
+ *
+ * @param iterable<mixed>|string|\Closure $content rows, text, or a function that returns one of the two. A generator
+ *                                                 can be read only once: when the page shows the same rows, pass
+ *                                                 an array or a function
+ * @param string                          $file    the name of the file, such as "orders.csv". It may contain what a
+ *                                                 user typed: it is made safe. Its ending should come from you,
+ *                                                 because the ending decides what a computer does with the file
+ * @param string                          $style   "default", "primary" or "danger"
+ */
+function download(string $label, iterable|string|\Closure $content, string $file, string $style = 'default', ?string $key = null): void
+{
+    Runtime::page()->download($label, $content, $file, $style, $key);
+}
+
+/**
+ * Rows as CSV text, for download() when the defaults do not fit:
+ *
+ *     download('Export', fn () => csv($orders, separator: ';'), 'orders.csv');
+ *
+ * @param iterable<mixed>             $rows
+ * @param array<array-key,mixed>|null $columns       ['id', 'total'] to choose columns, ['id' => 'Order'] to also rename them.
+ *                                                   By default every column, under its own name. For a very long export
+ *                                                   name the columns: the rows are then written one by one and not kept
+ * @param string                      $separator     what stands between two cells: ",", ";", "|", ":" or a tab.
+ *                                                   Excel expects ";" where people write 1,5 for one and a half
+ * @param bool                        $allowFormulas a spreadsheet runs a cell that starts with "=", "+", "-" or "@" as a
+ *                                                   formula. By default such a cell gets a "'" in front, and numbers
+ *                                                   are left alone. Pass true only when every cell comes from you
+ * @param bool                        $bom           start the file with the mark that tells Excel the text is UTF-8
+ */
+function csv(iterable $rows, ?array $columns = null, string $separator = ',', bool $allowFormulas = false, bool $bom = true): string
+{
+    return Csv::write($rows, $columns, $separator, $allowFormulas, $bom);
+}
+
 // ------------------------------------------------------------- flow, layout
 
 /** Puts things side by side. Each argument is a function that draws one column. */
@@ -275,7 +327,8 @@ function user(): ?string
  * typically in a file that every tool includes.
  *
  * @param callable|null $auth  the login check: receives the request, returns the user's name, or null to refuse
- * @param callable|null $log   called with an array for every button a user presses
+ * @param callable|null $log   called with an array for every button a user presses and every file a user downloads.
+ *                             It should throw or return false when the entry could not be written: a download is then not sent
  * @param bool|null     $debug show error details in the page. By default they are shown only without a login check,
  *                             where nobody but this computer gets in. With a login check, pass true where you develop
  * @param string|null   $name  the name of the tool collection
@@ -304,7 +357,8 @@ function configure(
  * reached from outside needs $auth.
  *
  * @param callable|null $auth  the login check: receives the request, returns the user's name, or null to refuse
- * @param callable|null $log   called with an array for every button a user presses
+ * @param callable|null $log   called with an array for every button a user presses and every file a user downloads.
+ *                             It should throw or return false when the entry could not be written: a download is then not sent
  * @param bool|null     $debug show error details in the page. By default only without $auth; with it, pass true where you develop
  * @param string|null   $base  null: one address, tools are chosen with "?_tool=id".
  *                          A path such as "/admin/tools": tools get the addresses "/admin/tools/{id}"

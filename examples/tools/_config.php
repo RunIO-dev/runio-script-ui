@@ -14,13 +14,14 @@ declare(strict_types=1);
 return [
     'name' => 'Shop back office',
 
-    // Called for every button a user presses. Here: one JSON line per action.
-    'log' => static function (array $entry): void {
+    // Called for every button a user presses and every file a user downloads. Here: one JSON line per action.
+    // It returns false when the line could not be written. A download is then not sent.
+    'log' => static function (array $entry): bool {
         $file = __DIR__ . '/../var/audit.log';
         if (!is_dir(dirname($file))) {
             mkdir(dirname($file), 0777, true);
         }
 
-        file_put_contents($file, json_encode($entry, JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
+        return file_put_contents($file, json_encode($entry, JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX) !== false;
     },
 ];

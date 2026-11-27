@@ -183,12 +183,31 @@ final class Kernel
             if ($failure === null) {
                 $this->saveState($page);
             }
-            $this->audit($page);
+            if (!$this->audit($page) && $page->fileToSend() !== null) {
+                // Who took which data out is exactly what a log is for. When the entry
+                // cannot be written, the file is not handed out.
+                $page->withhold(new \RuntimeException('The download could not be written to the log, so the file was not sent.'));
+                $failure = $page->failure();
+            }
         }
 
         if ($page->tookOver()) {
             // The tool sent an answer of its own, a file for example. Nothing is added to it.
             return new Response(alreadySent: true);
+        }
+
+        $file = $page->fileToSend();
+        if ($file !== null && $failure === null) {
+            // Saved, never shown: the type is never one a browser runs, nothing may guess
+            // another type, and should it be opened in the browser after all, it may do nothing.
+            return new Response(200, $file->body, [
+                'Content-Type' => $file->type(),
+                'Content-Disposition' => $file->disposition(),
+                'Content-Security-Policy' => "default-src 'none'; frame-ancestors 'none'; sandbox",
+                // The script of the page saves the file itself and reads the name here.
+                // A header holds no Arabic, so the name is encoded.
+                'X-Script-Ui-Download' => rawurlencode($file->name),
+            ] + self::headers());
         }
 
         if ($page->wantsRerun() && $failure === null) {
@@ -430,16 +449,20 @@ final class Kernel
         $this->session->set('state', $states);
     }
 
-    /** Tells the log callback which button was pressed, by whom and with which inputs. */
-    private function audit(Page $page): void
+    /**
+     * Tells the log callback which button was pressed, by whom and with which inputs.
+     *
+     * @return bool false when there was something to log and the callback failed: it threw, or it returned false
+     */
+    private function audit(Page $page): bool
     {
         $action = $page->action();
         if ($action === null || $this->config->log === null) {
-            return;
+            return true;
         }
 
         try {
-            self::call($this->config->log, [
+            $written = self::call($this->config->log, [
                 'time' => date(DATE_ATOM),
                 'user' => $page->user,
                 'tool' => $page->toolId,
@@ -448,9 +471,25 @@ final class Kernel
                 'confirmed' => $action['confirmed'],
                 'inputs' => $page->values(),
                 'error' => $page->failure()?->getMessage(),
+                // For a download: which file, and how large. No size means the file could not be made.
+                'download' => $action['file'] === null ? null : [
+                    'file' => $action['file'],
+                    'bytes' => $page->fileToSend() === null ? null : strlen($page->fileToSend()->body),
+                ],
             ]);
+
+            if ($written === false) {
+                // What file_put_contents() and many loggers answer when nothing was written.
+                error_log(sprintf('Script UI: the log callback returned false for "%s" in the tool "%s".', $action['label'], $page->toolId));
+
+                return false;
+            }
+
+            return true;
         } catch (\Throwable $error) {
             error_log(sprintf('Script UI: the log callback failed for "%s" in the tool "%s": %s', $action['label'], $page->toolId, $error));
+
+            return false;
         }
     }
 

@@ -4,7 +4,7 @@
 
 require_once __DIR__ . '/_shop.php';
 
-use function Runio\ScriptUi\{title, columns, text, select, metric, table};
+use function Runio\ScriptUi\{title, columns, text, select, metric, table, download};
 
 $shop = Shop::open();
 
@@ -34,3 +34,8 @@ table(
     limit: 20,
     empty: 'لا توجد طلبات مطابقة.',
 );
+
+// اسم الملف بالعربية، والدالة لا تُستدعى إلا عند طلب الملف.
+if ($orders !== []) {
+    download('تنزيل CSV', fn () => $orders, 'الطلبات.csv', key: 'download');
+}

@@ -184,10 +184,13 @@ test('the audit log shows the one refund and nothing else', async () => {
     await page.goto('/audit');
 
     // The button was pressed three times above. Only the press that was answered with yes is an action.
-    await expect(rows(page)).toHaveCount(1);
-    await expect(rows(page).first()).toContainText('Refund selected');
-    await expect(rows(page).first()).toContainText('omar@example.com');
-    await expect(rows(page).first()).toContainText(tickedOrder);
+    // (Other test files leave entries of their own tools in the same log.)
+    expect((await column(page, 2)).filter((tool) => 'refund' === tool), 'entries of the refund tool').toHaveLength(1);
+
+    const entry = rows(page).filter({ hasText: 'Refund selected' });
+    await expect(entry).toHaveCount(1);
+    await expect(entry).toContainText('omar@example.com');
+    await expect(entry).toContainText(tickedOrder);
 });
 
 test('no script failed and the security policy blocked nothing', async () => {

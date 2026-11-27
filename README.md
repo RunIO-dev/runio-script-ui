@@ -57,6 +57,7 @@ A tool is a script that runs from top to bottom. Every time the user changes an 
 - `button()` returns `true` only in the run that its click started. `if (button('Save')) { ... }` does the work once per click.
 - `button('Delete', confirm: 'Delete 3 rows?')` returns `true` only after the user answered yes to exactly that question.
 - `table($rows, selectable: true)` returns the rows the user ticked.
+- `download('Download CSV', $rows, 'orders.csv')` hands the user a file.
 - `rerun()` loads the page again after an action, so a table above the button shows the new data. Messages written after the click are kept.
 
 Inputs are saved per tool, so a reload keeps them. The "Reset" link in the header forgets them.
@@ -71,7 +72,7 @@ The page works without JavaScript as a plain form. With JavaScript it updates in
 | Messages | `success` `info` `warning` `error` |
 | Inputs | `text` `textarea` `number` `select` `checkbox` `date_input` |
 | Data | `table` `chart` `metric` |
-| Actions | `button` |
+| Actions | `button` `download` `csv` |
 | Layout and flow | `columns` `stop` `rerun` |
 | Hosting | `serve` `configure` `user` |
 
@@ -105,6 +106,28 @@ foreach ($orders as $order) {
 
 `table($rows, selectable: true)` returns the ticked rows. A row is found again by its `id` column (name another one with `rowKey:`). Rows without an id are recognised by what is in them. A tick never moves to a different row: when its row is gone or has changed, the tick is dropped.
 
+### Downloads
+
+`download('Download CSV', $orders, 'orders.csv')` draws a button that hands the user a file. Rows become CSV, or JSON when the name ends in `.json`. Text is sent as it is, so any other format works when you make the content yourself.
+
+Pass a function when making the content takes time. It is only called when the user asks for the file:
+
+```php
+download('Export all orders', fn () => $db->fetchAll('SELECT * FROM orders'), 'orders.csv');
+```
+
+A CSV file is written for a spreadsheet and for a program at once. It starts with the mark that tells Excel it is UTF-8, numbers are exact, dates are written like `2026-03-01 14:30:05`, and the first line names the columns as your rows do (`created_at`, not "Created at"). For other choices there is `csv()`:
+
+```php
+download('Export', fn () => csv($orders, columns: ['id' => 'Order', 'total'], separator: ';'), 'orders.csv');
+```
+
+In the CSV that the library writes, a cell that a spreadsheet would run as a formula (it starts with `=`, `+`, `-` or `@`) gets a `'` in front. The names of the columns are treated the same way. Numbers are left alone: `-12.50` stays as it is, while a phone number such as `+49 170 1234567` becomes `'+49 170 1234567` and a lone `-` becomes `'-`. Pass `allowFormulas: true` to `csv()` only when every cell comes from you. Text that you pass to `download()` yourself is sent as it is.
+
+The file is made in memory. For a very long export pass the rows as a function that reads them one by one, and name the columns with `csv($rows, columns: [...])`: the rows are then not kept while the file is written.
+
+The run ends where the file is made, as after `stop()`. With JavaScript the page stays in place and shows that it is busy, and a second click does not send a second file. Without it the browser saves the file from the plain form.
+
 ### Links that fill in fields
 
 `/refund?customer-email=ava@example.com` opens the tool with that field filled in. A link can only fill plain fields. It can never press a button or tick a row. What a link filled in is not saved until the user changes or submits something.
@@ -120,7 +143,7 @@ require __DIR__ . '/bootstrap.php';            // starts your session, connects 
 Runio\ScriptUi\serve(
     __DIR__ . '/tools',
     auth: fn () => $_SESSION['admin_email'] ?? null,   // who is asking, or null to refuse
-    log: fn (array $entry) => $auditLog->write($entry), // called for every button a user presses
+    log: fn (array $entry) => $auditLog->write($entry), // called for every button a user presses and every file a user downloads
     name: 'Back office',
 );
 ```
@@ -163,6 +186,7 @@ Pages that are not a tool have no title to follow: the list of tools and pages s
 - **Forged requests are refused.** Every form carries a token. A button only counts on a form that was sent from the page itself. The "Reset" link carries a code of its own.
 - **Everything is escaped.** Labels, table cells and messages are text, never HTML. Output printed with `echo` is shown as text too.
 - **A strict Content-Security-Policy** on every page: no inline styles, no inline handlers, nothing from other sites, no framing.
+- **A download is a file, never a page.** It is sent with the order to save it, never as HTML or a script, and it may do nothing if it is opened in the browser after all. Its name is made safe, also when it contains something a user typed. In CSV that the library writes, formula cells are defused. Every download goes to the log with the name and the size of the file. When the log cannot be written (the `log` callback throws or returns false), the file is not sent.
 - **Selections come from your data.** `table()` returns rows from the array you passed in. The browser only says which rows are ticked, and a tick never moves to another row or another table.
 - **Files are found by listing the folder.** An address can never point outside it.
 - **Error details stay private.** They are shown only while no login check is set, because then nobody but your own computer gets in. With a login check they go to the error log unless you pass `debug: true`. PHP warnings and notices are kept out of the page in the same way.
@@ -171,7 +195,7 @@ What stays your job: decide who may do what (`user()` tells you who is asking), 
 
 ## Limits of this first version
 
-- No file uploads and no download button (CSV export) yet. Until then a tool can send a file itself on a plain page view: when a parameter such as `?export=1` is set, close the output buffers, send the headers, print the file and `exit`. Offer it with `link('Download CSV', '/orders?export=1')`.
+- No file uploads yet.
 - Tables show the first 200 rows by default (`limit:`). There is no paging yet.
 - Charts are bar and line charts with one axis and at most 8 series.
 - State lives in the PHP session. Two tabs of the same tool share saved inputs.
@@ -200,7 +224,7 @@ npx playwright install chromium
 npx playwright test
 ```
 
-They drive the example tools in a real browser: the refund flow from the first key press to the audit log, the charts, the Arabic page, a dark theme, a phone-sized window and the page without JavaScript. They start their own two servers on ports 8775 and 8776 and work on a copy of the example tools, so a demo that is running keeps its data.
+They drive the example tools in a real browser: the refund flow from the first key press to the audit log, downloads, the charts, the Arabic page, a dark theme, a phone-sized window and the page without JavaScript. They start their own two servers on ports 8775 and 8776 and work on a copy of the example tools, so a demo that is running keeps its data.
 
 ## License
 

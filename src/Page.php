@@ -57,8 +57,14 @@ final class Page
 
     private ?string $title = null;
 
-    /** @var array{key: string, label: string, confirmed: bool}|null the button that returned true */
+    /**
+     * @var array{key: string, label: string, confirmed: bool, file: ?string}|null
+     *      the button that returned true, or the download that was asked for (then with the name of its file)
+     */
     private ?array $action = null;
+
+    /** The file that is sent instead of the page. */
+    private ?Download $download = null;
 
     private bool $rerun = false;
 
@@ -583,10 +589,49 @@ final class Page
         $this->add($html);
 
         if ($pressed) {
-            $this->action = ['key' => $key, 'label' => $label, 'confirmed' => $confirm !== null];
+            $this->action = ['key' => $key, 'label' => $label, 'confirmed' => $confirm !== null, 'file' => null];
         }
 
         return $pressed;
+    }
+
+    /**
+     * @param iterable<mixed>|string|\Closure $content rows, text, or a function that returns one of the two
+     */
+    public function download(string $label, iterable|string|\Closure $content, string $file, string $style, ?string $key): void
+    {
+        if (!in_array($style, self::BUTTON_STYLES, true)) {
+            throw new \InvalidArgumentException(sprintf(
+                'download() knows the styles %s, not "%s".',
+                implode(', ', self::BUTTON_STYLES),
+                $style,
+            ));
+        }
+
+        $key = $this->claim($key, $label);
+
+        // A wrong name is a mistake in the tool. It shows on the first page view,
+        // not only when somebody asks for the file.
+        $name = Download::name($file);
+        if (!is_string($content) && !$content instanceof \Closure) {
+            Download::assertWritesRows($name);
+        }
+
+        $this->add(
+            '<button type="submit" class="sui-btn sui-btn-' . $style . ' sui-btn-download" id="' . Text::e('b-' . $key) . '" name="_click" value="' . Text::e($key) . '" dir="auto">'
+            . Text::e($label) . '</button>',
+        );
+
+        if ($this->click !== $key) {
+            return;
+        }
+
+        // From here on this is an action. It goes to the log even when the file cannot be made.
+        $this->action = ['key' => $key, 'label' => $label, 'confirmed' => false, 'file' => $name];
+        $this->download = new Download($name, Download::body($content, $name));
+
+        // The file is the answer, so the rest of the page is not needed.
+        throw new Stop();
     }
 
     // ------------------------------------------------------------ flow, layout
@@ -715,10 +760,23 @@ final class Page
         return $this->rerun;
     }
 
-    /** @return array{key: string, label: string, confirmed: bool}|null */
+    /** @return array{key: string, label: string, confirmed: bool, file: ?string}|null */
     public function action(): ?array
     {
         return $this->action;
+    }
+
+    /** The file to send instead of the page, when the user asked for one in this run. */
+    public function fileToSend(): ?Download
+    {
+        return $this->download;
+    }
+
+    /** Takes the file back. The page is sent after all. */
+    public function withhold(\Throwable $reason): void
+    {
+        $this->download = null;
+        $this->failure = $reason;
     }
 
     /** @return array<array-key,mixed> */
@@ -740,10 +798,10 @@ final class Page
      */
     public function state(): array
     {
-        // After rerun() the inputs below that call were never reached, so the checked
-        // values are incomplete. Keep what the form sent instead. It is checked again
-        // when the next run reads it.
-        return $this->rerun ? self::keepable($this->in) : $this->out;
+        // After rerun() and after a download the inputs below that call were never
+        // reached, so the checked values are incomplete. Keep what the form sent
+        // instead. It is checked again when the next run reads it.
+        return $this->rerun || $this->download !== null ? self::keepable($this->in) : $this->out;
     }
 
     public function documentTitle(): string
@@ -1212,6 +1270,7 @@ final class Page
             $value === null => '—',
             is_bool($value) => $value ? 'Yes' : 'No',
             is_string($value) => mb_scrub($value, 'UTF-8'),
+            is_float($value) && !is_finite($value) => Text::exactNumber($value),
             is_int($value), is_float($value) => (string) $value,
             $value instanceof \DateTimeInterface => $value->format('Y-m-d H:i'),
             $value instanceof \BackedEnum => (string) $value->value,

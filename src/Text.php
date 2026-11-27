@@ -57,8 +57,12 @@ final class Text
      */
     public static function exactNumber(int|float $number): string
     {
-        if (is_int($number) || !is_finite($number)) {
+        if (is_int($number)) {
             return (string) $number;
+        }
+        if (!is_finite($number)) {
+            // Written out, because PHP 8.5 warns when "not a number" is turned into text.
+            return is_nan($number) ? 'NAN' : ($number > 0 ? 'INF' : '-INF');
         }
 
         foreach ([15, 16, 17] as $digits) {

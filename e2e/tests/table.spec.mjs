@@ -152,25 +152,33 @@ test('the search box filters while the user types, and the text is never lost', 
 
 test('fast typing does not send a request for every key', async ({ page }) => {
     await page.goto('/ship');
+
+    // The answer to the first request is held back until the test lets it go,
+    // so the keys that follow are typed while it is on its way.
     let posts = 0;
-    page.on('request', (request) => {
-        if ('POST' === request.method()) posts++;
-    });
-    // A slow server: more keys arrive while the first answer is on its way.
+    let letGo;
+    const held = new Promise((resolve) => { letGo = resolve; });
     await page.route('**/ship', async (route) => {
-        if ('POST' === route.request().method()) await new Promise((resolve) => setTimeout(resolve, 500));
+        if ('POST' === route.request().method() && 1 === ++posts) await held;
         await route.continue();
     });
 
     await search(page).click();
+    const first = page.waitForRequest((request) => 'POST' === request.method());
     await page.keyboard.type('k');
-    await page.waitForTimeout(400);
-    await page.keyboard.type('eyboard', { delay: 30 });
+    await first;
+
+    await page.keyboard.type('eyboard');
+    // Longer than the pause after the last key that starts a search.
+    await page.waitForTimeout(600);
+    expect(posts, 'nothing is sent while a request is on its way').toBe(1);
+
+    letGo();
 
     await expect.poll(async () => (await column(page, 4)).every((items) => /keyboard/i.test(items)), { timeout: 10_000 }).toBe(true);
     await settled(page);
     await expect(search(page)).toHaveValue('keyboard');
-    expect(posts, 'one request for "k", one for the rest').toBe(2);
+    expect(posts, 'one request for "k", one for all the rest').toBe(2);
 });
 
 test('a row that the search hides does not count, and its tick comes back with it', async ({ page }) => {
@@ -223,6 +231,20 @@ test('while a character is being composed the page is left alone', async ({ page
     await expect(foot(page)).toContainText('filtered from');
     await expect(search(page)).toHaveValue('mia');
     await expect(search(page)).toBeFocused();
+});
+
+test('a keyboard that never says the character is finished does not hold the page for ever', async ({ page }) => {
+    await page.goto('/ship');
+
+    await search(page).click();
+    await search(page).dispatchEvent('compositionstart');
+    await page.keyboard.type('mia');
+
+    // The field loses the focus half way, and no "compositionend" follows.
+    await all(page).focus();
+
+    await expect(foot(page)).toContainText('filtered from');
+    await expect(search(page)).toHaveValue('mia');
 });
 
 // -------------------------------------------------------------- select all

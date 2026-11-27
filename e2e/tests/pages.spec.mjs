@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { DIRECT_URL, PHONE, markDocument, noHorizontalOverflow, rows, sameDocument, settled, watch } from './support.mjs';
+import { DIRECT_URL, PHONE, column, markDocument, noHorizontalOverflow, rows, sameDocument, settled, watch } from './support.mjs';
 
 // Every test here opens its own browser context, so it starts with nothing saved.
 test.beforeEach(({ page }) => {
@@ -53,6 +53,52 @@ test('customers: a filter and a detail view', async ({ page }) => {
 
     await expect(page.locator('#sui-body .sui-json')).toBeVisible();
     await expect(page.locator('#sui-body table.sui-table'), 'the list and the orders of the customer').toHaveCount(2);
+});
+
+test('text typed while an answer is on its way is sent when the user leaves the field, not before', async ({ page }) => {
+    await page.goto('/customers');
+    const refundsOnly = page.locator('#f-only-customers-with-a-refund');
+
+    // Somebody who has a refund, so that both filters together leave a row.
+    await refundsOnly.click();
+    await settled(page);
+    const [name] = (await column(page, 1))[0].split(' ');
+    await refundsOnly.click();
+    await settled(page);
+
+    // From here on, the answer to the first request is held back until the test lets it go.
+    let posts = 0;
+    let letGo;
+    const held = new Promise((resolve) => { letGo = resolve; });
+    await page.route('**/customers', async (route) => {
+        if ('POST' === route.request().method() && 1 === ++posts) await held;
+        await route.continue();
+    });
+
+    const first = page.waitForRequest((request) => 'POST' === request.method());
+    await refundsOnly.click();
+    await first;
+
+    // The user goes on and types while the page waits for its answer.
+    await page.locator('#f-search').click();
+    await page.keyboard.type(name);
+    letGo();
+    await settled(page);
+
+    // The answer replaced the content of the page. The field is where it was.
+    await expect(refundsOnly).toBeChecked();
+    await expect(page.locator('#f-search')).toHaveValue(name);
+    await expect(page.locator('#f-search')).toBeFocused();
+    await page.waitForTimeout(300);
+    expect(posts, 'the half typed text was not sent').toBe(1);
+
+    await page.keyboard.press('Tab');
+
+    await expect.poll(() => posts).toBe(2);
+    await settled(page);
+    const names = await column(page, 1);
+    expect(names.length).toBeGreaterThan(0);
+    expect(names.every((shown) => shown.includes(name)), 'only customers with that name').toBe(true);
 });
 
 test('the Arabic page runs right to left', async ({ page }) => {

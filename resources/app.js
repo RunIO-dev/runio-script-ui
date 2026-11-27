@@ -26,6 +26,7 @@
   let pointerDown = false;
   let composing = false;   // a keyboard is putting a character together (Chinese, Japanese, Korean, some phones)
   let waiting = null;      // a response that arrived while the mouse button was held or a character was composed
+  let swapping = false;    // the content of the page is being replaced
   let busyTimer = 0;
   let typingTimer = 0;     // the user is typing into a search box that filters while they type
 
@@ -124,7 +125,14 @@
   const show = ({ html, title, origin }) => {
     const keep = origin || place(document.activeElement);
 
-    body.innerHTML = html;
+    // Some browsers say that the field with the focus lost it when it is replaced.
+    // The user did not leave the field, and it gets the focus back below.
+    swapping = true;
+    try {
+      body.innerHTML = html;
+    } finally {
+      swapping = false;
+    }
     if (title) document.title = title;
 
     refocus(keep);
@@ -307,6 +315,14 @@
 
   // Text reruns the page when the user leaves the field (or presses Enter, which submits).
   body.addEventListener('focusout', (event) => {
+    if (swapping) return;
+    if (composing) {
+      // Not every keyboard says that a character is finished when the field loses
+      // the focus half way. A field without the focus composes nothing, and the
+      // page must not wait for an end that never comes.
+      composing = false;
+      settle();
+    }
     if (dirty && isText(event.target)) run(null);
   });
 

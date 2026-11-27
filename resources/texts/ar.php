@@ -42,7 +42,7 @@ return [
     'table.filtered' => '{rows} (من أصل {count})',
     'table.selected' => 'المحدد: {count}',
     'table.selected_elsewhere' => 'المحدد: {count} (منها {hidden} في صفحات أخرى)',
-    'table.selected_hidden' => 'أخرى مخفية بسبب البحث: {count}',
+    'table.selected_hidden' => 'المحدد المخفي بسبب البحث: {count}',
     'table.selected_max' => 'أقصى عدد يمكن تحديده: {count}',
     'table.pages' => 'الصفحات',
     'table.page' => 'الصفحة {page} من {pages}',

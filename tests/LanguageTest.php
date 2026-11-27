@@ -292,7 +292,7 @@ final class LanguageTest extends ToolTestCase
         self::assertSame(['Clear selection'], $this->texts($response, '//button[@id="b-table:none"]'));
 
         $response = $pressed($tool('الطلبات'));
-        self::assertSame('صف واحد (من أصل 3) · المحدد: 1 · أخرى مخفية بسبب البحث: 1', $this->foot($response));
+        self::assertSame('صف واحد (من أصل 3) · المحدد: 1 · المحدد المخفي بسبب البحث: 1', $this->foot($response));
         self::assertSame(['إلغاء التحديد'], $this->texts($response, '//button[@id="b-table:none"]'));
 
         $this->configure('de');

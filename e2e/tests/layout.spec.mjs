@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { PHONE, markDocument, noHorizontalOverflow, sameDocument, watch } from './support.mjs';
+import { posts, reported } from './reports.mjs';
 
 // The page of these tests is e2e/tools/test-layout.php: a box that starts closed with a field
 // and a button inside, a box that starts open, and a line below that says what the tool got.
@@ -7,24 +8,6 @@ const note = (page) => page.locator('#sui-body > .sui-note');
 const line = (page, name) => page.locator('details.sui-expander > summary', { hasText: name });
 const limit = (page) => page.getByLabel('Limit');
 const about = (page) => page.getByText('It only exists for the tests.');
-
-/** What the page posts from now on: the runs of the tool, and the reports about its parts. */
-function posts(page) {
-    const seen = { runs: [], reports: [] };
-    page.on('request', (request) => {
-        if ('POST' !== request.method()) return;
-        ('layout' === request.headers()['x-script-ui'] ? seen.reports : seen.runs).push(request);
-    });
-
-    return seen;
-}
-
-/** Waits until the server has answered the report with this number. */
-async function reported(sent, count) {
-    await expect.poll(() => sent.reports.length, 'the server is told how the parts stand').toBe(count);
-    const response = await sent.reports[count - 1].response();
-    expect(response.status()).toBe(204);
-}
 
 test.beforeEach(({ page }) => {
     watch(page);

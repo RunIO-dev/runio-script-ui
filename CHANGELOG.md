@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-27
+
 First version. Requires PHP 8.2+ with the mbstring and session extensions, and no other package.
 
 ### Added
@@ -24,3 +26,6 @@ First version. Requires PHP 8.2+ with the mbstring and session extensions, and n
 - The help text of an input is read out with the input by software that reads the page.
 - Pages update in place with JavaScript and work as plain forms without it. A title in Arabic or Hebrew turns the page right to left.
 - The library's own texts ("Yes", "Reset", "No rows.") in English, Arabic and German. A page follows the language of its title, `language:` sets one language for every page, and `texts:` replaces single texts or adds a language.
+
+[Unreleased]: https://github.com/RunIO-dev/runio-script-ui/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/RunIO-dev/runio-script-ui/releases/tag/v0.1.0

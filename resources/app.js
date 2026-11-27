@@ -326,12 +326,6 @@
         }
 
         offline(false);
-        if (files) {
-          // The files are on the server now. The answer may have to wait before it
-          // is shown, and until then nothing must send them a second time.
-          body.querySelectorAll('input[type="file"]').forEach((input) => { input.value = ''; });
-        }
-
         let title = '';
         try {
           title = decodeURIComponent(response.headers.get('X-Script-Ui-Title') || '');
@@ -347,7 +341,11 @@
           }
         } catch (error) { /* keep the address as it is */ }
 
-        if (pointerDown || composing) {
+        // The answer to a button or to an upload is shown at once. The page was
+        // locked, so there is no click and no character to lose. And an answer
+        // that waits is dropped when a newer request starts: with it would go the
+        // news that an action was done, or that a file is on the server.
+        if ((pointerDown || composing) && !locked) {
           // Swapping the page under a pressed mouse button would lose the click.
           // Under a character that is being composed it would lose the character.
           waiting = { id, page };

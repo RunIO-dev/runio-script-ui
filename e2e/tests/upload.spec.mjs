@@ -189,10 +189,12 @@ test('a file that did not get through leaves its field and is not sent again lat
     page.problems = page.problems.filter((problem) => !/ERR_CONNECTION_RESET|Failed to load resource/.test(problem));
 });
 
-test('a file is not sent twice when its answer has to wait for the mouse', async ({ page }) => {
+test('the answer to an upload does not wait for a pressed mouse button', async ({ page }) => {
     await page.goto('/test-files');
 
-    // A mouse button is down when the answer arrives. The page is swapped when it comes up.
+    // Other answers wait while a mouse button is down, so that the click is not lost. This one
+    // must not: the page was locked, and an answer that waits can be dropped by the next request.
+    // The file would be on the server and nowhere on the page.
     await page.mouse.move(600, 20);
     await page.mouse.down();
     const [answer] = await Promise.all([
@@ -201,11 +203,13 @@ test('a file is not sent twice when its answer has to wait for the mouse', async
     ]);
     await answer.finished();
 
-    // The file is on the server. Until the page shows that, the field must not hold it any more:
-    // another request would send it a second time.
-    await expect.poll(() => waiting(attachments(page)), { timeout: 400 }).toBe(0);
+    await expect(names(page), 'shown while the button is still down').toHaveText(['a.txt'], { timeout: 400 });
+    expect(await waiting(attachments(page)), 'and no longer in the field, where it would be sent again').toBe(0);
 
+    // The button comes up over something that starts a request. The file is still there afterwards.
     await page.mouse.up();
+    await page.locator('#b-count-them').click();
+    await expect(notice(page)).toHaveText('Counted 1 for "".');
     await expect(names(page)).toHaveText(['a.txt']);
 });
 

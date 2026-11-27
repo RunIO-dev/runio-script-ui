@@ -344,6 +344,21 @@ test.describe('in a phone-sized window', () => {
         await next(page).click();
         await expect(pageNow(page)).toHaveText(/^Page 2 of/);
     });
+
+    test('a wide table stays where the user moved it when the page is drawn again', async ({ page }) => {
+        await page.goto('/customers');
+        const frame = page.locator('.sui-table-wrap').first();
+        const room = await frame.evaluate((el) => el.scrollWidth - el.clientWidth);
+        expect(room, 'the table is wider than its frame').toBeGreaterThan(60);
+
+        // The user moves the table sideways to see the last columns, then sets a filter.
+        await frame.evaluate((el) => { el.scrollLeft = 60; });
+        const all = await rows(page).count();
+        await page.getByLabel('Only customers with a refund').check();
+        await expect.poll(() => rows(page).count(), 'the filter came back').toBeLessThan(all);
+
+        expect(await frame.evaluate((el) => el.scrollLeft), 'the new page shows the same columns').toBe(60);
+    });
 });
 
 test.describe('without JavaScript', () => {

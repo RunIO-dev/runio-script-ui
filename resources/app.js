@@ -33,6 +33,7 @@
   let reportTimer = 0;     // a report of how the parts of the page stand waits to be sent: see report()
   const turned = new Map(); // parts the user opened or closed since the last request left: name of the field => what it says now
   let stepping = false;    // an arrow key is down: the change that follows comes from it, not from a click
+  let kept = new WeakSet(); // what the user moved sideways and the last answer left in its place: see show()
 
   const isText = (el) => el instanceof HTMLTextAreaElement
     || (el instanceof HTMLInputElement && /^(text|search|email|url|tel|password)$/.test(el.type));
@@ -185,7 +186,14 @@
   // page that holds the line comes into sight. Then the open header is brought
   // into sight again, and the line says anew at which ends it goes on.
   const watcher = new ResizeObserver((lines) => {
-    lines.forEach((line) => reveal(openIn(line.target.parentElement)));
+    lines.forEach((line) => {
+      if (kept.delete(line.target)) {
+        // The line was put back where the user had moved it. It is not moved again.
+        edges(line.target);
+      } else {
+        reveal(openIn(line.target.parentElement));
+      }
+    });
   });
 
   // Watches the lines that are on the page now, and lets go of the ones that
@@ -195,8 +203,16 @@
     body.querySelectorAll('.sui-tab-list').forEach((list) => watcher.observe(list));
   };
 
+  // A wide table and a long line of headers can be moved sideways. Their frames
+  // carry a name, so that the new page can be moved to where the old one was.
+  // A frame that is out of sight (behind a closed tab) has no place to keep. It
+  // is left out, so that its line finds the open header when it comes into sight.
+  const frames = () => Array.from(body.querySelectorAll('[data-sui-scroll]')).filter((frame) => frame.clientWidth > 0);
+
   const show = ({ html, title, origin }) => {
     const keep = origin || place(document.activeElement);
+    const moved = new Map();
+    frames().forEach((frame) => moved.set(frame.getAttribute('data-sui-scroll'), frame.scrollLeft));
 
     // Some browsers say that the field with the focus lost it when it is replaced.
     // The user did not leave the field, and it gets the focus back below.
@@ -223,6 +239,16 @@
         ? headersOf(group).find((header) => header.getAttribute('data-sui-tab') === turned.get(field.name))
         : null;
       if (chosen) putInView(chosen);
+    });
+
+    // Now the same parts are in sight as before, and each goes back to its place.
+    kept = new WeakSet();
+    frames().forEach((frame) => {
+      const name = frame.getAttribute('data-sui-scroll');
+      if (moved.has(name)) {
+        frame.scrollLeft = moved.get(name);
+        kept.add(frame);
+      }
     });
     watchTabs();
 

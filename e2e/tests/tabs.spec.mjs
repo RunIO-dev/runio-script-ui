@@ -279,7 +279,19 @@ test('on a phone the line of headers moves sideways, and the open header stays i
     await page.getByLabel('Owner').press('Tab');
     await expect(note(page)).toHaveText('Owner: Ava. Status: all. Limit: 10.');
     await expect.poll(() => inSight(page, 'August'), 'after the page was swapped').toBe(true);
+    await expect.poll(() => fading(page)).toEqual({ before: true, after: false, mask: 'clear-solid' });
     expect(await noHorizontalOverflow(page)).toBe(true);
+
+    // The user moves the line to look at the first months. An answer of the server
+    // leaves it there: it does not pull the line back to the open header.
+    await months(page).evaluate((list) => { list.scrollLeft = 0; });
+    await page.getByLabel('Owner').fill('Ben');
+    await page.getByLabel('Owner').press('Tab');
+    await expect(note(page)).toHaveText('Owner: Ben. Status: all. Limit: 10.');
+    await page.waitForTimeout(300);
+    expect(await months(page).evaluate((list) => list.scrollLeft)).toBe(0);
+    expect(await inSight(page, 'January')).toBe(true);
+    await expect.poll(() => fading(page)).toEqual({ before: false, after: true, mask: 'solid-clear' });
 });
 
 test('a line of headers that comes into sight later finds its place then', async ({ page }) => {
@@ -312,6 +324,44 @@ test('a line of headers that comes into sight later finds its place then', async
     await expect.poll(() => inSight(page, '2026'), 'the open header is brought into sight with its tab').toBe(true);
     await expect(years).toHaveClass(/sui-more-before/);
     await expect(years).not.toHaveClass(/sui-more-after/);
+
+    // The same when the page script draws the page again while the years are out of sight:
+    // a line that nobody saw has no place to keep.
+    await header(page, 'Orders').click();
+    await expect(header(page, '2026')).toBeHidden();
+    await status(page).selectOption('paid');
+    await expect(note(page)).toHaveText('Owner: nobody. Status: paid. Limit: 10.');
+
+    await header(page, 'About').click();
+    await expect(page.getByText('The numbers of 2026.')).toBeVisible();
+    await expect.poll(() => inSight(page, '2026'), 'after the page was swapped behind its back').toBe(true);
+    await expect(years).toHaveClass(/sui-more-before/);
+});
+
+test('a line that the user moved while an answer was on its way stays where it was put', async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await page.goto('/test-tabs');
+    const years = page.locator('#t-years > [role="tablist"]');
+    // Every run of the tool takes a moment.
+    await page.route('**/test-tabs', async (route) => {
+        const request = route.request();
+        if ('POST' === request.method() && 'layout' !== request.headers()['x-script-ui']) {
+            await new Promise((resolve) => { setTimeout(resolve, 400); });
+        }
+        await route.continue();
+    });
+
+    // The answer that is on its way was asked for while "Orders" was open: it has the years out of sight.
+    await status(page).selectOption('paid');
+    await header(page, 'About').click();
+    await expect(header(page, '2015')).toBeVisible();
+    await years.evaluate((list) => { list.scrollLeft = 50; });
+
+    await expect(note(page)).toHaveText('Owner: nobody. Status: paid. Limit: 10.');
+    await expect(header(page, '2015'), 'the answer did not bring the old tab back').toBeVisible();
+    await page.waitForTimeout(300);
+    expect(await years.evaluate((list) => list.scrollLeft), 'and the line is where the user left it').toBe(50);
+    await expect(years).toHaveClass(/sui-more-before/);
 });
 
 test('on a phone that reads from right to left the open header stays in sight too', async ({ page }) => {

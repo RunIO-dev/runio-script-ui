@@ -1041,7 +1041,7 @@ final class Page
         }
 
         return '<div class="sui-tabs" id="' . Text::e('t-' . $key) . '">'
-            . '<div class="sui-tab-list" role="tablist">' . $headers . '</div>'
+            . '<div class="sui-tab-list" role="tablist" data-sui-scroll="' . Text::e($key) . '">' . $headers . '</div>'
             . '<input type="hidden" name="' . Text::e('_tab[' . $key . ']') . '" value="' . Text::e($open . ':' . $slugs[$open]) . '">'
             . $bodies
             . '</div>';

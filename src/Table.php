@@ -769,7 +769,9 @@ final class Table
             $idShown = $idShown || (string) $field['field'] === $rowKey;
         }
 
-        $html = '<div class="sui-table-wrap"><table class="sui-table"><thead><tr>';
+        // The frame is named, so that the page script can put a wide table back where
+        // the user moved it when the page is drawn again.
+        $html = '<div class="sui-table-wrap" data-sui-scroll="' . Text::e($key) . '"><table class="sui-table"><thead><tr>';
         if ($selectable) {
             // A button that looks and reads like a tick box. A real tick box sends
             // nothing when it is unticked, so the server could not tell a click from none.

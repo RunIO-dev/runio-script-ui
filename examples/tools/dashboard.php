@@ -4,13 +4,14 @@
 
 require_once __DIR__ . '/_shop.php';
 
-use function Runio\ScriptUi\{title, heading, select, columns, metric, chart, table};
+use function Runio\ScriptUi\{title, heading, radio, columns, metric, chart, table};
 
 $shop = Shop::open();
 
 title('Sales dashboard');
 
-$days = select('Period', [7 => 'Last 7 days', 14 => 'Last 14 days', 30 => 'Last 30 days'], default: 14);
+// Three options: all of them in view, and one click instead of two.
+$days = radio('Period', [7 => 'Last 7 days', 14 => 'Last 14 days', 30 => 'Last 30 days'], default: 14, horizontal: true);
 
 $now = $shop->daily($days);
 $before = array_slice($shop->daily($days * 2), 0, $days);

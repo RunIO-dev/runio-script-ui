@@ -36,9 +36,25 @@ test('the dashboard draws two charts and reacts to the period', async ({ page })
     const twoWeeks = await bars.count();
     expect(twoWeeks).toBeGreaterThan(0);
 
-    await page.locator('#f-period').selectOption('30');
+    await page.getByRole('radio', { name: 'Last 30 days' }).check();
 
     await expect.poll(() => bars.count(), 'more days, more bars').toBeGreaterThan(twoWeeks);
+});
+
+test('customers: the country filter takes several countries', async ({ page }) => {
+    await page.goto('/customers');
+    const all = await rows(page).count();
+
+    await page.getByRole('checkbox', { name: 'Jordan' }).check();
+    await expect(rows(page)).toHaveCount(1);
+    await page.getByRole('checkbox', { name: 'Egypt' }).check();
+    await expect(rows(page)).toHaveCount(2);
+    expect((await column(page, 3)).sort()).toEqual(['Egypt', 'Jordan']);
+
+    // None ticked means every country, as the text under the boxes says.
+    await page.getByRole('checkbox', { name: 'Jordan' }).uncheck();
+    await page.getByRole('checkbox', { name: 'Egypt' }).uncheck();
+    await expect(rows(page)).toHaveCount(all);
 });
 
 test('customers: a filter and a detail view', async ({ page }) => {

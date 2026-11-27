@@ -4,23 +4,18 @@
 
 require_once __DIR__ . '/_shop.php';
 
-use function Runio\ScriptUi\{title, heading, columns, text, select, number, checkbox, date_input, table, download, json, link, note};
+use function Runio\ScriptUi\{title, heading, columns, text, multiselect, number, checkbox, date_input, table, download, json, link, note};
 
 $shop = Shop::open();
 $customers = $shop->customers();
 
 title('Customers');
 
-$search = $country = $minSpent = $joinedAfter = $refundsOnly = null;
+$search = $minSpent = $joinedAfter = null;
 
 columns(
     function () use (&$search): void {
         $search = text('Search', placeholder: 'Name or email');
-    },
-    function () use (&$country, $customers): void {
-        $countries = array_unique(array_column($customers, 'country'));
-        sort($countries);
-        $country = select('Country', ['Any country', ...$countries]);
     },
     function () use (&$minSpent): void {
         $minSpent = number('Spent at least', default: 0, min: 0, step: 50);
@@ -29,11 +24,15 @@ columns(
         $joinedAfter = date_input('Joined after');
     },
 );
+
+$countries = array_column($customers, 'country');
+sort($countries);
+$from = multiselect('Country', $countries, horizontal: true, help: 'Tick none to see every country.');
 $refundsOnly = checkbox('Only customers with a refund');
 
 $found = array_values(array_filter($customers, static fn (array $customer): bool
     => ($search === '' || stripos($customer['name'] . ' ' . $customer['email'], $search) !== false)
-    && ($country === 'Any country' || $customer['country'] === $country)
+    && ($from === [] || in_array($customer['country'], $from, true))
     && $customer['spent'] >= ($minSpent ?? 0)
     && ($joinedAfter === null || $customer['joined'] > $joinedAfter)
     && (!$refundsOnly || $customer['refunds'] > 0)));

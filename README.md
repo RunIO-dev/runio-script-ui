@@ -127,7 +127,7 @@ The search only hides rows. A ticked row that it hides is not returned, so a but
 $file = file_input('Orders as CSV', types: ['csv'], maxSize: 5 * 1024 * 1024);
 
 if ($file !== null) {
-    $orders = $importer->read($file->path);      // your code: look into the file
+    $orders = $file->rows();                     // one row per line: ['email' => ..., 'total' => ...]
     table($orders);
 
     if (button('Import ' . count($orders) . ' orders', confirm: 'Add them to the shop?')) {
@@ -139,7 +139,11 @@ if ($file !== null) {
 }
 ```
 
-The file is an `Upload` with `name`, `size`, `path`, `contents()`, `saveTo()` and `forget()`. With `multiple: true` the field takes up to 20 files and returns a list, which is empty at first. A new file takes the place of the old one in a field for one file, and is added in a field for several.
+The file is an `Upload` with `name`, `size`, `path`, `contents()`, `rows()`, `saveTo()` and `forget()`. With `multiple: true` the field takes up to 20 files and returns a list, which is empty at first. A new file takes the place of the old one in a field for one file, and is added in a field for several.
+
+**`rows()` reads a CSV file, whatever spreadsheet wrote it.** The first line names the columns, and every other line becomes one row: `['email' => 'ava@example.com', 'total' => '24.50']`. It takes cells apart by `,`, `;` or a tab, with or without the mark for UTF-8, in UTF-8, in UTF-16, or in the Western Windows encoding that older versions of Excel write. Empty lines are left out, and a line that ends early gets empty cells. For another encoding, name it: `rows(encoding: 'Windows-1256')` reads Arabic from an older Excel (PHP needs its iconv extension for that one).
+
+Every cell is text, exactly as it stands in the file: `007` stays `007`, and `1,50` is not a number until your code says so. The file comes from a user, so look whether the columns you need are there. A file that is not text has no rows.
 
 **The file is still there on the next run.** A tool runs again on every interaction, so the library keeps the file on the server, and the page shows its name and size with a "Remove" link. The user can look at a preview, change other inputs and confirm, all with the same file.
 

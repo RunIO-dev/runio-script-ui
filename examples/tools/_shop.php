@@ -81,7 +81,7 @@ final class Shop
     }
 
     /**
-     * A few orders in the shape that readOrders() takes, to try the import tool with.
+     * A few orders in the shape that checkOrders() takes, to try the import tool with.
      *
      * @return list<array{email: string, items: string, total: float}>
      */
@@ -95,66 +95,53 @@ final class Shop
     }
 
     /**
-     * Reads orders from a CSV file. The first line names the columns: email, items and total.
-     * Nothing is added to the shop yet.
+     * Looks at rows that came from a file and says which of them are orders. A
+     * row needs the columns email, items and total. Nothing is added to the shop yet.
+     *
+     * @param list<array<array-key,string>> $rows as $file->rows() returns them: every cell is text
      *
      * @return array{0: list<array{email: string, customer: string, items: string, total: float}>, 1: list<string>}
-     *         the orders that can be added, and what is wrong with the other lines
+     *         the orders that can be added, and what is wrong with the other rows
      */
-    public function readOrders(string $path): array
+    public function checkOrders(array $rows): array
     {
-        $file = @fopen($path, 'r');
-        if ($file === false) {
-            return [[], ['The file could not be read.']];
-        }
+        $customers = array_column($this->data['customers'], 'name', 'email');
+        $orders = $problems = [];
 
-        try {
-            // A file from Excel starts with a mark that says "UTF-8". It is not part of the first name.
-            $names = array_map(
-                static fn (mixed $name): string => strtolower(trim(str_replace("\u{FEFF}", '', (string) $name))),
-                fgetcsv($file, null, ',', '"', '') ?: [],
-            );
-            $missing = array_diff(['email', 'items', 'total'], $names);
+        foreach ($rows as $index => $row) {
+            // The file comes from a user. Its columns may be missing or written "Email".
+            $row = array_change_key_case($row, CASE_LOWER);
+            $missing = array_diff(['email', 'items', 'total'], array_map('strval', array_keys($row)));
             if ($missing !== []) {
                 return [[], ['The first line has to name the columns email, items and total. Missing: ' . implode(', ', $missing) . '.']];
             }
 
-            $customers = array_column($this->data['customers'], 'name', 'email');
-            $orders = $problems = [];
+            $number = $index + 1;
+            $email = strtolower(trim($row['email']));
+            $items = trim($row['items']);
+            // A spreadsheet in half of Europe writes one and a half as 1,5.
+            $total = trim($row['total']);
+            $amount = str_contains($total, '.') ? $total : str_replace(',', '.', $total);
 
-            for ($line = 2; ($cells = fgetcsv($file, null, ',', '"', '')) !== false; $line++) {
-                if ($cells === [null]) {
-                    continue;   // an empty line
-                }
-
-                $row = [];
-                foreach ($names as $index => $name) {
-                    $row[$name] = trim((string) ($cells[$index] ?? ''));
-                }
-                $email = strtolower($row['email']);
-
-                if (!isset($customers[$email])) {
-                    $problems[] = 'Line ' . $line . ': no customer has the email "' . $email . '".';
-                } elseif ($row['items'] === '') {
-                    $problems[] = 'Line ' . $line . ': the items are missing.';
-                } elseif (mb_strlen($row['items']) > 200) {
-                    $problems[] = 'Line ' . $line . ': the items are longer than 200 characters.';
-                } elseif (!is_numeric($row['total']) || (float) $row['total'] <= 0 || (float) $row['total'] > 1_000_000) {
-                    // "1e999" is a number to PHP, and an endless one. No shop sells for that.
-                    $problems[] = 'Line ' . $line . ': "' . mb_substr($row['total'], 0, 40) . '" is not an amount.';
-                } else {
-                    $orders[] = ['email' => $email, 'customer' => $customers[$email], 'items' => $row['items'], 'total' => round((float) $row['total'], 2)];
-                }
+            if (!isset($customers[$email])) {
+                $problems[] = 'Row ' . $number . ': no customer has the email "' . mb_substr($email, 0, 80) . '".';
+            } elseif ($items === '') {
+                $problems[] = 'Row ' . $number . ': the items are missing.';
+            } elseif (mb_strlen($items) > 200) {
+                $problems[] = 'Row ' . $number . ': the items are longer than 200 characters.';
+            } elseif (!is_numeric($amount) || (float) $amount <= 0 || (float) $amount > 1_000_000) {
+                // "1e999" is a number to PHP, and an endless one. No shop sells for that.
+                $problems[] = 'Row ' . $number . ': "' . mb_substr($total, 0, 40) . '" is not an amount.';
+            } else {
+                $orders[] = ['email' => $email, 'customer' => $customers[$email], 'items' => $items, 'total' => round((float) $amount, 2)];
             }
-
-            return [$orders, $problems];
-        } finally {
-            fclose($file);
         }
+
+        return [$orders, $problems];
     }
 
     /**
-     * Adds orders that readOrders() returned. They are paid and placed today.
+     * Adds orders that checkOrders() returned. They are paid and placed today.
      *
      * @param list<array{email: string, customer: string, items: string, total: float}> $orders
      */

@@ -421,6 +421,29 @@ test('a file field fits a phone', async ({ page }) => {
     expect(remove.width).toBeGreaterThanOrEqual(24);
 });
 
+test('a file as a German Excel saves it is read like any other', async ({ page }) => {
+    await page.goto('/import');
+
+    // A mark at the start, semicolons, Windows line ends, a comma in the amount, an empty line at the end.
+    await orders(page).setInputFiles(file('bestellungen.csv', '\uFEFFEmail;Items;Total\r\nava@example.com;Notizbuch;24,50\r\nomar@example.com;Lampe;89\r\n\r\n'));
+
+    await expect(names(page)).toHaveText(['bestellungen.csv']);
+    await expect(rows(page)).toHaveCount(2);
+    await expect(rows(page).first()).toContainText('Notizbuch');
+    await expect(rows(page).first()).toContainText('24.5');
+    await expect(notice(page)).toHaveCount(0);
+});
+
+test('a file without the columns the tool needs is turned down with the reason', async ({ page }) => {
+    await page.goto('/import');
+
+    await orders(page).setInputFiles(file('people.csv', 'name,city\nAva,London\n'));
+
+    await expect(notice(page).first()).toContainText('Missing: email, items, total.');
+    await expect(notice(page).last()).toHaveText('No order could be read from people.csv.');
+    await expect(page.locator('#sui-body table')).toHaveCount(0);
+});
+
 test('orders from a file are added after a look at them, and the file is gone afterwards', async ({ page }) => {
     await page.goto('/ship');
     await page.locator('#f-table\\:find').fill('Pen holder');
@@ -430,8 +453,8 @@ test('orders from a file are added after a look at them, and the file is gone af
     await orders(page).setInputFiles(file('new-orders.csv', 'email,items,total\nava@example.com,Pen holder,12\nnobody@example.com,Lamp,10\nomar@example.com,Pen holder,abc\n'));
 
     // What cannot be added is said, and what can is shown.
-    await expect(notice(page)).toContainText('Line 3: no customer has the email "nobody@example.com".');
-    await expect(notice(page)).toContainText('Line 4: "abc" is not an amount.');
+    await expect(notice(page)).toContainText('Row 2: no customer has the email "nobody@example.com".');
+    await expect(notice(page)).toContainText('Row 3: "abc" is not an amount.');
     await expect(rows(page)).toHaveCount(1);
 
     await page.locator('#b-import-1-order').click();

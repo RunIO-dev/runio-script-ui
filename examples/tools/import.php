@@ -25,7 +25,8 @@ if ($file === null) {
 }
 
 // The file waits on the server while you look at it. Nothing is in the shop yet.
-[$orders, $problems] = $shop->readOrders($file->path);
+// rows() reads what a spreadsheet saved: the first line names the columns, every cell is text.
+[$orders, $problems] = $shop->checkOrders($file->rows());
 
 if ($problems !== []) {
     $more = count($problems) - 5;

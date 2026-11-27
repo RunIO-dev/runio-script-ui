@@ -162,6 +162,24 @@ final class InputsTest extends ToolTestCase
         self::assertSame(['Shipped'], $this->texts($response, '//select[@name="status"]/option[@selected]'));
     }
 
+    public function testAnOptionWithALineBreakCanBeChosen(): void
+    {
+        // A browser sends every line break as "\r\n", whatever the page said.
+        $value = null;
+        $tool = function () use (&$value): void {
+            $value = select('Address', ['None', "1 Main St\nSpringfield", "2 Side St\r\nShelbyville"]);
+        };
+
+        $this->post($tool, ['address' => "1 Main St\r\nSpringfield"]);
+        self::assertSame("1 Main St\nSpringfield", $value);
+
+        $this->get($tool);
+        self::assertSame("1 Main St\nSpringfield", $value, 'and the choice is remembered');
+
+        $this->post($tool, ['address' => "2 Side St\r\nShelbyville"]);
+        self::assertSame("2 Side St\r\nShelbyville", $value, 'the script gets the option as it passed it');
+    }
+
     public function testCheckboxKeepsItsDefaultUntilTheFormIsSubmitted(): void
     {
         $value = null;

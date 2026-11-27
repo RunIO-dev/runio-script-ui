@@ -1349,19 +1349,29 @@ final class Page
             }
 
             $value = $isList ? $option : $optionKey;
-            $choices[] = ['wire' => (string) $value, 'value' => $value, 'label' => (string) $option];
+            $choices[] = ['wire' => self::wire((string) $value), 'value' => $value, 'label' => (string) $option];
         }
 
         return $choices;
     }
 
     /**
+     * A value the way it is compared with what the form sent. A browser sends
+     * every line break as "\r\n", whatever the page said, so both sides use "\n".
+     */
+    private static function wire(string $value): string
+    {
+        return str_replace(["\r\n", "\r"], "\n", $value);
+    }
+
+    /**
      * @param list<array{wire: string, value: mixed, label: string}> $choices
      */
-    private static function choose(array $choices, string $wire): ?int
+    private static function choose(array $choices, string $sent): ?int
     {
+        $sent = self::wire($sent);
         foreach ($choices as $index => $choice) {
-            if ($choice['wire'] === $wire) {
+            if ($choice['wire'] === $sent) {
                 return $index;
             }
         }

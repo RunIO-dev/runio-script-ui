@@ -9,6 +9,7 @@ use Runio\ScriptUi\Tests\Support\ToolTestCase;
 
 use function Runio\ScriptUi\button;
 use function Runio\ScriptUi\checkbox;
+use function Runio\ScriptUi\download;
 use function Runio\ScriptUi\multiselect;
 use function Runio\ScriptUi\radio;
 use function Runio\ScriptUi\rerun;
@@ -297,6 +298,22 @@ final class ChoicesTest extends ToolTestCase
         self::assertSame([], $value, 'nothing ticked is kept too');
     }
 
+    public function testADownloadKeepsTheTicks(): void
+    {
+        // As with rerun(): the run that makes the file never reaches the field below the button.
+        $value = null;
+        $tool = function () use (&$value): void {
+            download('Export', 'a,b', 'export.csv');
+            $value = multiselect('Status', ['paid', 'shipped', 'refunded'], default: ['paid']);
+        };
+
+        $response = $this->post($tool, ['_click' => 'export', '_seen' => ['status'], 'status' => ['shipped', 'refunded']]);
+        self::assertSame('a,b', $response->body);
+
+        $this->get($tool);
+        self::assertSame(['shipped', 'refunded'], $value);
+    }
+
     public function testOnlyAPlainListOfTextsIsKeptForTheNextPageView(): void
     {
         // After rerun() the form is kept as it was sent and checked when the next run
@@ -582,6 +599,32 @@ final class ChoicesTest extends ToolTestCase
         self::assertSame(['DE', 'FR'], $this->texts($response, '//input[@name="countries[]"]/@value'));
         self::assertSame(['DE', 'FR'], $this->texts($response, '//select[@name="pick"]/option/@value'));
         self::assertSame(['DE'], $many);
+    }
+
+    public function testOptionsThatLookAlikeStayApart(): void
+    {
+        // PHP turns the text "7" into the number 7 where it names an entry of a list.
+        // No other text becomes that entry, so "07" and "7" are two options.
+        $options = ['1', '01', '1.0', '1e0', ' 1', '', '0', '-0', '00', '7', '07'];
+        $value = null;
+        $tool = function () use (&$value, $options): void {
+            $value = multiselect('Codes', $options);
+        };
+
+        $response = $this->post($tool, ['_seen' => ['codes'], 'codes' => $options]);
+        self::assertSame($options, $value, 'every option comes back as itself');
+        self::assertSame(count($options), $this->hits($response, '//input[@name="codes[]" and @checked]'));
+
+        foreach ($options as $option) {
+            $this->post($tool, ['_seen' => ['codes'], 'codes' => [$option]]);
+            self::assertSame([$option], $value);
+        }
+
+        // The number 0.0 and the text "0" are written the same way, so they are one option.
+        $this->post(function () use (&$value): void {
+            $value = multiselect('Zero', ['0', 0.0, 0]);
+        }, ['_seen' => ['zero'], 'zero' => ['0']]);
+        self::assertSame(['0'], $value);
     }
 
     public function testAnOptionWithALineBreakCanBeChosen(): void

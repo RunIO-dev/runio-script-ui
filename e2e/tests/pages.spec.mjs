@@ -13,9 +13,14 @@ test.afterEach(({ page }) => {
 test('the index page lists the tools', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page.locator('a.sui-card strong')).toHaveText([
+    await expect(page.locator('a.sui-card').first()).toBeVisible();
+    const names = await page.locator('a.sui-card strong').allTextContents();
+
+    // The tools that only the tests need are served from the same folder. See prepare-demo.mjs.
+    expect(names.filter((name) => !name.startsWith('Test:'))).toEqual([
         'Audit log',
         'Customers',
+        'Import orders',
         'Refund orders',
         'Sales dashboard',
         'Ship orders',

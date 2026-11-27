@@ -80,6 +80,100 @@ final class Shop
         $this->setStatus($id, 'shipped');
     }
 
+    /**
+     * A few orders in the shape that readOrders() takes, to try the import tool with.
+     *
+     * @return list<array{email: string, items: string, total: float}>
+     */
+    public static function exampleOrders(): array
+    {
+        return [
+            ['email' => 'ava@example.com', 'items' => 'Notebook and pen set', 'total' => 24.5],
+            ['email' => 'omar@example.com', 'items' => 'Monitor arm', 'total' => 89.0],
+            ['email' => 'lina@example.com', 'items' => 'Desk lamp', 'total' => 39.9],
+        ];
+    }
+
+    /**
+     * Reads orders from a CSV file. The first line names the columns: email, items and total.
+     * Nothing is added to the shop yet.
+     *
+     * @return array{0: list<array{email: string, customer: string, items: string, total: float}>, 1: list<string>}
+     *         the orders that can be added, and what is wrong with the other lines
+     */
+    public function readOrders(string $path): array
+    {
+        $file = @fopen($path, 'r');
+        if ($file === false) {
+            return [[], ['The file could not be read.']];
+        }
+
+        try {
+            // A file from Excel starts with a mark that says "UTF-8". It is not part of the first name.
+            $names = array_map(
+                static fn (mixed $name): string => strtolower(trim(str_replace("\u{FEFF}", '', (string) $name))),
+                fgetcsv($file, null, ',', '"', '') ?: [],
+            );
+            $missing = array_diff(['email', 'items', 'total'], $names);
+            if ($missing !== []) {
+                return [[], ['The first line has to name the columns email, items and total. Missing: ' . implode(', ', $missing) . '.']];
+            }
+
+            $customers = array_column($this->data['customers'], 'name', 'email');
+            $orders = $problems = [];
+
+            for ($line = 2; ($cells = fgetcsv($file, null, ',', '"', '')) !== false; $line++) {
+                if ($cells === [null]) {
+                    continue;   // an empty line
+                }
+
+                $row = [];
+                foreach ($names as $index => $name) {
+                    $row[$name] = trim((string) ($cells[$index] ?? ''));
+                }
+                $email = strtolower($row['email']);
+
+                if (!isset($customers[$email])) {
+                    $problems[] = 'Line ' . $line . ': no customer has the email "' . $email . '".';
+                } elseif ($row['items'] === '') {
+                    $problems[] = 'Line ' . $line . ': the items are missing.';
+                } elseif (!is_numeric($row['total']) || (float) $row['total'] <= 0) {
+                    $problems[] = 'Line ' . $line . ': "' . $row['total'] . '" is not an amount.';
+                } else {
+                    $orders[] = ['email' => $email, 'customer' => $customers[$email], 'items' => $row['items'], 'total' => round((float) $row['total'], 2)];
+                }
+            }
+
+            return [$orders, $problems];
+        } finally {
+            fclose($file);
+        }
+    }
+
+    /**
+     * Adds orders that readOrders() returned. They are paid and placed today.
+     *
+     * @param list<array{email: string, customer: string, items: string, total: float}> $orders
+     */
+    public function addOrders(array $orders): void
+    {
+        $id = max([1000, ...array_column($this->data['orders'], 'id')]);
+
+        foreach ($orders as $order) {
+            $this->data['orders'][] = [
+                'id' => ++$id,
+                'email' => $order['email'],
+                'customer' => $order['customer'],
+                'items' => $order['items'],
+                'total' => $order['total'],
+                'status' => 'paid',
+                'created_at' => date('Y-m-d'),
+            ];
+        }
+
+        $this->save();
+    }
+
     private function setStatus(int $id, string $status): void
     {
         foreach ($this->data['orders'] as &$order) {

@@ -315,16 +315,19 @@ final class Kernel
             return new Response(303, '', self::headers() + ['Location' => $selfUrl]);
         }
 
+        $saved = $states[$stateKey] ?? [];
+        $saved = is_array($saved) && self::savedAt($saved, $selfUrl) ? $saved : [];
+        unset($saved['_route']);
+
         if ($isPost) {
             $in = $request->post;
             $linked = [];
             $carried = [];
+            $inputsChanged = self::inputsChanged($saved, $in);
         } else {
-            $saved = $states[$stateKey] ?? [];
-            $saved = is_array($saved) && self::savedAt($saved, $selfUrl) ? $saved : [];
-            unset($saved['_route']);
             [$in, $linked] = self::prefill($saved, $request->query);
             $carried = $this->takeMessages($stateKey);
+            $inputsChanged = $linked !== [];
         }
 
         return new Page(
@@ -344,7 +347,40 @@ final class Kernel
             $linked,
             $this->config->language,
             $this->config->texts,
+            $inputsChanged,
         );
+    }
+
+    /**
+     * Did the user change an input of the tool since the last run? A table asks:
+     * when a changed input gives it other rows, it starts again at its first page.
+     *
+     * Only the fields of the tool count, not what the library keeps in the form
+     * (ticked rows, the page of a table). Without a saved run there is nothing to
+     * compare with, and the answer is no.
+     *
+     * @param array<array-key,mixed> $saved what the last run of this tool kept
+     * @param array<array-key,mixed> $form  what the browser sent now
+     */
+    private static function inputsChanged(array $saved, array $form): bool
+    {
+        if ($saved === []) {
+            return false;
+        }
+
+        foreach ($saved + $form as $name => $unused) {
+            $name = (string) $name;
+            if ($name === '' || $name[0] === '_') {
+                continue;
+            }
+
+            // An unticked box is not sent at all, and it is not kept either.
+            if (($saved[$name] ?? '') !== ($form[$name] ?? '')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

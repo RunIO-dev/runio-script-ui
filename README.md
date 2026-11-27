@@ -47,7 +47,7 @@ composer install
 php bin/script-ui serve examples/tools
 ```
 
-Open <http://localhost:8765>. The demo has five tools: refunds, a sales dashboard with charts, a customer list with filters, an Arabic page (right to left, with the library's own texts in Arabic), and the audit log. The demo data lives in `examples/var/` and can be deleted at any time.
+Open <http://localhost:8765>. The demo has six tools: refunds, orders to ship page by page, a sales dashboard with charts, a customer list with filters, an Arabic page (right to left, with the library's own texts in Arabic), and the audit log. The demo data lives in `examples/var/` and can be deleted at any time.
 
 ## How it works
 
@@ -102,9 +102,17 @@ foreach ($orders as $order) {
 
 `select('Status', ['paid', 'shipped'])` returns the chosen text. `select('Period', [7 => 'Last 7 days', 30 => 'Last 30 days'])` shows the texts and returns 7 or 30. PHP cannot tell `[0 => 'No', 1 => 'Yes']` from the list `['No', 'Yes']`, so when your keys count up from 0, add `byKey: true`.
 
+### Tables
+
+Pass all rows to `table($rows)`. A click on a header sorts all of them. A long table is shown one page at a time: 25 rows, or what you set with `pageSize:` (up to 200).
+
+The table starts again at its first page when it is sorted, and when the user changes another input and the rows are different after that, as with a filter. Rows that change on their own, such as a new order, leave the page where it is.
+
 ### Rows you can tick
 
 `table($rows, selectable: true)` returns the ticked rows. A row is found again by its `id` column (name another one with `rowKey:`). Rows without an id are recognised by what is in them. A tick never moves to a different row: when its row is gone or has changed, the tick is dropped.
+
+A tick stays when the user turns the page or sorts, so the rows you get back can come from any page. The line under the table says how many rows are ticked and how many of them are on other pages. One table takes up to 1,000 ticks.
 
 ### Downloads
 
@@ -196,7 +204,7 @@ What stays your job: decide who may do what (`user()` tells you who is asking), 
 ## Limits of this first version
 
 - No file uploads yet.
-- Tables show the first 200 rows by default (`limit:`). There is no paging yet.
+- A table gets all its rows from the script and cuts them into pages itself. That is fast for tens of thousands of rows. For more, filter in the database first.
 - Charts are bar and line charts with one axis and at most 8 series.
 - State lives in the PHP session. Two tabs of the same tool share saved inputs.
 - A script that runs on its own (without `serve()`) is told apart by its file and its path. Tools that share both and differ only in the query string (`index.php?page=refund`) work, but they do not remember their inputs separately.

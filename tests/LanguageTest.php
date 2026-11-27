@@ -76,12 +76,12 @@ final class LanguageTest extends ToolTestCase
         return $this->folders[] = $folder;
     }
 
-    /** A page with a table of three rows of which two are shown, and a button that asks first. */
+    /** A page with a table of three rows on two pages, and a button that asks first. */
     private static function orders(string $title): \Closure
     {
         return static function () use ($title): void {
             title($title);
-            table(self::ORDERS, selectable: true, limit: 2);
+            table(self::ORDERS, selectable: true, pageSize: 2);
             button('Delete', confirm: 'Delete?', key: 'delete');
         };
     }
@@ -126,7 +126,9 @@ final class LanguageTest extends ToolTestCase
         self::assertSame('en', $this->attr($response, '/html', 'lang'));
         self::assertSame('ltr', $this->attr($response, '/html', 'dir'));
         self::assertSame(['Reset'], $this->texts($response, '//a[contains(@class,"sui-reset")]'));
-        self::assertSame('Showing 2 of 3 rows · 0 selected', $this->foot($response));
+        self::assertSame('Rows 1 to 2 of 3 · 0 selected', $this->foot($response));
+        self::assertSame(['Previous', 'Page 1 of 2', 'Next'], $this->texts($response, '//*[contains(@class,"sui-pager")]/*'));
+        self::assertSame('Pages', $this->attr($response, '//*[contains(@class,"sui-pager")]', 'aria-label'));
         self::assertSame(['Yes', 'No'], $this->texts($response, '//table//tbody/tr/td[3]'));
         self::assertSame('Select row 1', $this->attr($response, '//table//tbody//input[@type="checkbox"]', 'aria-label'));
 
@@ -143,7 +145,9 @@ final class LanguageTest extends ToolTestCase
         self::assertSame('ar', $this->attr($response, '/html', 'lang'));
         self::assertSame('rtl', $this->attr($response, '/html', 'dir'));
         self::assertSame(['إعادة تعيين'], $this->texts($response, '//a[contains(@class,"sui-reset")]'));
-        self::assertSame('الصفوف: 2 من 3 · المحدد: 0', $this->foot($response));
+        self::assertSame('الصفوف 1 إلى 2 من 3 · المحدد: 0', $this->foot($response));
+        self::assertSame(['السابق', 'الصفحة 1 من 2', 'التالي'], $this->texts($response, '//*[contains(@class,"sui-pager")]/*'));
+        self::assertSame('الصفحات', $this->attr($response, '//*[contains(@class,"sui-pager")]', 'aria-label'));
         self::assertSame(['نعم', 'لا'], $this->texts($response, '//table//tbody/tr/td[3]'));
         self::assertSame('تحديد الصف 1', $this->attr($response, '//table//tbody//input[@type="checkbox"]', 'aria-label'));
 
@@ -161,7 +165,8 @@ final class LanguageTest extends ToolTestCase
         self::assertSame('de', $this->attr($response, '/html', 'lang'));
         self::assertSame('ltr', $this->attr($response, '/html', 'dir'));
         self::assertSame(['Zurücksetzen'], $this->texts($response, '//a[contains(@class,"sui-reset")]'));
-        self::assertSame('2 von 3 Zeilen · 0 ausgewählt', $this->foot($response));
+        self::assertSame('Zeilen 1 bis 2 von 3 · 0 ausgewählt', $this->foot($response));
+        self::assertSame(['Zurück', 'Seite 1 von 2', 'Weiter'], $this->texts($response, '//*[contains(@class,"sui-pager")]/*'));
         self::assertSame(['Ja', 'Nein'], $this->texts($response, '//table//tbody/tr/td[3]'));
 
         $response = $this->post($tool, ['_click' => 'delete']);
@@ -221,13 +226,27 @@ final class LanguageTest extends ToolTestCase
     {
         $tool = static function (): void {
             title('Orders');
-            table(array_map(static fn (int $id): array => ['id' => $id], range(1, 1200)), limit: 1000);
+            table(array_map(static fn (int $id): array => ['id' => $id], range(1, 1200)), pageSize: 200);
         };
 
-        self::assertSame('Showing 1,000 of 1,200 rows', $this->foot($this->get($tool)));
+        self::assertSame('Rows 1 to 200 of 1,200', $this->foot($this->get($tool)));
 
         $this->configure('de');
-        self::assertSame('1.000 von 1.200 Zeilen', $this->foot($this->get($tool)));
+        self::assertSame('Zeilen 1 bis 200 von 1.200', $this->foot($this->get($tool)));
+    }
+
+    public function testTheNoteUnderALongChartTableIsTranslated(): void
+    {
+        $tool = static function (): void {
+            title('Orders');
+            chart(array_map(static fn (int $day): array => ['day' => 'Day ' . $day, 'total' => $day], range(1, 250)), x: 'day', y: 'total');
+        };
+        $note = '//figure//p[contains(@class,"sui-table-foot")]';
+
+        self::assertSame(['Showing 200 of 250 rows'], $this->texts($this->get($tool), $note));
+
+        $this->configure('de');
+        self::assertSame(['200 von 250 Zeilen'], $this->texts($this->get($tool), $note));
     }
 
     public function testWhatTheScriptPassesWinsOverTheLanguage(): void
@@ -443,7 +462,12 @@ final class LanguageTest extends ToolTestCase
             'page.update' => $evil,
             'page.offline' => $quote,
             'table.rows' => $evil . ' {count}',
+            'table.range' => $evil . ' {from} {to} {count}',
             'table.selected' => $evil . ' {count}',
+            'table.pages' => $quote,
+            'table.page' => $evil . ' {page} {pages}',
+            'table.previous' => $evil,
+            'table.next' => $evil,
             'table.select' => $evil,
             'table.select_row' => $quote . ' {row}',
             'cell.yes' => $evil,
@@ -460,6 +484,7 @@ final class LanguageTest extends ToolTestCase
         $response = $this->post(function (): void {
             title('Orders');
             table(self::ORDERS, selectable: true);
+            table(array_map(static fn (int $id): array => ['id' => $id], range(1, 30)), key: 'long');
             chart([['day' => 'Mon', 'total' => 3]], x: 'day', y: 'total');
             button('Delete', confirm: 'Delete?', key: 'delete');
 
@@ -477,6 +502,9 @@ final class LanguageTest extends ToolTestCase
         self::assertSame([$evil], $this->texts($response, '//noscript//button'));
         self::assertSame($quote, $this->attr($response, '//*[@id="sui-body"]', 'data-sui-offline'));
         self::assertSame($evil . ' 3 · ' . $evil . ' 0', $this->foot($response));
+        self::assertSame($evil . ' 1 25 30', $this->texts($response, '//p[contains(@class,"sui-table-foot")]')[1]);
+        self::assertSame([$evil, $evil . ' 1 2', $evil], $this->texts($response, '//*[contains(@class,"sui-pager")]/*'));
+        self::assertSame($quote, $this->attr($response, '//*[contains(@class,"sui-pager")]', 'aria-label'));
         self::assertSame([$evil], $this->texts($response, '//table[1]//th[contains(@class,"sui-pick")]'));
         self::assertSame($quote . ' 1', $this->attr($response, '//table//tbody//input[@type="checkbox"]', 'aria-label'));
         self::assertSame([$evil, 'No', $evil], $this->texts($response, '//table[1]//tbody/tr/td[3]'));

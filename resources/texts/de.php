@@ -26,8 +26,14 @@ return [
     'table.select_row' => 'Zeile {row} auswählen',
     'table.rows_one' => '1 Zeile',
     'table.rows' => '{count} Zeilen',
-    'table.rows_of' => '{shown} von {count} Zeilen',
+    'table.range' => 'Zeilen {from} bis {to} von {count}',
     'table.selected' => '{count} ausgewählt',
+    'table.selected_elsewhere' => '{count} ausgewählt ({hidden} auf anderen Seiten)',
+    'table.selected_max' => 'Es können höchstens {count} Zeilen ausgewählt werden.',
+    'table.pages' => 'Seiten',
+    'table.page' => 'Seite {page} von {pages}',
+    'table.previous' => 'Zurück',
+    'table.next' => 'Weiter',
     'cell.yes' => 'Ja',
     'cell.no' => 'Nein',
     'number.thousands' => '.',
@@ -35,6 +41,7 @@ return [
     // Charts
     'chart.empty' => 'Keine Daten zum Zeichnen.',
     'chart.data' => 'Daten',
+    'chart.rows_of' => '{shown} von {count} Zeilen',
     'chart.bar' => 'Säulendiagramm: {series} nach {axis}',
     'chart.line' => 'Liniendiagramm: {series} nach {axis}',
 

@@ -90,7 +90,7 @@ final class Chart
             . $caption
             . $legend
             . '<div class="sui-chart-scroll">' . self::svg($labels, $values, $names, $type, max(120, min(600, $height)), $description, $scale) . '</div>'
-            . ($withTable ? self::table(Text::humanise($x), $labels, $values, $names, $scale['precision'], $texts->get('chart.data')) : '')
+            . ($withTable ? self::table(Text::humanise($x), $labels, $values, $names, $scale['precision'], $texts) : '')
             . '</figure>';
     }
 
@@ -412,9 +412,9 @@ final class Chart
      * @param list<list<?float>> $values
      * @param list<string>       $names
      */
-    private static function table(string $axis, array $labels, array $values, array $names, int $precision, string $summary): string
+    private static function table(string $axis, array $labels, array $values, array $names, int $precision, Texts $texts): string
     {
-        $html = '<details class="sui-data"><summary dir="auto">' . Text::e($summary) . '</summary><div class="sui-table-wrap"><table class="sui-table"><thead><tr>'
+        $html = '<details class="sui-data"><summary dir="auto">' . Text::e($texts->get('chart.data')) . '</summary><div class="sui-table-wrap"><table class="sui-table"><thead><tr>'
             . '<th scope="col" dir="auto">' . Text::e($axis) . '</th>';
         foreach ($names as $name) {
             $html .= '<th scope="col" class="sui-num" dir="auto">' . Text::e($name) . '</th>';
@@ -432,7 +432,10 @@ final class Chart
 
         $html .= '</tbody></table></div>';
         if (count($labels) > self::MAX_TABLE_ROWS) {
-            $html .= '<p class="sui-table-foot">Showing ' . self::MAX_TABLE_ROWS . ' of ' . count($labels) . ' rows</p>';
+            $html .= '<p class="sui-table-foot">' . Text::e($texts->get('chart.rows_of', [
+                'shown' => $texts->number(self::MAX_TABLE_ROWS),
+                'count' => $texts->number(count($labels)),
+            ])) . '</p>';
         }
 
         return $html . '</details>';

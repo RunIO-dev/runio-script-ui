@@ -81,6 +81,8 @@ final class Page
      * @param array<array-key,true>  $linked   names in the bag that came from the address ("?customer-email=...")
      * @param string|null            $setLanguage the language of the built-in texts, when one is set for all pages
      * @param array<array-key,mixed> $ownTexts built-in texts the application replaced: language => (id => text)
+     * @param bool                   $inputsChanged the user changed an input of the tool since the page was drawn,
+     *                                              or a link filled one in
      */
     public function __construct(
         public readonly string $toolId,
@@ -96,6 +98,7 @@ final class Page
         private readonly array $linked = [],
         private readonly ?string $setLanguage = null,
         private readonly array $ownTexts = [],
+        private readonly bool $inputsChanged = false,
     ) {
         $this->stateKey = $stateKey ?? $toolId;
 
@@ -432,10 +435,10 @@ final class Page
      *
      * @return list<mixed> the selected rows, exactly as they were passed in
      */
-    public function table(iterable $rows, bool $selectable, ?array $columns, ?string $key, string $rowKey, int $limit, ?string $empty): array
+    public function table(iterable $rows, bool $selectable, ?array $columns, ?string $key, string $rowKey, int $pageSize, ?string $empty): array
     {
         $key = $this->claimTable($key);
-        $table = Table::draw($key, $rows, $selectable, $columns, $rowKey, $limit, $empty, $this->in, $this->click, $this->texts());
+        $table = Table::draw($key, $rows, $selectable, $columns, $rowKey, $pageSize, $empty, $this->in, $this->click, $this->inputsChanged, $this->texts());
 
         foreach ($table->keep as $name => $value) {
             $this->out[$name][$key] = $value;
@@ -1020,8 +1023,9 @@ final class Page
     }
 
     /**
-     * The part of a submitted form that may be kept in the session: plain fields
-     * and the three internal lists, all limited in size.
+     * The part of a submitted form that may be kept in the session: plain fields,
+     * the list of tick boxes that were on the page, and what the tables keep. All
+     * of it is limited in size.
      *
      * @param array<array-key,mixed> $in
      *
@@ -1055,19 +1059,9 @@ final class Page
                 }
             } elseif ($name === '_seen') {
                 $keep['_seen'] = $strings($value);
-            } elseif ($name === '_sel' && is_array($value)) {
-                foreach ($value as $table => $ids) {
-                    $keep['_sel'][$table] = $strings($ids);
-                }
-            } elseif ($name === '_sort' && is_array($value)) {
-                foreach ($value as $table => $state) {
-                    if (is_string($state) && strlen($state) <= 16) {
-                        $keep['_sort'][$table] = $state;
-                    }
-                }
             }
         }
 
-        return $keep;
+        return $keep + Table::keepable($in);
     }
 }

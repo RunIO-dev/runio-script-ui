@@ -34,8 +34,14 @@ return [
     'table.select_row' => 'تحديد الصف {row}',
     'table.rows_one' => 'صف واحد',
     'table.rows' => 'الصفوف: {count}',
-    'table.rows_of' => 'الصفوف: {shown} من {count}',
+    'table.range' => 'الصفوف {from} إلى {to} من {count}',
     'table.selected' => 'المحدد: {count}',
+    'table.selected_elsewhere' => 'المحدد: {count} (منها {hidden} في صفحات أخرى)',
+    'table.selected_max' => 'أقصى عدد يمكن تحديده: {count}',
+    'table.pages' => 'الصفحات',
+    'table.page' => 'الصفحة {page} من {pages}',
+    'table.previous' => 'السابق',
+    'table.next' => 'التالي',
     'cell.yes' => 'نعم',
     'cell.no' => 'لا',
     'number.thousands' => ',',
@@ -43,6 +49,7 @@ return [
     // Charts
     'chart.empty' => 'لا توجد بيانات للرسم.',
     'chart.data' => 'البيانات',
+    'chart.rows_of' => 'الصفوف: {shown} من {count}',
     'chart.bar' => 'مخطط أعمدة: {series} حسب {axis}',
     'chart.line' => 'مخطط خطي: {series} حسب {axis}',
 

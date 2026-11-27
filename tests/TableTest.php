@@ -118,16 +118,6 @@ final class TableTest extends ToolTestCase
         self::assertStringContainsString('Nothing found', $response->body);
     }
 
-    public function testOnlyTheFirstRowsAreShown(): void
-    {
-        $response = $this->get(function (): void {
-            table(self::ORDERS, limit: 2);
-        });
-
-        self::assertSame(2, $this->hits($response, '//table//tbody/tr'));
-        self::assertStringContainsString('Showing 2 of 3 rows', $response->body);
-    }
-
     public function testASelectableTableReturnsTheTickedRows(): void
     {
         $picked = null;
@@ -424,17 +414,25 @@ final class TableTest extends ToolTestCase
         self::assertSame([self::ORDERS[0], self::ORDERS[2]], $picked);
     }
 
-    public function testRowsThatAreNotShownCannotBeSelected(): void
+    public function testAnIdThatIsNotTextCanStillBeTicked(): void
     {
+        // A database may keep a UUID as 16 bytes. Bytes cannot sit in a form field.
+        $first = hex2bin('018f3a7c9d2b7e41a6c05b1e9f3d2c10');
+        $second = hex2bin('ff8f3a7c9d2b7e41a6c05b1e9f3d2cff');
+        $rows = [['id' => $first, 'name' => 'Ava'], ['id' => $second, 'name' => 'Ben']];
         $picked = null;
-        $all = function (): void {
-            table(self::ORDERS, selectable: true);
+        $tool = function () use (&$picked, $rows): void {
+            $picked = table($rows, selectable: true, columns: ['name']);
+            button('Delete');
         };
-        $this->post(function () use (&$picked): void {
-            $picked = table(self::ORDERS, selectable: true, limit: 2);
-        }, ['_sel' => ['table' => [$this->box($all, 1001), $this->box($all, 1003)]]]);
 
-        self::assertSame([self::ORDERS[0]], $picked);
+        $boxes = $this->boxes($this->get($tool));
+        self::assertMatchesRegularExpression('/^[0-9a-f]{6}:x:[0-9a-f]{32}$/', $boxes[1]);
+
+        $this->post($tool, ['_sel' => ['table' => [$boxes[1]]], '_click' => 'delete']);
+
+        self::assertSame([$rows[1]], $picked);
+        self::assertSame(['0xff8f3a7c9d2b7e41a6c05b1e9f3d2cff'], $this->logged[0]['inputs']['table']);
     }
 
     public function testColumnsNamedLikeNumbersCanBeRenamed(): void

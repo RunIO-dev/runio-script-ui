@@ -165,17 +165,19 @@ function date_input(
 // --------------------------------------------------------------------- data
 
 /**
- * A table of rows. Click a column header to sort.
+ * A table of rows. Click a column header to sort. A long table is shown one page at a time.
+ *
+ * Pass all rows: the table sorts all of them and cuts them into pages itself.
  *
  * @param iterable<mixed>             $rows       arrays or objects, for example what a database query returned
- * @param bool                        $selectable adds a tick box to every row
+ * @param bool                        $selectable adds a tick box to every row. A tick stays when the page of the table changes
  * @param array<array-key,mixed>|null $columns    ['id', 'total'] to choose columns, ['id' => 'Order'] to also rename them
  * @param string                      $rowKey     the column that identifies a row. A row without it is known by what is in it:
  *                                                its tick is dropped when the row changes
- * @param int                         $limit      how many rows to show at most
+ * @param int                         $pageSize   how many rows one page shows, from 1 to 200
  * @param string|null                 $empty      what to say when there are no rows. By default "No rows." in the language of the page
  *
- * @return list<mixed> the rows the user ticked, exactly as they were passed in (always empty unless $selectable)
+ * @return list<mixed> the rows the user ticked on all pages, exactly as they were passed in (always empty unless $selectable)
  */
 function table(
     iterable $rows,
@@ -183,10 +185,10 @@ function table(
     ?array $columns = null,
     ?string $key = null,
     string $rowKey = 'id',
-    int $limit = 200,
+    int $pageSize = 25,
     ?string $empty = null,
 ): array {
-    return Runtime::page()->table($rows, $selectable, $columns, $key, $rowKey, $limit, $empty);
+    return Runtime::page()->table($rows, $selectable, $columns, $key, $rowKey, $pageSize, $empty);
 }
 
 /**

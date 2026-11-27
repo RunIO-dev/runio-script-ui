@@ -8,6 +8,7 @@
 
   const form = document.getElementById('sui-form');
   const body = document.getElementById('sui-body');
+  const status = document.getElementById('sui-status');
   if (!form || !body || !window.fetch || !window.AbortController) {
     return;
   }
@@ -79,12 +80,8 @@
     return kept;
   };
 
-  const show = ({ html, title, origin }) => {
-    const keep = origin || place(document.activeElement);
-
-    body.innerHTML = html;
-    if (title) document.title = title;
-
+  // Puts the keyboard focus back where it was before the content was swapped.
+  const refocus = (keep) => {
     const asked = body.querySelector('[data-sui-focus]');
     if (asked) {
       asked.focus();
@@ -93,8 +90,10 @@
     if (!keep) return;
 
     let again = document.getElementById(keep.id);
-    if (!again && keep.fallback) {
+    if ((!again || again.disabled) && keep.fallback) {
       // The question was answered and is gone: back to the button it belonged to.
+      // Or the last page of a table is reached and "Next" cannot be pressed any
+      // more: on to "Previous".
       again = document.getElementById(keep.fallback);
     }
     if (again && body.contains(again)) {
@@ -106,6 +105,28 @@
         } catch (error) { /* see above */ }
       }
     }
+  };
+
+  // Swapping the content says nothing to a screen reader. When the user is in a
+  // table, its status line is written into a place that is read out when it
+  // changes: "Rows 26 to 50 of 80".
+  const announce = () => {
+    if (!status) return;
+    const focused = document.activeElement;
+    const table = focused ? focused.closest('.sui-table-block') : null;
+    const lines = table ? Array.from(table.querySelectorAll('[data-sui-status]'), (line) => line.textContent.trim()) : [];
+    const text = lines.join(' ');
+    if (status.textContent !== text) status.textContent = text;
+  };
+
+  const show = ({ html, title, origin }) => {
+    const keep = origin || place(document.activeElement);
+
+    body.innerHTML = html;
+    if (title) document.title = title;
+
+    refocus(keep);
+    announce();
   };
 
   // Hands a file to the browser to save, as if the user had followed a download link.

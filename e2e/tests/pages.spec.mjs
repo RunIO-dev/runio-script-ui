@@ -18,6 +18,7 @@ test('the index page lists the tools', async ({ page }) => {
         'Customers',
         'Refund orders',
         'Sales dashboard',
+        'Ship orders',
         'البحث في الطلبات',
     ]);
 });
@@ -64,7 +65,8 @@ test('the Arabic page runs right to left', async ({ page }) => {
 
     // The title is Arabic, so the texts the library writes itself are Arabic too.
     await expect(page.locator('a.sui-reset')).toHaveText('إعادة تعيين');
-    await expect(page.locator('.sui-table-foot')).toHaveText('الصفوف: 20 من 80');
+    await expect(page.locator('.sui-table-foot')).toHaveText('الصفوف 1 إلى 20 من 80');
+    await expect(page.locator('.sui-pager')).toHaveText('السابق' + 'الصفحة 1 من 4' + 'التالي');
     await expect(page.locator('html')).toHaveAttribute('lang', 'ar');
 });
 

@@ -125,6 +125,50 @@ abstract class ToolTestCase extends TestCase
         return $query;
     }
 
+    /**
+     * What a browser would send if the form of this page were submitted as it
+     * stands: every hidden field, every text, the ticked boxes and the chosen options.
+     * Add "_click" to press a button.
+     *
+     * @return array<array-key,mixed>
+     */
+    protected function form(Response $response): array
+    {
+        $pairs = [];
+        foreach ($this->xpath($response)->query('//input[@name] | //select[@name] | //textarea[@name]') ?: [] as $field) {
+            if (!$field instanceof \DOMElement || $field->hasAttribute('disabled')) {
+                continue;
+            }
+
+            $type = strtolower($field->getAttribute('type'));
+            if ($field->tagName === 'select') {
+                $options = iterator_to_array($field->getElementsByTagName('option'));
+                $chosen = array_values(array_filter($options, static fn (\DOMElement $option): bool => $option->hasAttribute('selected')))[0] ?? $options[0] ?? null;
+                if ($chosen === null) {
+                    continue;
+                }
+                $value = $chosen->getAttribute('value');
+            } elseif ($field->tagName === 'textarea') {
+                $value = $field->textContent;
+            } elseif (in_array($type, ['checkbox', 'radio'], true)) {
+                if (!$field->hasAttribute('checked')) {
+                    continue;
+                }
+                $value = $field->getAttribute('value');
+            } elseif (in_array($type, ['submit', 'button', 'reset', 'file', 'image'], true)) {
+                continue;
+            } else {
+                $value = $field->getAttribute('value');
+            }
+
+            $pairs[] = rawurlencode($field->getAttribute('name')) . '=' . rawurlencode($value);
+        }
+
+        parse_str(implode('&', $pairs), $fields);
+
+        return $fields;
+    }
+
     protected function xpath(Response $response): \DOMXPath
     {
         $dom = new \DOMDocument();

@@ -9,7 +9,7 @@ namespace Runio\ScriptUi;
  * its saved value. By default it is made from the label.
  *
  * Keys never start with an underscore: those names belong to the library
- * (_token, _click, _seen, _sel, _sort, _tool, _reset).
+ * (_token, _click, _seen, _sel, _kept, _sort, _page, _tool, _reset).
  *
  * A key holds no colon. The element of an input has the id "f-" plus its key and
  * a button "b-" plus its key. The parts inside a table or a question get an id

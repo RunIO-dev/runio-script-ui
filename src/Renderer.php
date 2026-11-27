@@ -42,6 +42,9 @@ final class Renderer
             // "contains" would hide the form's own property of that name.
             // The script cannot ask for a text while the server is away, so it gets this one now.
             . '<div id="sui-body" class="sui-flow" data-sui-offline="' . Text::e($texts->get('page.offline')) . '">' . $page->html() . '</div>'
+            // The content above is replaced as a whole, which a screen reader does not
+            // announce. The script writes here what changed: the status line of a table.
+            . '<div id="sui-status" class="sui-sr" role="status"></div>'
             . '<noscript><p class="sui-noscript"><button type="submit" class="sui-btn sui-btn-default">' . Text::e($texts->get('page.update')) . '</button></p></noscript>'
             . '</form>';
 

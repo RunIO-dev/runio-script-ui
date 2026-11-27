@@ -42,5 +42,5 @@ heading('Latest orders');
 table(
     $shop->orders(days: $days),
     columns: ['id' => 'Order', 'created_at' => 'Placed on', 'customer' => 'Customer', 'items' => 'Items', 'status' => 'Status', 'total' => 'Total'],
-    limit: 15,
+    pageSize: 10,
 );

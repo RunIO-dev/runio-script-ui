@@ -72,9 +72,19 @@ final class Shop
 
     public function refund(int $id): void
     {
+        $this->setStatus($id, 'refunded');
+    }
+
+    public function ship(int $id): void
+    {
+        $this->setStatus($id, 'shipped');
+    }
+
+    private function setStatus(int $id, string $status): void
+    {
         foreach ($this->data['orders'] as &$order) {
             if ($order['id'] === $id) {
-                $order['status'] = 'refunded';
+                $order['status'] = $status;
             }
         }
         unset($order);

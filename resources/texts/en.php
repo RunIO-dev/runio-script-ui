@@ -31,8 +31,14 @@ return [
     'table.select_row' => 'Select row {row}',
     'table.rows_one' => '1 row',
     'table.rows' => '{count} rows',
-    'table.rows_of' => 'Showing {shown} of {count} rows',
+    'table.range' => 'Rows {from} to {to} of {count}',
     'table.selected' => '{count} selected',
+    'table.selected_elsewhere' => '{count} selected ({hidden} on other pages)',
+    'table.selected_max' => 'No more than {count} rows can be selected.',
+    'table.pages' => 'Pages',
+    'table.page' => 'Page {page} of {pages}',
+    'table.previous' => 'Previous',
+    'table.next' => 'Next',
     'cell.yes' => 'Yes',
     'cell.no' => 'No',
     'number.thousands' => ',',
@@ -40,6 +46,7 @@ return [
     // Charts
     'chart.empty' => 'No data to draw.',
     'chart.data' => 'Data',
+    'chart.rows_of' => 'Showing {shown} of {count} rows',
     'chart.bar' => 'Bar chart of {series} by {axis}',
     'chart.line' => 'Line chart of {series} by {axis}',
 

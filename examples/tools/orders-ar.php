@@ -31,7 +31,7 @@ columns(
 table(
     $orders,
     columns: ['id' => 'رقم الطلب', 'created_at' => 'التاريخ', 'customer' => 'العميل', 'items' => 'المنتجات', 'total' => 'المبلغ'],
-    limit: 20,
+    pageSize: 20,
     empty: 'لا توجد طلبات مطابقة.',
 );
 

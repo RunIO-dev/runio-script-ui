@@ -13,6 +13,7 @@
   --accent: #1b64be;
   --accent-ink: #ffffff;
   --wash: #edf4fd;
+  --shade: rgba(11, 11, 11, 0.18);
   --good: #0aac23;
   --good-ink: #006c10;
   --warn: #fbb315;
@@ -47,6 +48,7 @@
     --accent: #6aabf1;
     --accent-ink: #0b0b0b;
     --wash: #172433;
+    --shade: rgba(0, 0, 0, 0.85);
     --good-ink: #53c556;
     --bad-ink: #eb6263;
     --danger-ink: #0b0b0b;
@@ -516,9 +518,28 @@ input[type="checkbox"] {
 
 /* ---------------------------------------------------------------- tables */
 
+/* A table, the line under it and its pager stay together. */
+.sui-table-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/*
+ * A wide table scrolls sideways. A shadow at an edge says that more is hidden
+ * there. The shadows stay at the edges of the frame. The two covers lie on the
+ * ends of the table and move with it, so each hides its shadow once that end
+ * is reached.
+ */
 .sui-table-wrap {
   overflow-x: auto;
-  background: var(--surface);
+  background:
+    linear-gradient(to right, var(--surface) 40%, transparent) left / 36px 100% no-repeat local,
+    linear-gradient(to left, var(--surface) 40%, transparent) right / 36px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, var(--shade), transparent) left / 12px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, var(--shade), transparent) right / 12px 100% no-repeat scroll,
+    var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
@@ -599,14 +620,50 @@ th[aria-sort="descending"] .sui-sort::after {
   content: " \2193";
 }
 
-.sui-flow > .sui-table-foot,
-.sui-col > .sui-table-foot {
-  margin-top: -8px;
+/* Under the table: how many rows, and on the far side the pager. */
+.sui-table-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
 }
 
-.sui-table-foot {
+.sui-table-foot,
+.sui-table-limit {
+  margin: 0;
   color: var(--ink-2);
   font-size: 13px;
+}
+
+.sui-table-limit {
+  color: var(--bad-ink);
+}
+
+.sui-pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+
+.sui-page {
+  align-self: center;
+  min-height: 34px;
+  padding: 5px 12px;
+  font-size: 13px;
+}
+
+/* The first or the last page: the button is there, so nothing jumps, but it does nothing. */
+.sui-page:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.sui-page-now {
+  color: var(--ink-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* --------------------------------------------------------------- numbers */

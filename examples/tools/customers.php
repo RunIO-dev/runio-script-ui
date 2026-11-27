@@ -61,7 +61,7 @@ if (count($picked) === 1) {
         $shop->orders(email: $customer['email']),
         columns: ['id' => 'Order', 'created_at' => 'Placed on', 'items' => 'Items', 'status' => 'Status', 'total' => 'Total'],
         key: 'orders',
-        limit: 10,
+        pageSize: 10,
     );
 } elseif (count($picked) > 1) {
     note('Tick a single customer to see the details.');

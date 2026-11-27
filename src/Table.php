@@ -5,16 +5,29 @@ declare(strict_types=1);
 namespace Runio\ScriptUi;
 
 /**
- * One table of a page: which rows it shows, in which order, which of them are
- * ticked, and the HTML for all of it.
+ * One table of a page: which rows it shows, in which order, on which page,
+ * which of them are ticked, and the HTML for all of it.
  *
- * The browser only says how the table is sorted and which rows are ticked. The
- * rows themselves always come from the script, so a forged form can never add one.
+ * The browser only says how the table is sorted, which page it shows and which
+ * rows are ticked. The rows themselves always come from the script, so a
+ * forged form can never add one.
  *
  * @internal Tools call table().
  */
 final class Table
 {
+    /** A longer page is slow to draw, and every tick box on it is one field of the form. */
+    public const MAX_PAGE_SIZE = 200;
+
+    /** How many rows of one table can be ticked at the same time. */
+    public const MAX_SELECTED = 1000;
+
+    /** The ticks of the other pages travel as one field. A longer one is not read. */
+    public const MAX_KEPT_BYTES = 100000;
+
+    /** A longer value of the id column travels through the form as a fingerprint. */
+    private const MAX_ID_BYTES = 40;
+
     /**
      * @param list<mixed>                       $picked the ticked rows, exactly as they were passed in
      * @param list<string>|null                 $named  what the ticked rows are called in the log; null when there is nothing to tick
@@ -31,8 +44,9 @@ final class Table
     /**
      * @param iterable<mixed>             $rows
      * @param array<array-key,mixed>|null $columns
-     * @param array<array-key,mixed>      $in    the bag of this run
-     * @param string                      $click the button the user pressed, or ''
+     * @param array<array-key,mixed>      $in            the bag of this run
+     * @param string                      $click         the button the user pressed, or ''
+     * @param bool                        $inputsChanged the user changed an input of the tool since the page was drawn
      */
     public static function draw(
         string $key,
@@ -40,12 +54,17 @@ final class Table
         bool $selectable,
         ?array $columns,
         string $rowKey,
-        int $limit,
+        int $pageSize,
         ?string $empty,
         array $in,
         string $click,
+        bool $inputsChanged,
         Texts $texts,
     ): self {
+        if ($pageSize < 1 || $pageSize > self::MAX_PAGE_SIZE) {
+            throw new \InvalidArgumentException(sprintf('table(): pageSize has to be between 1 and %d.', self::MAX_PAGE_SIZE));
+        }
+
         $originals = [];
         $records = [];
         foreach ($rows as $row) {
@@ -54,64 +73,68 @@ final class Table
         }
 
         if ($records === []) {
-            return new self('<p class="sui-empty" dir="auto">' . Text::e($empty ?? $texts->get('table.empty')) . '</p>');
+            // A filter of the tool may leave nothing for a moment. The table still
+            // remembers how it was sorted for when the rows are back.
+            $sorted = self::savedSort($key, $in);
+
+            return new self(
+                '<p class="sui-empty" dir="auto">' . Text::e($empty ?? $texts->get('table.empty')) . '</p>'
+                    . ($sorted === null ? '' : self::hidden('_sort', $key, $sorted)),
+                keep: $sorted === null ? [] : ['_sort' => $sorted],
+            );
         }
 
         $keep = [];
+        $hidden = '';
         $fields = Rows::columns($records, $columns, 'table()');
+
         $sort = self::sort($key, count($fields), $in, $click);
-
-        $order = array_keys($records);
         if ($sort !== null) {
-            $field = $fields[$sort[0]]['field'];
-            $descending = $sort[1] === 'desc';
-            usort($order, static function (int $a, int $b) use ($records, $field, $descending): int {
-                $left = $records[$a][$field] ?? null;
-                $right = $records[$b][$field] ?? null;
-                if ($left === null || $right === null) {
-                    // Empty values go last, whichever way the column is sorted.
-                    return ($left === null) <=> ($right === null);
-                }
-
-                $result = self::compare($left, $right);
-
-                return $descending ? -$result : $result;
-            });
             $keep['_sort'] = $sort[0] . ':' . $sort[1];
+            $hidden .= self::hidden('_sort', $key, $keep['_sort']);
         }
+        $order = self::order($records, $fields, $sort);
 
-        $visible = array_slice($order, 0, max(1, $limit));
+        // A page number belongs to one list: these rows, in this order, cut into pages of this size.
+        $total = count($order);
+        $pages = (int) ceil($total / $pageSize);
+        $view = hash('crc32b', ($keep['_sort'] ?? '') . "\0" . $pageSize);
+        $list = hash('crc32b', $total . "\0" . Text::json($records[0], false) . "\0" . Text::json($records[$total - 1], false));
+        $page = $pages > 1 ? self::page($key, $in, $click, $view, $list, $inputsChanged, $pages) : 1;
+        if ($pages > 1) {
+            $keep['_page'] = $page . '.' . $view . '.' . $list;
+            $hidden .= self::hidden('_page', $key, $keep['_page']);
+        }
+        $visible = array_slice($order, ($page - 1) * $pageSize, $pageSize);
 
         $ids = [];
         $chosen = [];
         $named = null;
+        $elsewhere = 0;
+        $tooMany = false;
         if ($selectable) {
-            // The browser only says which rows are ticked. The rows themselves always
-            // come from $rows, so a forged form can never add a row.
-            $wanted = [];
-            $submitted = is_array($in['_sel'] ?? null) ? ($in['_sel'][$key] ?? null) : null;
-            foreach (is_array($submitted) ? $submitted : [] as $id) {
-                if (is_string($id)) {
-                    $wanted[$id] = true;
-                }
-            }
+            $ids = self::rowIds($records, $rowKey, $fields);
+            [$chosen, $tooMany] = self::ticked($key, $in, $ids);
 
-            $ids = self::rowIds($records, $visible, $rowKey, $fields);
-            foreach ($ids as $index => $id) {
-                if (isset($wanted[$id['wire']])) {
-                    $chosen[$index] = true;
-                }
-            }
-            ksort($chosen);
-
+            // The page draws a box for each of its rows. The ticks of all other rows
+            // travel in one field, so they come back with whatever the user does next.
+            $onPage = array_fill_keys($visible, true);
+            $all = [];
             $kept = [];
             $named = [];
             foreach (array_keys($chosen) as $index) {
-                $kept[] = $ids[$index]['wire'];
+                $all[] = $ids[$index]['wire'];
                 $named[] = $ids[$index]['name'];
+                if (!isset($onPage[$index])) {
+                    $kept[] = $ids[$index]['wire'];
+                }
+            }
+            $elsewhere = count($kept);
+            if ($all !== []) {
+                $keep['_sel'] = $all;
             }
             if ($kept !== []) {
-                $keep['_sel'] = $kept;
+                $hidden .= self::hidden('_kept', $key, Text::json($kept, false));
             }
         }
 
@@ -120,12 +143,83 @@ final class Table
             $picked[] = $originals[$index];
         }
 
-        return new self(
-            self::html($key, $fields, $records, $visible, $ids, $chosen, $sort, $selectable, $texts),
-            $picked,
-            $named,
-            $keep,
-        );
+        $status = $pages > 1
+            ? $texts->get('table.range', [
+                'from' => $texts->number(($page - 1) * $pageSize + 1),
+                'to' => $texts->number(($page - 1) * $pageSize + count($visible)),
+                'count' => $texts->number($total),
+            ])
+            : ($total === 1 ? $texts->get('table.rows_one') : $texts->get('table.rows', ['count' => $texts->number($total)]));
+        if ($selectable) {
+            $status .= ' · ' . ($elsewhere === 0
+                ? $texts->get('table.selected', ['count' => $texts->number(count($chosen))])
+                : $texts->get('table.selected_elsewhere', ['count' => $texts->number(count($chosen)), 'hidden' => $texts->number($elsewhere)]));
+        }
+
+        $html = '<div class="sui-table-block">'
+            . self::grid($key, $fields, $records, $visible, $ids, $chosen, $sort, $selectable, $texts)
+            . '<div class="sui-table-bar">'
+            // The page script reads this line to people who use a screen reader.
+            . '<p class="sui-table-foot" data-sui-status>' . Text::e($status) . '</p>'
+            . ($tooMany ? '<p class="sui-table-limit" data-sui-status>' . Text::e($texts->get('table.selected_max', ['count' => $texts->number(self::MAX_SELECTED)])) . '</p>' : '')
+            . ($pages > 1 ? self::pager($key, $page, $pages, $texts) : '')
+            . '</div>'
+            . $hidden
+            . '</div>';
+
+        return new self($html, $picked, $named, $keep);
+    }
+
+    /**
+     * The part of a submitted form that belongs to tables and may be kept in the
+     * session: how each is sorted, its page, and its ticks. All of it is checked
+     * again when the next run reads it.
+     *
+     * @param array<array-key,mixed> $in
+     *
+     * @return array<string,array<array-key,string|list<string>>>
+     */
+    public static function keepable(array $in): array
+    {
+        $keep = [];
+
+        foreach (['_sort' => 16, '_page' => 32, '_kept' => self::MAX_KEPT_BYTES] as $name => $longest) {
+            foreach (is_array($in[$name] ?? null) ? $in[$name] : [] as $table => $state) {
+                if (is_string($state) && strlen($state) <= $longest) {
+                    $keep[$name][$table] = $state;
+                }
+            }
+        }
+
+        foreach (is_array($in['_sel'] ?? null) ? $in['_sel'] : [] as $table => $boxes) {
+            $kept = [];
+            foreach (is_array($boxes) ? $boxes : [] as $wire) {
+                if (is_string($wire) && strlen($wire) <= 64 && count($kept) < self::MAX_SELECTED) {
+                    $kept[] = $wire;
+                }
+            }
+            $keep['_sel'][$table] = $kept;
+        }
+
+        return $keep;
+    }
+
+    private static function hidden(string $name, string $key, string $value): string
+    {
+        return '<input type="hidden" name="' . Text::e($name . '[' . $key . ']') . '" value="' . Text::e($value) . '">';
+    }
+
+    /**
+     * How the table was sorted, as the form holds it. Used while there are no rows
+     * and therefore no columns to check it against.
+     *
+     * @param array<array-key,mixed> $in
+     */
+    private static function savedSort(string $key, array $in): ?string
+    {
+        $saved = is_array($in['_sort'] ?? null) ? ($in['_sort'][$key] ?? null) : null;
+
+        return is_string($saved) && preg_match('/^\d{1,3}:(asc|desc)$/D', $saved) === 1 ? $saved : null;
     }
 
     /**
@@ -139,12 +233,11 @@ final class Table
     private static function sort(string $key, int $columnCount, array $in, string $click): ?array
     {
         $sort = null;
-        $saved = is_array($in['_sort'] ?? null) ? ($in['_sort'][$key] ?? null) : null;
+        $saved = self::savedSort($key, $in);
 
-        if (is_string($saved)
-            && preg_match('/^(\d{1,3}):(asc|desc)$/D', $saved, $match) === 1
-            && (int) $match[1] < $columnCount) {
-            $sort = [(int) $match[1], $match[2]];
+        if ($saved !== null && (int) $saved < $columnCount) {
+            [$column, $direction] = explode(':', $saved);
+            $sort = [(int) $column, $direction];
         }
 
         if ($click !== ''
@@ -162,6 +255,155 @@ final class Table
     }
 
     /**
+     * The rows in the order they are shown, as positions in the data.
+     *
+     * @param list<array<array-key,mixed>>                 $records
+     * @param list<array{field: array-key, label: string}> $fields
+     * @param array{int, string}|null                      $sort
+     *
+     * @return list<int>
+     */
+    private static function order(array $records, array $fields, ?array $sort): array
+    {
+        $order = array_keys($records);
+        if ($sort === null) {
+            return $order;
+        }
+
+        $field = $fields[$sort[0]]['field'];
+        $descending = $sort[1] === 'desc';
+        usort($order, static function (int $a, int $b) use ($records, $field, $descending): int {
+            $left = $records[$a][$field] ?? null;
+            $right = $records[$b][$field] ?? null;
+            if ($left === null || $right === null) {
+                // Empty values go last, whichever way the column is sorted.
+                return ($left === null) <=> ($right === null);
+            }
+
+            $result = self::compare($left, $right);
+
+            return $descending ? -$result : $result;
+        });
+
+        return $order;
+    }
+
+    /**
+     * The page to show. The form says which page the user was on and for which
+     * list ("3.5d0f1a2b.9c8e7f60"): how it was sorted and cut into pages, and
+     * which rows it held.
+     *
+     * A page number means nothing in another list. So the table starts again at
+     * its first page when it is sorted or cut differently, and when the user
+     * changed an input of the tool and the rows are different ones now: a filter.
+     * Rows that change on their own (a new order arrives) leave the page alone.
+     *
+     * A click on "Next" is a click on a page of the list the user saw. It only
+     * counts while the table still shows that list.
+     *
+     * @param array<array-key,mixed> $in
+     */
+    private static function page(string $key, array $in, string $click, string $view, string $list, bool $inputsChanged, int $pages): int
+    {
+        $saved = is_array($in['_page'] ?? null) ? ($in['_page'][$key] ?? null) : null;
+
+        if (!is_string($saved)
+            || preg_match('/^([1-9]\d{0,6})\.([0-9a-f]{8})\.([0-9a-f]{8})$/D', $saved, $match) !== 1
+            || $match[2] !== $view
+            || ($inputsChanged && $match[3] !== $list)) {
+            return 1;
+        }
+
+        $page = (int) $match[1];
+        if (preg_match('/^' . preg_quote($key, '/') . ':page:([1-9]\d{0,6})$/D', $click, $asked) === 1) {
+            $page = (int) $asked[1];
+        }
+
+        // Rows were deleted and the page is gone: show the last one that is left.
+        return min($page, $pages);
+    }
+
+    /**
+     * Which rows are ticked. The form names them twice: the boxes of the page
+     * the user looked at, and one field with the ticks of all other pages. Only
+     * a row of the data can be ticked, whatever the form says.
+     *
+     * @param array<array-key,mixed>                       $in
+     * @param array<int,array{wire: string, name: string}> $ids
+     *
+     * @return array{array<int,true>, bool} the ticked rows by their position in the data, and whether some ticks were dropped
+     */
+    private static function ticked(string $key, array $in, array $ids): array
+    {
+        $wanted = [];
+
+        $kept = is_array($in['_kept'] ?? null) ? ($in['_kept'][$key] ?? null) : null;
+        if (is_string($kept) && strlen($kept) <= self::MAX_KEPT_BYTES) {
+            // A flat list and nothing deeper.
+            $list = json_decode($kept, true, 2);
+            foreach (is_array($list) ? $list : [] as $wire) {
+                if (is_string($wire)) {
+                    $wanted[] = $wire;
+                }
+            }
+        }
+
+        $boxes = is_array($in['_sel'] ?? null) ? ($in['_sel'][$key] ?? null) : null;
+        foreach (is_array($boxes) ? $boxes : [] as $wire) {
+            if (is_string($wire)) {
+                $wanted[] = $wire;
+            }
+        }
+
+        if ($wanted === []) {
+            return [[], false];
+        }
+
+        $positions = [];
+        foreach ($ids as $index => $id) {
+            $positions[$id['wire']] = $index;
+        }
+
+        // The ticks of the other pages are counted first. When there are too many,
+        // the boxes that come back unticked are on the page the user is looking at.
+        $chosen = [];
+        $tooMany = false;
+        foreach ($wanted as $wire) {
+            $index = $positions[$wire] ?? null;
+            if ($index === null || isset($chosen[$index])) {
+                continue;
+            }
+            if (count($chosen) >= self::MAX_SELECTED) {
+                $tooMany = true;
+                break;
+            }
+            $chosen[$index] = true;
+        }
+        ksort($chosen);
+
+        return [$chosen, $tooMany];
+    }
+
+    private static function pager(string $key, int $page, int $pages, Texts $texts): string
+    {
+        // A button that cannot be pressed cannot hold the keyboard focus either.
+        // Each of the two names the other, and the page script moves the focus there.
+        $button = static fn (string $side, string $other, string $label, ?int $target): string
+            => '<button type="submit" class="sui-btn sui-page" id="' . Text::e('p-' . $key . ':' . $side) . '"'
+            . ' data-sui-return="' . Text::e('p-' . $key . ':' . $other) . '"'
+            . ($target === null ? ' disabled' : ' name="_click" value="' . Text::e($key . ':page:' . $target) . '"')
+            . '>' . Text::e($label) . '</button>';
+
+        return '<div class="sui-pager" role="group" aria-label="' . Text::e($texts->get('table.pages')) . '">'
+            . $button('prev', 'next', $texts->get('table.previous'), $page > 1 ? $page - 1 : null)
+            . '<span class="sui-page-now">' . Text::e($texts->get('table.page', ['page' => $texts->number($page), 'pages' => $texts->number($pages)])) . '</span>'
+            . $button('next', 'prev', $texts->get('table.next'), $page < $pages ? $page + 1 : null)
+            . '</div>';
+    }
+
+    /**
+     * The table itself: the headers, which sort it, and the rows of the page.
+     *
      * @param list<array{field: array-key, label: string}> $fields
      * @param list<array<array-key,mixed>>                 $records
      * @param list<int>                                    $visible
@@ -169,15 +411,16 @@ final class Table
      * @param array<int,true>                              $chosen
      * @param array{int, string}|null                      $sort
      */
-    private static function html(string $key, array $fields, array $records, array $visible, array $ids, array $chosen, ?array $sort, bool $selectable, Texts $texts): string
+    private static function grid(string $key, array $fields, array $records, array $visible, array $ids, array $chosen, ?array $sort, bool $selectable, Texts $texts): string
     {
-        // A column of numbers is set to the right so the digits line up.
+        // A column of numbers is set to the right so the digits line up. All rows
+        // decide, not only those of the page: a column must not jump between pages.
         $numeric = [];
         foreach ($fields as $column => $field) {
             $found = false;
             $numeric[$column] = true;
-            foreach ($visible as $index) {
-                $value = $records[$index][$field['field']] ?? null;
+            foreach ($records as $record) {
+                $value = $record[$field['field']] ?? null;
                 if ($value === null) {
                     continue;
                 }
@@ -222,34 +465,18 @@ final class Table
             }
             $html .= '</tr>';
         }
-        $html .= '</tbody></table></div>';
 
-        $total = count($records);
-        $shown = count($visible);
-        $foot = match (true) {
-            $shown < $total => $texts->get('table.rows_of', ['shown' => $texts->number($shown), 'count' => $texts->number($total)]),
-            $total === 1 => $texts->get('table.rows_one'),
-            default => $texts->get('table.rows', ['count' => $texts->number($total)]),
-        };
-        if ($selectable) {
-            $foot .= ' · ' . $texts->get('table.selected', ['count' => $texts->number(count($chosen))]);
-        }
-        $html .= '<p class="sui-table-foot">' . Text::e($foot) . '</p>';
-
-        if ($sort !== null) {
-            $html .= '<input type="hidden" name="' . Text::e('_sort[' . $key . ']') . '" value="' . $sort[0] . ':' . $sort[1] . '">';
-        }
-
-        return $html;
+        return $html . '</tbody></table></div>';
     }
 
     /**
-     * What the tick box of each visible row sends, and what the row is called in the log.
+     * What the tick box of each row sends, and what the row is called in the log.
      *
      * A row is known by the value in its id column ("...:k:1042"). When several
      * rows share a value, the later ones are numbered ("...:k2:1042"), so one tick
      * never selects two rows. The numbering follows the order the rows were passed
-     * in, so sorting the table changes nothing.
+     * in, over all of them, so sorting the table or turning its page changes nothing.
+     * A value that is long or not text travels as its fingerprint ("...:x:5f0c...").
      *
      * A row without a usable id is known by what is in it ("...:h:9f2c..."). The
      * tick follows the row when the list is filtered or grows. When the row itself
@@ -260,12 +487,11 @@ final class Table
      * customers that is drawn in its place.
      *
      * @param list<array<array-key,mixed>>                 $records
-     * @param list<int>                                    $visible
      * @param list<array{field: array-key, label: string}> $fields
      *
      * @return array<int,array{wire: string, name: string}>
      */
-    private static function rowIds(array $records, array $visible, string $rowKey, array $fields): array
+    private static function rowIds(array $records, string $rowKey, array $fields): array
     {
         $shape = $rowKey;
         foreach ($fields as $field) {
@@ -273,30 +499,39 @@ final class Table
         }
         $mark = substr(hash('sha256', $shape), 0, 6);
 
-        $shown = array_fill_keys($visible, true);
         $ids = [];
         $seen = [];
 
         foreach ($records as $index => $record) {
             $value = $record[$rowKey] ?? null;
+            $name = match (true) {
+                is_string($value) => $value,
+                is_int($value) => (string) $value,
+                is_float($value) => Text::exactNumber($value),
+                default => '',
+            };
 
-            if ((is_string($value) || is_int($value) || is_float($value)) && (string) $value !== '') {
-                $kind = 'k';
-                $name = (string) $value;
-            } elseif (isset($shown[$index])) {
-                $kind = 'h';
-                $name = substr(hash('sha256', Text::json($record, false)), 0, 16);
+            if ($name !== '') {
+                // A form field carries text. An id that is long, or that is bytes and
+                // not text (a binary UUID), goes through it as a fingerprint.
+                $isText = preg_match('/^[^\p{C}]*$/Du', $name) === 1;
+                [$kind, $short] = $isText && strlen($name) <= self::MAX_ID_BYTES
+                    ? ['k', $name]
+                    : ['x', substr(hash('sha256', $name), 0, 32)];
+                if (!$isText && !mb_check_encoding($name, 'UTF-8')) {
+                    $name = '0x' . bin2hex($name);
+                }
             } else {
-                continue;
+                $name = '#' . ($index + 1);
+                $kind = 'h';
+                $short = substr(hash('sha256', Text::json($record, false)), 0, 16);
             }
 
-            $count = $seen[$kind . $name] = ($seen[$kind . $name] ?? 0) + 1;
-            if (isset($shown[$index])) {
-                $ids[$index] = [
-                    'wire' => $mark . ':' . $kind . ($count === 1 ? '' : $count) . ':' . $name,
-                    'name' => $kind === 'k' ? $name : '#' . ($index + 1),
-                ];
-            }
+            $count = $seen[$kind . $short] = ($seen[$kind . $short] ?? 0) + 1;
+            $ids[$index] = [
+                'wire' => $mark . ':' . $kind . ($count === 1 ? '' : $count) . ':' . $short,
+                'name' => $name,
+            ];
         }
 
         return $ids;

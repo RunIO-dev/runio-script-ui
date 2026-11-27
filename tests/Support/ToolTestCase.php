@@ -149,7 +149,9 @@ abstract class ToolTestCase extends TestCase
                 }
                 $value = $chosen->getAttribute('value');
             } elseif ($field->tagName === 'textarea') {
-                $value = $field->textContent;
+                // A browser drops a line break right after the opening tag, and it
+                // sends every other line break as "\r\n".
+                $value = (string) preg_replace('/\r\n|\r|\n/', "\r\n", (string) preg_replace('/^\r?\n/', '', $field->textContent));
             } elseif (in_array($type, ['checkbox', 'radio'], true)) {
                 if (!$field->hasAttribute('checked')) {
                     continue;

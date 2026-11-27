@@ -375,13 +375,23 @@ final class Kernel
             }
 
             // An unticked box is not sent at all, and it is not kept either.
-            if (($saved[$name] ?? '') !== ($form[$name] ?? '')) {
+            if (self::sameLineBreaks($saved[$name] ?? '') !== self::sameLineBreaks($form[$name] ?? '')) {
                 return true;
             }
         }
 
         return false;
     }
+
+    /**
+     * A browser sends the line breaks of a text of several lines as "\r\n". The
+     * page keeps them as "\n". Both are the same text.
+     */
+    private static function sameLineBreaks(mixed $value): mixed
+    {
+        return is_string($value) ? str_replace(["\r\n", "\r"], "\n", $value) : $value;
+    }
+
 
     /**
      * Was this saved by the tool at this address? Two tools can share a script and

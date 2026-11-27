@@ -12,6 +12,7 @@ use function Runio\ScriptUi\rerun;
 use function Runio\ScriptUi\select;
 use function Runio\ScriptUi\table;
 use function Runio\ScriptUi\text;
+use function Runio\ScriptUi\textarea;
 
 /**
  * A long table is shown one page at a time. The page, like everything else,
@@ -285,6 +286,24 @@ final class TablePagesTest extends ToolTestCase
 
         $count = 3;
         self::assertSame(['3', '2', '1'], $this->shown($this->post($tool, $this->form($empty))));
+    }
+
+    public function testATextOfSeveralLinesIsNotAChangedInput(): void
+    {
+        // A browser sends the line breaks of a text as "\r\n". The page keeps them
+        // as "\n". That is the same text, not an input the user changed.
+        $count = 60;
+        $tool = function () use (&$count): void {
+            textarea('Note', "first line\nsecond line");
+            table(self::rows($count));
+        };
+
+        $second = $this->press($tool, $this->get($tool), 'table:page:2');
+        self::assertSame("first line\r\nsecond line", $this->form($second)['note']);
+
+        // A row arrives on its own. That is no reason to go back to the first page.
+        $count = 61;
+        self::assertSame('Page 3 of 3', $this->pageNow($this->press($tool, $second, 'table:page:3')));
     }
 
     // ------------------------------------------------------- a page that is forged

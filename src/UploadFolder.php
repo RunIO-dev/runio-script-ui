@@ -196,10 +196,17 @@ final class UploadFolder
 
     private function location(): string
     {
+        if ($this->path !== null) {
+            return $this->path;
+        }
+
         // One folder for each copy of the library, so that two applications on one
-        // machine do not share theirs.
-        return $this->path
-            ?? rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'script-ui-' . substr(hash('sha256', __DIR__), 0, 12);
+        // machine do not share theirs. And one for each system user: a folder is only
+        // used by the user it belongs to, so two users with one name between them
+        // would lock each other out.
+        $user = function_exists('posix_geteuid') ? posix_geteuid() . '-' : '';
+
+        return rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'script-ui-' . $user . substr(hash('sha256', __DIR__), 0, 12);
     }
 
     /**

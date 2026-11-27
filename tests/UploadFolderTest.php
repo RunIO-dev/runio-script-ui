@@ -99,6 +99,10 @@ final class UploadFolderTest extends TestCase
 
         try {
             self::assertStringStartsWith(rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'script-ui-', $path);
+            if (function_exists('posix_geteuid')) {
+                // Two system users that run the same copy of the library each get a folder.
+                self::assertMatchesRegularExpression('/script-ui-' . posix_geteuid() . '-[0-9a-f]{12}$/', dirname($path));
+            }
             if (self::hasPermissions()) {
                 self::assertSame(0700, fileperms(dirname($path)) & 0777);
             }

@@ -72,7 +72,7 @@ test('a chosen file is uploaded at once, and the tool shows what is in it', asyn
     // The form names the file by a handle. Nothing in the page says where the file lies.
     const handle = await page.locator('input[name="_file[orders-as-csv][]"]').inputValue();
     expect(handle).toMatch(/^[0-9a-f]{32}$/);
-    expect(await page.content()).not.toMatch(/script-ui-[0-9a-f]{12}/);
+    expect(await page.content()).not.toMatch(/script-ui-(\d+-)?[0-9a-f]{12}/);
 });
 
 test('a page without a chosen file is sent the short way', async ({ page }) => {

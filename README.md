@@ -36,7 +36,7 @@ That script is the whole tool: a search field, a filter, a sortable table with t
 composer require runio/script-ui
 ```
 
-It needs PHP 8.2 or newer with the `mbstring` extension, and no other package.
+It needs PHP 8.2 or newer with the `mbstring` and `session` extensions, and no other package.
 
 ## Try the demo
 

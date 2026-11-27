@@ -28,7 +28,8 @@
   let waiting = null;      // a response that arrived while the mouse button was held or a character was composed
   let swapping = false;    // the content of the page is being replaced
   let busyTimer = 0;
-  let typingTimer = 0;     // the user is typing into a search box that filters while they type
+  let pauseTimer = 0;      // a run that waits until the user pauses: see soon()
+  let stepping = false;    // an arrow key is down: the change that follows comes from it, not from a click
 
   const isText = (el) => el instanceof HTMLTextAreaElement
     || (el instanceof HTMLInputElement && /^(text|search|email|url|tel|password)$/.test(el.type));
@@ -255,7 +256,7 @@
     if (stop) stop.abort();
     stop = new AbortController();
     const id = ++serial;
-    clearTimeout(typingTimer);
+    clearTimeout(pauseTimer);
 
     // Files travel as they are. Without them the form goes the short way, as text.
     const { data, files } = collect();
@@ -388,19 +389,32 @@
     run(event.submitter || null);
   });
 
-  // A search box of a table filters while the user types: a moment after the
-  // last key, and with one request at a time. A request for every key would
-  // queue up on the server, and their answers would be out of date on arrival.
-  const typed = () => {
-    clearTimeout(typingTimer);
-    typingTimer = setTimeout(() => {
+  // Runs the page once the user pauses, and with one request at a time. A
+  // request for every key would queue up on the server, and their answers would
+  // be out of date on arrival.
+  const soon = (delay) => {
+    clearTimeout(pauseTimer);
+    pauseTimer = setTimeout(() => {
       if (composing) return;
       if (stop) {
         queued = true;
       } else {
         run(null);
       }
-    }, 300);
+    }, delay);
+  };
+
+  // A search box of a table filters while the user types: a moment after the last key.
+  const typed = () => soon(300);
+
+  // The arrow keys walk through the options of a group or of a list, and through
+  // days and numbers. Every step is a change, so the page waits for a pause here
+  // too. The answer that is on its way belongs to an option the user has left.
+  // It is dropped: shown, it would put that option back under their fingers.
+  const stepped = () => {
+    if (stop && !acting) stop.abort();
+    waiting = null;
+    soon(250);
   };
 
   const isLive = (el) => isText(el) && el.hasAttribute('data-sui-live');
@@ -438,7 +452,11 @@
     if (isFile(event.target)) {
       chosen(event.target);
     } else if (!isText(event.target)) {
-      run(null);
+      if (stepping) {
+        stepped();
+      } else {
+        run(null);
+      }
     }
   });
 
@@ -522,7 +540,15 @@
     if (carriesFiles(event) && !isFile(event.target)) event.preventDefault();
   });
 
-  window.addEventListener('pointerdown', () => { pointerDown = true; }, true);
+  window.addEventListener('pointerdown', () => {
+    pointerDown = true;
+    stepping = false;
+  }, true);
   window.addEventListener('pointerup', release, true);
   window.addEventListener('pointercancel', release, true);
+
+  window.addEventListener('keydown', (event) => {
+    stepping = /^(Arrow|Page|Home$|End$)/.test(event.key || '');
+  }, true);
+  window.addEventListener('keyup', () => { stepping = false; }, true);
 })();

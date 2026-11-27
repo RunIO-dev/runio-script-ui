@@ -888,12 +888,13 @@ final class Page
      * After a run that went well: deletes the files that the page showed before
      * and does not show any more.
      *
-     * @param array<array-key,mixed> $state what was kept for the next page view
+     * What counts is what this page holds, not what was saved of it. A form that
+     * is too large to be remembered still shows its files.
      */
-    public function settleFiles(array $state): void
+    public function settleFiles(): void
     {
         if ($this->isPost) {
-            $this->uploads?->settle($this->in, $state);
+            $this->uploads?->settle($this->in, $this->state());
         }
     }
 

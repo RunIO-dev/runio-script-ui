@@ -19,6 +19,7 @@ use function Runio\ScriptUi\rerun;
 use function Runio\ScriptUi\success;
 use function Runio\ScriptUi\table;
 use function Runio\ScriptUi\text;
+use function Runio\ScriptUi\textarea;
 use function Runio\ScriptUi\title;
 
 /**
@@ -637,6 +638,34 @@ final class FileInputTest extends ToolTestCase
         $fail = false;
         $this->get($tool);
         self::assertSame('orders.csv', $file?->name);
+    }
+
+    public function testAFileStaysWhenTheFormIsTooLargeToBeRemembered(): void
+    {
+        // What a page keeps for the next view has a size limit. Over it nothing is kept.
+        // The page still shows the file, so the file is not deleted for that.
+        $tool = function () use (&$file): void {
+            for ($n = 1; $n <= 40; $n++) {
+                textarea('Notes ' . $n);
+            }
+            $file = file_input('Report');
+        };
+        $long = [];
+        for ($n = 1; $n <= 40; $n++) {
+            $long['notes-' . $n] = str_repeat('x', 8000);
+        }
+        $uploaded = $this->post($tool, files: ['report' => $this->arrived('orders.csv', self::CSV)]);
+
+        $response = $this->post($tool, $long + $this->form($uploaded));
+        self::assertSame([], $this->session->get('state') ?? [], 'the form was too large to be remembered');
+        self::assertSame(['orders.csv'], $this->shown($response));
+        self::assertCount(1, $this->stored());
+
+        // The page goes on working with the file.
+        $file = null;
+        $this->post($tool, $this->form($response));
+        self::assertSame('orders.csv', $file?->name);
+        self::assertSame(self::CSV, $file?->contents());
     }
 
     public function testResetDeletesTheFilesOfTheTool(): void

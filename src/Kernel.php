@@ -190,7 +190,8 @@ final class Kernel
             // A run that failed half way must not overwrite what was saved before,
             // and it deletes no file either.
             if ($failure === null) {
-                $page->settleFiles($this->saveState($page));
+                $this->saveState($page);
+                $page->settleFiles();
             }
             if (!$this->audit($page) && $page->fileToSend() !== null) {
                 // Who took which data out is exactly what a log is for. When the entry
@@ -501,8 +502,7 @@ final class Kernel
         return is_array($messages) ? $messages : [];
     }
 
-    /** @return array<array-key,mixed> what was kept */
-    private function saveState(Page $page): array
+    private function saveState(Page $page): void
     {
         $states = $this->session->get('state');
         $states = is_array($states) ? $states : [];
@@ -522,14 +522,11 @@ final class Kernel
 
         if ($state === [] || strlen(serialize($state)) > self::MAX_STATE_BYTES) {
             unset($states[$page->stateKey]);
-            $state = [];
         } else {
             $states[$page->stateKey] = $state;
         }
 
         $this->session->set('state', $states);
-
-        return $state;
     }
 
     /**

@@ -125,6 +125,24 @@ final class DisplayTest extends ToolTestCase
         self::assertSame(['under b', 'after'], $this->texts($response, '//p[contains(@class,"sui-note")]'));
     }
 
+    public function testWhatWasPrintedBeforeColumnsStaysAboveThem(): void
+    {
+        $response = $this->get(function (): void {
+            echo 'printed first';
+            columns(
+                static fn () => note('left'),
+                static function (): void {
+                    echo 'printed in the right column';
+                },
+            );
+        });
+
+        $row = '//div[contains(@class,"sui-row")]';
+        self::assertSame(['printed first'], $this->texts($response, $row . '/preceding-sibling::pre[contains(@class,"sui-echo")]'));
+        self::assertSame(0, $this->hits($response, $row . '/div[1]/pre'));
+        self::assertSame(['printed in the right column'], $this->texts($response, $row . '/div[2]/pre'));
+    }
+
     public function testInputsWorkInsideColumns(): void
     {
         $first = $second = null;

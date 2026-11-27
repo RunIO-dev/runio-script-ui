@@ -814,6 +814,9 @@ final class Page
 
         try {
             foreach ($columns as $column) {
+                // What the script printed up to here belongs above the columns, or into
+                // the column before this one. It must not slip into this one.
+                $this->flushPrinted();
                 $this->buffers[] = [];
                 try {
                     $column();

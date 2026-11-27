@@ -497,6 +497,44 @@ final class ExpanderTest extends ToolTestCase
         self::assertFalse($this->isOpen($this->post($tool, ['_click' => 'save']), 'help'));
     }
 
+    public function testABoxThatAClickInsideOpenedIsStillOpenAfterRerunAndAfterADownload(): void
+    {
+        // Without the page script the form says "closed" although the user opened the
+        // box. The click inside is what tells the server, and that has to outlast a
+        // run that ends in rerun() or in a file.
+        $tool = function (): void {
+            expander('Edit', static function (): void {
+                if (button('Save')) {
+                    success('Saved.');
+                    rerun();
+                }
+            });
+            expander('Export', static function (): void {
+                download('Get the file', 'a,b', 'export.csv');
+            });
+            expander('Untouched', static fn () => note('inside'));
+        };
+
+        $closed = $this->get($tool);
+        self::assertSame('0', $this->attr($closed, '//input[@name="_open[edit]"]', 'value'));
+
+        $response = $this->post($tool, ['_click' => 'save'] + $this->form($closed));
+        self::assertSame(303, $response->status);
+        $after = $this->get($tool);
+        self::assertTrue($this->isOpen($after, 'edit'));
+        self::assertFalse($this->isOpen($after, 'export'));
+
+        // The run ends where the file is made. The box below is not reached.
+        $form = $this->form($closed);
+        $form['_open']['untouched'] = '1';
+        $file = $this->post($tool, ['_click' => 'get-the-file'] + $form);
+        self::assertSame('a,b', $file->body);
+        $after = $this->get($tool);
+        self::assertTrue($this->isOpen($after, 'export'));
+        self::assertTrue($this->isOpen($after, 'untouched'), 'a box that the run did not reach stays as the form said');
+        self::assertFalse($this->isOpen($after, 'edit'), 'and one that it reached is as the run drew it');
+    }
+
     public function testAPartThatFailedIsDrawnOpen(): void
     {
         $response = $this->get(function (): void {

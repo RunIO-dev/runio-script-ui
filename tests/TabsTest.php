@@ -314,6 +314,28 @@ final class TabsTest extends ToolTestCase
         self::assertSame('Second', $this->open($this->get($tool)), 'and the open tab is kept over the reload');
     }
 
+    public function testAHeaderThatWasPressedCountsAlsoWhenTheRunEndsInRerun(): void
+    {
+        // Without the page script the form names the tab that was open, and the
+        // press on a header names the one that is wanted.
+        $again = true;
+        $tool = function () use (&$again): void {
+            tabs([
+                'First' => static fn () => note('one'),
+                'Second' => static fn () => note('two'),
+            ]);
+            if ($again) {
+                $again = false;
+                rerun();
+            }
+        };
+
+        $response = $this->post($tool, ['_click' => 'tabs:tab:1', '_tab' => ['tabs' => '0:first']]);
+        self::assertSame(303, $response->status);
+
+        self::assertSame('Second', $this->open($this->get($tool)));
+    }
+
     public function testATabThatFailsIsOpenedAndTheOthersKeepTheirHeaders(): void
     {
         $response = $this->post(function (): void {

@@ -1257,6 +1257,14 @@ final class Page
         }
 
         $state = self::keepable($this->in);
+        // An expander and a group of tabs that were reached know better than the
+        // form: without the page script it is a click that opens them, and the
+        // form still names what was open before.
+        foreach (['_open', '_tab'] as $parts) {
+            if (isset($this->out[$parts])) {
+                $state[$parts] = $this->out[$parts] + ($state[$parts] ?? []);
+            }
+        }
         // A file field that was reached knows better than the form: a file may
         // have arrived in this very run, or the tool may have forgotten one.
         foreach ($this->fileFields as $key => $field) {

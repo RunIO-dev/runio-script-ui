@@ -621,6 +621,65 @@ fieldset.sui-field {
   padding: 14px;
 }
 
+/* ------------------------------------------------------------------ tabs */
+
+/* Parts of the page behind headers. One of them is in view. */
+.sui-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* The headers stand in one line. Where they do not fit, the line is moved sideways. */
+.sui-tab-list {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  box-shadow: inset 0 -1px 0 var(--hair);
+  scrollbar-width: thin;
+}
+
+/* Tall enough for a finger. */
+.sui-tab {
+  flex: none;
+  min-height: 40px;
+  padding: 8px 12px 10px;
+  background: none;
+  color: var(--ink-2);
+  border: 0;
+  border-radius: 6px 6px 0 0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sui-tab:hover {
+  background: var(--wash);
+  color: var(--ink);
+}
+
+/*
+ * Only the open tab has the line under it. A line in a see-through colour under
+ * the others would be drawn by a screen that replaces all colours.
+ */
+.sui-tab[aria-selected="true"] {
+  padding-bottom: 8px;
+  color: var(--ink);
+  border-bottom: 2px solid var(--accent);
+}
+
+/* The line of headers cuts off what stands out of it, so the frame of the focus is drawn inside. */
+.sui-tab:focus-visible {
+  outline-offset: -2px;
+}
+
+/* A panel is a flex box, and that alone would show one that is marked as hidden. */
+.sui-tab-panel[hidden] {
+  display: none;
+}
+
 /* --------------------------------------------------------------- buttons */
 
 .sui-btn {

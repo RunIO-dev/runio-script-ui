@@ -404,6 +404,23 @@ function expander(string $label, callable $content, bool $open = false, ?string 
     Runtime::page()->expander($label, $content, $open, $key);
 }
 
+/**
+ * Parts of the page behind headers, one of them in view at a time. For a page
+ * that holds more than one screen should show at once: the orders, the
+ * customers and the settings of a shop.
+ *
+ * Every tab runs on every run, whichever is in view. The inputs behind the
+ * others keep working and keep their values, and changing the tab needs no
+ * run of the tool. Work that takes long belongs behind a button.
+ *
+ * @param array<array-key,callable():mixed> $tabs the label of each tab and the function that draws it:
+ *                                                ['Orders' => fn () => table($orders), 'Settings' => $settings]
+ */
+function tabs(array $tabs, ?string $key = null): void
+{
+    Runtime::page()->tabs($tabs, $key);
+}
+
 /** Ends the run here. Everything drawn so far is shown. */
 function stop(): never
 {

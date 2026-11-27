@@ -889,6 +889,144 @@ final class Page
     }
 
     /**
+     * @param array<array-key,mixed> $tabs the label of each tab and the function that draws it
+     */
+    public function tabs(array $tabs, ?string $key): void
+    {
+        foreach ($tabs as $label => $content) {
+            if (!is_callable($content)) {
+                throw new \InvalidArgumentException(sprintf(
+                    'tabs() takes a label and a function for every tab: [\'Orders\' => fn () => table($orders)]. The tab "%s" has no function.',
+                    (string) $label,
+                ));
+            }
+        }
+
+        // Tabs have no label of their own to make a key from. They are numbered like tables.
+        $key = $this->claimNumbered($key, 'tabs');
+        if ($tabs === []) {
+            return;
+        }
+
+        $labels = array_map(strval(...), array_keys($tabs));
+        $slugs = array_map(Keys::slug(...), $labels);
+        $open = $this->openTab($key, $slugs);
+        $panels = [];
+
+        try {
+            // Every tab runs, whichever is in view. The script gets the value of every
+            // input that way, and no key and no table changes its number with the open tab.
+            foreach (array_values($tabs) as $position => $content) {
+                $this->flushPrinted();
+                $this->buffers[] = [];
+                try {
+                    $this->part($content);
+                } catch (Stop $signal) {
+                    // rerun() or a download: the run ends, and nothing broke.
+                    throw $signal;
+                } catch (\Throwable $error) {
+                    // The tab that broke is the one to look at.
+                    $open = $position;
+
+                    throw $error;
+                } finally {
+                    $this->flushPrinted();
+                    $panels[] = implode('', (array) array_pop($this->buffers));
+                }
+            }
+        } finally {
+            // Also when a tab failed or ended the run: every header is there, and
+            // what was drawn stays visible.
+            $this->out['_tab'][$key] = $open . ':' . $slugs[$open];
+            $this->add($this->tabsHtml($key, $labels, $slugs, $panels, $open));
+        }
+    }
+
+    /**
+     * Which tab is in view. The page script changes it without a request and
+     * writes into a hidden field which one it is: its place and the key that its
+     * label makes, "1:customers". Without the script a header is a button of the
+     * form, and pressing it counts for more than the field.
+     *
+     * A tab is found again by its place and by its label. When another tab was put
+     * in front of it, the label finds it. When its label changed ("Orders (3)" is
+     * "Orders (4)" now), the place does.
+     *
+     * @param list<string> $slugs the key that the label of each tab makes
+     */
+    private function openTab(string $key, array $slugs): int
+    {
+        if (preg_match('/^' . preg_quote($key, '/') . ':tab:(\d{1,3})$/D', $this->click, $pressed) === 1 && isset($slugs[(int) $pressed[1]])) {
+            return (int) $pressed[1];
+        }
+
+        $sent = is_array($this->in['_tab'] ?? null) ? ($this->in['_tab'][$key] ?? null) : null;
+        $named = is_string($sent) ? self::tabNamed($sent) : null;
+        if ($named === null) {
+            return 0;
+        }
+
+        [$position, $slug] = $named;
+        if (($slugs[$position] ?? null) === $slug) {
+            return $position;
+        }
+
+        $again = array_search($slug, $slugs, true);
+        if ($again !== false) {
+            return $again;
+        }
+
+        return isset($slugs[$position]) ? $position : 0;
+    }
+
+    /**
+     * Reads what a form says about the tab that is in view: "1:customers".
+     *
+     * @return array{int, string}|null its place and the key of its label, or null when the text is not of that kind
+     */
+    private static function tabNamed(string $sent): ?array
+    {
+        // The second part is what Keys::slug() can make, and nothing else.
+        return preg_match('/^(\d{1,3}):([\p{L}\p{M}\p{N}-]{1,' . Keys::MAX_LENGTH . '})$/uD', $sent, $parts) === 1
+            ? [(int) $parts[1], $parts[2]]
+            : null;
+    }
+
+    /**
+     * @param list<string> $labels
+     * @param list<string> $slugs
+     * @param list<string> $panels what each tab drew. A tab that was not reached drew nothing
+     */
+    private function tabsHtml(string $key, array $labels, array $slugs, array $panels, int $open): string
+    {
+        $headers = '';
+        $bodies = '';
+
+        foreach ($labels as $position => $label) {
+            $header = Text::e('b-' . $key . ':' . $position);
+            $panel = Text::e('t-' . $key . ':' . $position);
+            $isOpen = $position === $open;
+
+            // A button of the form: without the page script it sends the form, and the
+            // server draws the page with this tab in view.
+            $headers .= '<button type="submit" class="sui-tab" role="tab" id="' . $header . '"'
+                . ' name="_click" value="' . Text::e($key . ':tab:' . $position) . '"'
+                . ' aria-selected="' . ($isOpen ? 'true' : 'false') . '" aria-controls="' . $panel . '"'
+                . ' data-sui-tab="' . Text::e($position . ':' . $slugs[$position]) . '" dir="auto">'
+                . Text::e($label) . '</button>';
+
+            $bodies .= '<div class="sui-tab-panel sui-flow" role="tabpanel" id="' . $panel . '" aria-labelledby="' . $header . '"'
+                . ($isOpen ? '' : ' hidden') . '>' . ($panels[$position] ?? '') . '</div>';
+        }
+
+        return '<div class="sui-tabs" id="' . Text::e('t-' . $key) . '">'
+            . '<div class="sui-tab-list" role="tablist">' . $headers . '</div>'
+            . '<input type="hidden" name="' . Text::e('_tab[' . $key . ']') . '" value="' . Text::e($open . ':' . $slugs[$open]) . '">'
+            . $bodies
+            . '</div>';
+    }
+
+    /**
      * Draws a part of the page that can be out of sight: what is inside an
      * expander or behind a tab. stop() inside it ends the part and not the page.
      * A page that ends inside something nobody sees would end for no reason that
@@ -1379,13 +1517,22 @@ final class Page
     /** A table has no label to make a key from. Tables are numbered in the order they are drawn. */
     private function claimTable(?string $key): string
     {
+        return $this->claimNumbered($key, 'table');
+    }
+
+    /**
+     * The key of something that has no label: the key the developer chose, or its
+     * kind with the next free number ("table", "table-2", "tabs").
+     */
+    private function claimNumbered(?string $key, string $kind): string
+    {
         if ($key !== null) {
-            return $this->claim($key, 'table');
+            return $this->claim($key, $kind);
         }
 
-        $candidate = 'table';
+        $candidate = $kind;
         for ($n = 2; isset($this->used[$candidate]); $n++) {
-            $candidate = 'table-' . $n;
+            $candidate = $kind . '-' . $n;
         }
         $this->used[$candidate] = true;
 
@@ -1732,13 +1879,14 @@ final class Page
 
     /**
      * How the user left the parts of a page that open and close, as far as a form
-     * says it: which expanders are open. Checked and limited in size.
+     * says it: which expanders are open, and which tab of each group is in view.
+     * Checked and limited in size.
      *
      * The page script reports this without a run of the tool: see Kernel::noteLayout().
      *
      * @param array<array-key,mixed> $in
      *
-     * @return array{_open?: array<array-key,string>}
+     * @return array{_open?: array<array-key,string>, _tab?: array<array-key,string>}
      */
     public static function layout(array $in): array
     {
@@ -1748,6 +1896,13 @@ final class Page
         foreach (is_array($in['_open'] ?? null) ? $in['_open'] : [] as $key => $state) {
             if (Keys::isValid((string) $key) && ($state === '0' || $state === '1') && count($layout['_open'] ?? []) < self::MAX_SAVED_FIELDS) {
                 $layout['_open'][$key] = $state;
+            }
+        }
+
+        // Which tab is in view: the key of each group of tabs, and the place and label of the tab.
+        foreach (is_array($in['_tab'] ?? null) ? $in['_tab'] : [] as $key => $tab) {
+            if (Keys::isValid((string) $key) && is_string($tab) && self::tabNamed($tab) !== null && count($layout['_tab'] ?? []) < self::MAX_SAVED_FIELDS) {
+                $layout['_tab'][$key] = $tab;
             }
         }
 

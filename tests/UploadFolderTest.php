@@ -410,6 +410,18 @@ final class UploadFolderTest extends TestCase
         self::assertSame('old', file_get_contents($this->base . '/there.csv'));
     }
 
+    public function testANameAsLongAsAFileSystemTakesCanBeSaved(): void
+    {
+        // The copy is written under another name first. That name must not be longer than the target's.
+        $upload = $this->upload('long');
+        $name = str_repeat('a', 250) . '.csv';
+
+        $upload->saveTo($this->base . '/' . $name);
+        $upload->saveTo($this->base . '/' . $name, overwrite: true);
+
+        self::assertSame('long', file_get_contents($this->base . '/' . $name));
+    }
+
     public function testSavingIntoAFolderThatIsNotThereIsAnError(): void
     {
         $upload = $this->upload('x');

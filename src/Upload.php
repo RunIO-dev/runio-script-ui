@@ -105,9 +105,11 @@ final class Upload
 
         // The copy is written next to its place and put there when it is complete.
         // A file that is replaced is then never half written. The name is random,
-        // so nobody can put a link where the copy is written.
-        $part = $path . '.' . bin2hex(random_bytes(6)) . '.part';
+        // so nobody can put a link where the copy is written, and short, so that
+        // it fits wherever the target fits.
+        $part = dirname($path) . DIRECTORY_SEPARATOR . '.' . bin2hex(random_bytes(8)) . '.part';
         $failed = sprintf('"%s" could not be written.', $path);
+        $size = fstat($from)['size'] ?? null;
 
         try {
             $to = @fopen($part, 'xb');
@@ -117,7 +119,8 @@ final class Upload
 
             @chmod($part, 0600);
             $copied = stream_copy_to_stream($from, $to);
-            if (!fclose($to) || $copied === false) {
+            // A full disk can end the copy early without an error. Half a file is not put in place.
+            if (!fclose($to) || $copied === false || $copied !== $size) {
                 throw new \RuntimeException($failed);
             }
 

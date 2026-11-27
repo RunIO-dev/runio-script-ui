@@ -11,6 +11,13 @@ const status = (page) => page.getByLabel('Status');
 const limit = (page) => page.getByLabel('Limit');
 const about = (page) => page.getByText('It only exists for the tests.');
 
+/**
+ * Chooses a header the way the page script hears a click, without a pointer. A header that is
+ * out of sight would first be brought into sight by the test library, in a way of its own that
+ * changes with the fonts of the machine. Here the page script alone moves the line.
+ */
+const choose = (page, name) => header(page, name).dispatchEvent('click');
+
 /** Is the whole header inside the window, from left to right? */
 async function inSight(page, name) {
     const box = await header(page, name).boundingBox();
@@ -241,7 +248,7 @@ test('on a phone the line of headers moves sideways, and the open header stays i
     expect(size.height, 'a header is tall enough for a finger').toBeGreaterThanOrEqual(38);
 
     // A header in the middle keeps clear of both ends, and a little of the next one shows.
-    await header(page, 'June').click();
+    await choose(page, 'June');
     await expect(page.getByText('The numbers of June.')).toBeVisible();
     expect(await fading(page)).toEqual({ before: true, after: true, mask: 'clear-clear' });
     const june = await header(page, 'June').boundingBox();
@@ -376,7 +383,7 @@ test('on a phone that reads from right to left the open header stays in sight to
     expect(await fadesToward(page), 'here the line goes on to the left').toBe('left');
 
     // A header in the middle keeps clear of both ends.
-    await header(page, 'يونيو').click();
+    await choose(page, 'يونيو');
     await expect(page.getByText('أرقام شهر يونيو.')).toBeVisible();
     expect(await fading(page)).toEqual({ before: true, after: true, mask: 'clear-clear' });
     const june = await header(page, 'يونيو').boundingBox();

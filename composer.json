@@ -14,6 +14,13 @@
         "arabic"
     ],
     "homepage": "https://github.com/RunIO-dev/runio-script-ui",
+    "authors": [
+        {
+            "name": "Amer Malik Mohammed",
+            "email": "amermalikmohammed@gmail.com",
+            "homepage": "https://github.com/RunIO-dev"
+        }
+    ],
     "support": {
         "issues": "https://github.com/RunIO-dev/runio-script-ui/issues",
         "source": "https://github.com/RunIO-dev/runio-script-ui"

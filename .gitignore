@@ -1,4 +1,16 @@
+# Library
 /vendor/
+/composer.lock
 /.phpunit.cache/
+/.phpunit.result.cache
+/coverage/
+
+# Demo data, created on first use
 /examples/var/
-composer.lock
+
+# Editors and OS
+/.idea/
+/.vscode/
+*.swp
+*.swo
+.DS_Store

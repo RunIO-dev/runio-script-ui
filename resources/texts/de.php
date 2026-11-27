@@ -20,6 +20,12 @@ return [
     'confirm.yes' => 'Ja',
     'confirm.no' => 'Abbrechen',
 
+    // A page that runs again by itself
+    'refresh.updated' => 'Aktualisiert um {time}',
+    'refresh.paused' => 'Angehalten',
+    'refresh.pause' => 'Anhalten',
+    'refresh.resume' => 'Fortsetzen',
+
     // Tables
     'table.empty' => 'Keine Zeilen.',
     'table.select_page' => 'Alle Zeilen dieser Seite auswählen',

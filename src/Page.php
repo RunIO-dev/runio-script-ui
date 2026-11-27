@@ -32,6 +32,10 @@ final class Page
     /** Up to this many options of radio() or multiselect() stand in one column. More are laid out in several. */
     private const MANY_CHOICES = 8;
 
+    /** A page runs again by itself after this many seconds at the least and at the most. Each time is a whole run. */
+    private const MIN_REFRESH = 2;
+    private const MAX_REFRESH = 86400;
+
     /** Said when a column, an expander or a tab got the name of a function where the function belongs. */
     private const NOT_A_NAME = 'A name in quotes is not run. Pass the function itself: fn () => ..., or name(...).';
 
@@ -74,6 +78,12 @@ final class Page
 
     private bool $rerun = false;
 
+    /** refresh() was called: the page runs again by itself. */
+    private bool $refreshes = false;
+
+    /** How deep the run is inside parts that can be out of sight: see part(). */
+    private int $parts = 0;
+
     private ?\Throwable $failure = null;
 
     private ?int $bufferLevel = null;
@@ -102,6 +112,7 @@ final class Page
      *                                              or a link filled one in
      * @param string                 $secret   a secret of the session. No page and no form ever holds it
      * @param Uploads|null           $uploads  the uploaded files of this tool
+     * @param bool                   $refreshing nobody asked for this run: the page script started it, see refresh()
      */
     public function __construct(
         public readonly string $toolId,
@@ -120,6 +131,7 @@ final class Page
         private readonly bool $inputsChanged = false,
         private readonly string $secret = '',
         private readonly ?Uploads $uploads = null,
+        public readonly bool $refreshing = false,
     ) {
         $this->stateKey = $stateKey ?? $toolId;
 
@@ -226,7 +238,7 @@ final class Page
             $this->messages[] = ['kind' => $kind, 'text' => $text];
         }
 
-        $this->add(self::calloutHtml($kind, Text::lines($text)));
+        $this->add(self::calloutHtml($kind, Text::lines($text), $this->action !== null));
     }
 
     // ----------------------------------------------------------------- inputs
@@ -1041,6 +1053,7 @@ final class Page
         }
 
         return '<div class="sui-tabs" id="' . Text::e('t-' . $key) . '">'
+            // Named like the frame of a table: the line stays where the user moved it.
             . '<div class="sui-tab-list" role="tablist" data-sui-scroll="' . Text::e($key) . '">' . $headers . '</div>'
             . '<input type="hidden" name="' . Text::e('_tab[' . $key . ']') . '" value="' . Text::e($open . ':' . $slugs[$open]) . '">'
             . $bodies
@@ -1068,12 +1081,15 @@ final class Page
      */
     private function part(callable $content): void
     {
+        $this->parts++;
         try {
             $content();
         } catch (Stop $signal) {
             if ($signal::class !== Stop::class || $this->download !== null) {
                 throw $signal;
             }
+        } finally {
+            $this->parts--;
         }
     }
 
@@ -1086,6 +1102,58 @@ final class Page
     private function clickedIn(array $keys): bool
     {
         return $this->click !== '' && isset($keys[explode(':', $this->click, 2)[0]]);
+    }
+
+    /**
+     * @param int      $seconds   the wait between the answer to one run and the start of the next
+     * @param int|null $stopAfter seconds without a touch of the user after which the page stops by itself
+     */
+    public function refresh(int $seconds, ?int $stopAfter): void
+    {
+        if ($seconds < self::MIN_REFRESH || $seconds > self::MAX_REFRESH) {
+            throw new \InvalidArgumentException(sprintf(
+                'refresh() takes from %d seconds to a day (%d), not %d. Every refresh is a whole run of the script.',
+                self::MIN_REFRESH,
+                self::MAX_REFRESH,
+                $seconds,
+            ));
+        }
+        if ($stopAfter !== null && $stopAfter <= $seconds) {
+            // The page stops when nobody touched it for that long. It would stop at
+            // the very moment it is due to run again for the first time.
+            throw new \InvalidArgumentException(sprintf(
+                'refresh(%d, stopAfter: %d): stopAfter: has to be longer than the wait, or the page would stop before it ran again. Pass null to go on for ever.',
+                $seconds,
+                $stopAfter,
+            ));
+        }
+        if ($this->refreshes) {
+            throw new \LogicException('refresh() is called twice on this page. A page runs again at one rate.');
+        }
+        if ($this->parts > 0) {
+            // The page stops by itself when nobody was there. Behind a closed tab nobody
+            // would see that it did, or find the button that starts it again.
+            throw new \LogicException('refresh() is called inside expander() or tabs(). Its line says when the page stands still and holds the button that starts it again, so it must not be out of sight. Call it outside, near the top of the script.');
+        }
+        $this->refreshes = true;
+
+        $now = new \DateTimeImmutable();
+        $time = '<time datetime="' . Text::e($now->format(\DATE_ATOM)) . '">' . Text::e($now->format('H:i:s')) . '</time>';
+
+        // The waiting is the work of the page script. It reads the rate here after every answer.
+        $this->add(
+            '<p class="sui-refresh" data-sui-refresh="' . $seconds . '"' . ($stopAfter === null ? '' : ' data-sui-stop-after="' . $stopAfter . '"') . '>'
+            // The script writes the word in here when the page stands still. That is
+            // read out to somebody who does not see it. The time never is.
+            . '<span class="sui-refresh-paused" role="status" data-sui-text="' . Text::e($this->t('refresh.paused')) . '"></span>'
+            // The words are escaped first. Only then the time goes in, as an element.
+            . '<span class="sui-refresh-time">' . str_replace('{time}', $time, Text::e($this->t('refresh.updated'))) . '</span>'
+            // Without the script nothing runs by itself, so there is nothing to pause.
+            // The button has a name of its own, so that it keeps the focus over a refresh.
+            . '<button type="button" class="sui-link-btn" id="sui-pause" hidden data-sui-pause="' . Text::e($this->t('refresh.pause')) . '"'
+            . ' data-sui-resume="' . Text::e($this->t('refresh.resume')) . '">' . Text::e($this->t('refresh.pause')) . '</button>'
+            . '</p>',
+        );
     }
 
     public function stop(): never
@@ -1326,7 +1394,7 @@ final class Page
                 && is_string($message['kind'] ?? null)
                 && is_string($message['text'] ?? null)
                 && in_array($message['kind'], self::CALLOUTS, true)) {
-                $html .= self::calloutHtml($message['kind'], Text::lines($message['text']));
+                $html .= self::calloutHtml($message['kind'], Text::lines($message['text']), true);
             }
         }
 
@@ -1699,11 +1767,15 @@ final class Page
             . '</div>';
     }
 
-    private static function calloutHtml(string $kind, string $html): string
+    /**
+     * @param bool $result this is what a button had to say. A page that runs again by itself would take
+     *                     it away before anybody read it, so it is marked and the page script waits
+     */
+    private static function calloutHtml(string $kind, string $html, bool $result = false): string
     {
         $role = $kind === 'error' || $kind === 'warning' ? 'alert' : 'status';
 
-        return '<div class="sui-callout sui-' . $kind . '" role="' . $role . '" dir="auto">' . $html . '</div>';
+        return '<div class="sui-callout sui-' . $kind . '" role="' . $role . '"' . ($result ? ' data-sui-result' : '') . ' dir="auto">' . $html . '</div>';
     }
 
     private function failureHtml(\Throwable $error): string

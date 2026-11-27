@@ -25,6 +25,12 @@ return [
     'confirm.yes' => 'Yes',
     'confirm.no' => 'Cancel',
 
+    // A page that runs again by itself
+    'refresh.updated' => 'Updated {time}',
+    'refresh.paused' => 'Paused',
+    'refresh.pause' => 'Pause',
+    'refresh.resume' => 'Resume',
+
     // Tables
     'table.empty' => 'No rows.',
     'table.select_page' => 'Select all rows on this page',

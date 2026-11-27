@@ -191,8 +191,10 @@ final class Kernel
 
         if ($page->isPost) {
             // A run that failed half way must not overwrite what was saved before,
-            // and it deletes no file either.
-            if ($failure === null) {
+            // and it deletes no file either. Nor does a run that the page started by
+            // itself: two windows of one tool would overwrite each other all day long,
+            // and a file would be gone without the user having done anything.
+            if ($failure === null && !$page->refreshing) {
                 $this->saveState($page);
                 $page->settleFiles();
             }
@@ -349,10 +351,23 @@ final class Kernel
             return $this->noteLayout($states, $stateKey, $saved, $noRun, $request->post, $selfUrl);
         }
 
-        $uploads = new Uploads($this->folder, $this->session, $stateKey, $isPost ? $request->files : []);
+        // The page script asks, and only needs what goes inside the form. It says
+        // "refresh" when it started the run by itself, because the tool called
+        // refresh(). After rerun() it comes back with the same word, to read the page.
+        $kind = $request->header('x-script-ui');
+        $fragment = $kind === 'fragment' || $kind === 'refresh';
+
+        // Nobody asked for this run. It brings no file and it presses nothing: no
+        // button, no header of a table, no "remove" of a file. Whatever the request says.
+        $refreshing = $isPost && $kind === 'refresh';
+
+        $uploads = new Uploads($this->folder, $this->session, $stateKey, $isPost && !$refreshing ? $request->files : []);
 
         if ($isPost) {
             $in = $request->post;
+            if ($refreshing) {
+                unset($in['_click']);
+            }
             $linked = [];
             $carried = [];
             // A file that arrives or is taken away is a changed input too: a table
@@ -379,7 +394,7 @@ final class Kernel
             $selfUrl,
             $homeUrl,
             $carried,
-            $request->header('x-script-ui') === 'fragment',
+            $fragment,
             $stateKey,
             $linked,
             $this->config->language,
@@ -387,6 +402,7 @@ final class Kernel
             $inputsChanged,
             $this->secret(),
             $uploads,
+            $refreshing,
         );
     }
 

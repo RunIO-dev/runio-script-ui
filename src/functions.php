@@ -433,6 +433,38 @@ function tabs(array $tabs, ?string $key = null): void
 }
 
 /**
+ * Lets the page run again by itself, so that a dashboard or the state of a queue
+ * stays up to date while somebody looks at it. Where it is called, a small line
+ * says when the page was made, with a button that pauses it.
+ *
+ * Every refresh is a whole run of the script, so the rate should fit the work:
+ * the next run starts $seconds after the answer to the last one, never before.
+ * Call it near the top, and not inside expander() or tabs(): its line must be in
+ * sight. A page that ends before it reaches the call stops refreshing.
+ *
+ * A refresh waits while the user is in the middle of something: typing, choosing
+ * from a list, answering the question of a button, or moving the mouse. It
+ * presses no button, writes nothing to the log and changes nothing that the
+ * tool remembers. Without JavaScript nothing refreshes.
+ *
+ * It is a whole run all the same: what the script does on every run, it now does
+ * every few seconds with nobody at the page. Work that changes something belongs
+ * behind a button. And the login check runs for it like for any request: one that
+ * counts the time without a request should leave out those with the header
+ * "X-Script-Ui: refresh".
+ *
+ * @param int      $seconds   the wait between an answer and the next run: 2 or more
+ * @param int|null $stopAfter the page stops by itself when nobody touched it for this many seconds,
+ *                            and says so. An hour by default: a page that keeps asking keeps its
+ *                            session alive. It has to be longer than $seconds. null: never, for a
+ *                            screen on a wall
+ */
+function refresh(int $seconds, ?int $stopAfter = 3600): void
+{
+    Runtime::page()->refresh($seconds, $stopAfter);
+}
+
+/**
  * Ends the run here. Everything drawn so far is shown.
  *
  * Inside expander() and tabs() it ends that part only, and the rest of the page

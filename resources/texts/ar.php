@@ -28,6 +28,12 @@ return [
     'confirm.yes' => 'نعم',
     'confirm.no' => 'إلغاء',
 
+    // A page that runs again by itself
+    'refresh.updated' => 'آخر تحديث {time}',
+    'refresh.paused' => 'متوقف',
+    'refresh.pause' => 'إيقاف مؤقت',
+    'refresh.resume' => 'متابعة',
+
     // Tables
     'table.empty' => 'لا توجد صفوف.',
     'table.select_page' => 'تحديد كل صفوف هذه الصفحة',

@@ -21,7 +21,12 @@ final class UploadFolder
     private const CLEAN_EVERY = 3600;
 
     /** The name of a stored file: random, and nothing else. */
-    private const NAME = '/^[0-9a-f]{32}$/D';
+    /**
+     * What a stored file is called: random, with an ending of its own. The ending
+     * tells our files from anything else in the folder, and no web server and
+     * no program does anything with a ".upload".
+     */
+    public const NAME = '/^[0-9a-f]{32}\.upload$/D';
 
     private readonly \Closure $move;
 
@@ -109,7 +114,7 @@ final class UploadFolder
     public function keep(string $arrived): string
     {
         $directory = $this->directory();
-        $name = bin2hex(random_bytes(16));
+        $name = bin2hex(random_bytes(16)) . '.upload';
         $target = $directory . DIRECTORY_SEPARATOR . $name;
 
         if (!($this->move)($arrived, $target)) {

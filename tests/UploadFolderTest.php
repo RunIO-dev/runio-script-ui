@@ -71,7 +71,8 @@ final class UploadFolderTest extends TestCase
         $first = $folder->keep($this->arrived('one'));
         $second = $folder->keep($this->arrived('two'));
 
-        self::assertMatchesRegularExpression('/^[0-9a-f]{32}$/', $first);
+        // The ending says whose file it is. Nothing runs or opens a ".upload".
+        self::assertMatchesRegularExpression('/^[0-9a-f]{32}\.upload$/', $first);
         self::assertNotSame($first, $second);
         self::assertSame('one', file_get_contents($folder->path($first)));
         self::assertSame($this->base . '/uploads/' . $second, $folder->path($second));
@@ -160,7 +161,8 @@ final class UploadFolderTest extends TestCase
         $folder = $this->folder();
         $folder->keep($this->arrived('x'));
 
-        foreach (['../secret', 'a/b', '', '.', '..', str_repeat('g', 32), str_repeat('a', 31), str_repeat('a', 32) . "\n"] as $name) {
+        $hex = str_repeat('a', 32);
+        foreach (['../secret', 'a/b', '', '.', '..', str_repeat('g', 32) . '.upload', str_repeat('a', 31) . '.upload', $hex, $hex . ".upload\n", $hex . '.upload.php', '../' . $hex . '.upload'] as $name) {
             try {
                 $folder->path($name);
                 self::fail('"' . $name . '" was taken for the name of a stored file');
@@ -188,15 +190,21 @@ final class UploadFolderTest extends TestCase
         $old = $folder->keep($this->arrived('old'));
         $new = $folder->keep($this->arrived('new'));
         touch($folder->path($old), time() - UploadFolder::LIFETIME - 60);
-        // Something that is not ours stays, however old it is.
-        file_put_contents($this->base . '/uploads/notes.txt', 'keep me');
-        touch($this->base . '/uploads/notes.txt', time() - 10 * UploadFolder::LIFETIME);
+        // Something that is not ours stays, however old it is. That goes for a file with
+        // a name made of a hash too: caches write such names, and a folder may be shared.
+        $others = ['notes.txt', md5('somebody else'), md5('somebody else') . '.cache'];
+        foreach ($others as $other) {
+            file_put_contents($this->base . '/uploads/' . $other, 'keep me');
+            touch($this->base . '/uploads/' . $other, time() - 10 * UploadFolder::LIFETIME);
+        }
 
         self::assertSame(1, $folder->clean());
 
         self::assertFileDoesNotExist($this->base . '/uploads/' . $old);
         self::assertFileExists($folder->path($new));
-        self::assertFileExists($this->base . '/uploads/notes.txt');
+        foreach ($others as $other) {
+            self::assertFileExists($this->base . '/uploads/' . $other);
+        }
     }
 
     public function testTheFolderIsCleanedNowAndThenWhileFilesArrive(): void

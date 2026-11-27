@@ -133,7 +133,7 @@ abstract class ToolTestCase extends TestCase
 
         return array_values(array_filter(
             scandir($this->uploadFolder) ?: [],
-            static fn (string $entry): bool => preg_match('/^[0-9a-f]{32}$/', $entry) === 1,
+            static fn (string $entry): bool => preg_match('/^[0-9a-f]{32}\.upload$/', $entry) === 1,
         ));
     }
 

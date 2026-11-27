@@ -367,7 +367,7 @@ final class Uploads
                 $sound = is_array($entry)
                     && is_string($entry['field'] ?? null)
                     && is_string($entry['stored'] ?? null)
-                    && preg_match(self::HANDLE, $entry['stored']) === 1
+                    && preg_match(UploadFolder::NAME, $entry['stored']) === 1
                     && is_string($entry['name'] ?? null)
                     && is_int($entry['size'] ?? null)
                     && is_int($entry['at'] ?? null)

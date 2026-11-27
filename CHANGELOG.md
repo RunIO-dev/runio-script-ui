@@ -11,6 +11,7 @@ First version. Requires PHP 8.2+ with the mbstring and session extensions, and n
 - A tool is one PHP script. It runs from top to bottom and runs again on every interaction.
 - Text and messages: `title`, `heading`, `note`, `code`, `json`, `link`, `divider`, `metric`, `success`, `info`, `warning`, `error`.
 - Inputs that return their current value: `text`, `textarea`, `number`, `select`, `checkbox`, `date_input`.
+- `radio` shows every option and takes one. `multiselect` shows a tick box for every option and returns the ticked ones as a list. Both take their options the way `select` does, lay them out in a column, in several columns or in a row (`horizontal: true`), and can be filled in by a link.
 - `table` with sorting, pages (`pageSize:`), a search box (`search: true`) and rows you can tick on any page, one by one or a page at a time. `chart` with bar and line charts drawn as SVG.
 - `button` with an optional question before it acts, plus `columns`, `stop` and `rerun`.
 - `file_input` takes files from the user: one or several, with limits on size and kind. A file stays on the server between the runs of a tool, in a folder only PHP reads, and the page names it by a random handle. `Upload` gives the tool `name`, `size`, `path`, `contents()`, `saveTo()` and `forget()`, and `rows()` reads an uploaded CSV file as rows, whichever spreadsheet wrote it. `uploads:` sets the folder, `clean_uploads()` deletes what was left behind.

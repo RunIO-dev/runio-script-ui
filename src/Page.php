@@ -75,6 +75,17 @@ final class Page
     private ?Texts $texts = null;
 
     /**
+     * @var array<array-key,array{label: string, help: ?string, multiple: bool, endings: list<string>, limit: ?int,
+     *                            errors: list<array{string, string}>, held: list<string>}>
+     *      the file fields of this page by key: what limits them, what went wrong (the id of a text and the
+     *      name of the file) and the handles of the files they hold
+     */
+    private array $fileFields = [];
+
+    /** Marks the places where the file fields go. Random, so nothing a tool prints can be taken for one. */
+    private ?string $mark = null;
+
+    /**
      * @param array<array-key,mixed> $in      the bag this run reads from
      * @param array<array-key,mixed> $carried  messages kept from the run that called rerun()
      * @param bool                   $fragment the page's own script asked: answer with the content only
@@ -84,6 +95,7 @@ final class Page
      * @param bool                   $inputsChanged the user changed an input of the tool since the page was drawn,
      *                                              or a link filled one in
      * @param string                 $secret   a secret of the session. No page and no form ever holds it
+     * @param Uploads|null           $uploads  the uploaded files of this tool
      */
     public function __construct(
         public readonly string $toolId,
@@ -101,6 +113,7 @@ final class Page
         private readonly array $ownTexts = [],
         private readonly bool $inputsChanged = false,
         private readonly string $secret = '',
+        private readonly ?Uploads $uploads = null,
     ) {
         $this->stateKey = $stateKey ?? $toolId;
 
@@ -429,6 +442,144 @@ final class Page
         return $value;
     }
 
+    /**
+     * @param array<array-key,mixed>|null $types endings of file names, such as "csv"
+     *
+     * @return Upload|list<Upload>|null
+     */
+    public function fileInput(string $label, ?array $types, bool $multiple, ?int $maxSize, ?string $help, ?string $key): Upload|array|null
+    {
+        $key = $this->claim($key, $label);
+        $uploads = $this->uploads();
+
+        if (!$uploads->switchedOn()) {
+            throw new \LogicException(
+                'file_input() needs PHP to take uploads, and they are switched off. '
+                . 'In php.ini set file_uploads = On, and max_file_uploads to 1 or more.',
+            );
+        }
+        if ($maxSize !== null && $maxSize < 1) {
+            throw new \InvalidArgumentException('file_input(): maxSize is a number of bytes and has to be at least 1.');
+        }
+
+        $endings = self::endings($types);
+        // PHP has limits of its own, and a file never gets past them.
+        $limit = match (true) {
+            $maxSize === null => $uploads->limit(),
+            $uploads->limit() === null => $maxSize,
+            default => min($maxSize, $uploads->limit()),
+        };
+        $room = $multiple ? $uploads->room() : 1;
+        $errors = [];
+
+        // The files the page showed: the form names them. Only a file that was
+        // uploaded to this field of this tool counts, and only while it is there.
+        $held = [];
+        $named = is_array($this->in['_file'] ?? null) ? ($this->in['_file'][$key] ?? null) : null;
+        foreach (is_array($named) ? $named : [] as $handle) {
+            if (!is_string($handle) || count($held) >= $room) {
+                continue;
+            }
+            if ($uploads->find($key, $handle) === null) {
+                // Removed in another tab, or kept for longer than a day.
+                $errors['file.gone'] = ['file.gone', ''];
+            } else {
+                $held[$handle] = true;
+            }
+        }
+
+        if (preg_match('/^' . preg_quote($key, '/') . ':remove:([0-9a-f]{32})$/D', $this->click, $match) === 1) {
+            // The file itself is deleted when this run has ended well. See Uploads::settle().
+            unset($held[$match[1]]);
+        }
+
+        $replaced = false;
+        foreach ($uploads->posted($key) as $file) {
+            $name = Download::name($file['name'], 'upload');
+
+            if (in_array($file['error'], [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)) {
+                $errors[] = ['file.too_large', $name];
+
+                continue;
+            }
+            $size = $file['error'] === UPLOAD_ERR_OK ? @filesize($file['arrived']) : false;
+            if ($size === false) {
+                // Cut off on the way, or the server could not write it. The user can only try again.
+                error_log(sprintf('Script UI: the file "%s" did not arrive in the tool "%s" (PHP upload error %d).', $name, $this->toolId, $file['error']));
+                $errors[] = ['file.failed', $name];
+
+                continue;
+            }
+            if ($limit !== null && $size > $limit) {
+                $errors[] = ['file.too_large', $name];
+
+                continue;
+            }
+            if ($endings !== [] && !in_array(Download::ending($name), $endings, true)) {
+                $errors[] = ['file.wrong_type', $name];
+
+                continue;
+            }
+
+            if (!$multiple) {
+                // A field for one file: the new file takes the place of the old one.
+                if (!$replaced) {
+                    $held = [$uploads->keep($key, $file['arrived'], $name) => true];
+                    $replaced = true;
+                }
+
+                continue;
+            }
+            if (count($held) >= $room) {
+                $errors['file.too_many'] = ['file.too_many', ''];
+
+                continue;
+            }
+            $held[$uploads->keep($key, $file['arrived'], $name)] = true;
+        }
+
+        $handles = array_map('strval', array_keys($held));
+        $this->fileFields[$key] = [
+            'label' => $label,
+            'help' => $help,
+            'multiple' => $multiple,
+            'endings' => $endings,
+            'limit' => $limit,
+            'errors' => array_values($errors),
+            'held' => $handles,
+        ];
+        $this->keepFiles($key);
+
+        // For the log: the files this run got, also when the tool forgets them
+        // afterwards. Worked out only when an entry is written.
+        $this->values[$key] = static function () use ($uploads, $handles, $multiple): mixed {
+            $described = [];
+            foreach ($handles as $handle) {
+                $file = $uploads->describe($handle);
+                if ($file !== null) {
+                    $described[] = $file;
+                }
+            }
+
+            return $multiple ? $described : ($described[0] ?? null);
+        };
+
+        // The field is drawn when the page is finished. See fileFieldHtml().
+        $this->add($this->filePlace($key));
+
+        $files = [];
+        foreach ($handles as $handle) {
+            $file = $uploads->find($key, $handle);
+            if ($file !== null) {
+                $files[] = new Upload($file['name'], $file['size'], $file['path'], function () use ($key, $handle): void {
+                    $this->forgetFile($key, $handle);
+                });
+            }
+        }
+
+        return $multiple ? $files : ($files[0] ?? null);
+    }
+
     // ------------------------------------------------------------------- data
 
     /**
@@ -716,10 +867,34 @@ final class Page
         $this->failure = $reason;
     }
 
-    /** @return array<array-key,mixed> */
+    /**
+     * What the script got from each input, for the log.
+     *
+     * @return array<array-key,mixed>
+     */
     public function values(): array
     {
-        return $this->values;
+        // A file field works out the fingerprints of its files only here, when somebody asks.
+        return array_map(static fn (mixed $value): mixed => $value instanceof \Closure ? $value() : $value, $this->values);
+    }
+
+    /** Does the page have a field that takes files? Its form then has to be sent in another way. */
+    public function hasFileField(): bool
+    {
+        return $this->fileFields !== [];
+    }
+
+    /**
+     * After a run that went well: deletes the files that the page showed before
+     * and does not show any more.
+     *
+     * @param array<array-key,mixed> $state what was kept for the next page view
+     */
+    public function settleFiles(array $state): void
+    {
+        if ($this->isPost) {
+            $this->uploads?->settle($this->in, $state);
+        }
     }
 
     /** @return list<array{kind: string, text: string}> */
@@ -738,7 +913,24 @@ final class Page
         // After rerun() and after a download the inputs below that call were never
         // reached, so the checked values are incomplete. Keep what the form sent
         // instead. It is checked again when the next run reads it.
-        return $this->rerun || $this->download !== null ? self::keepable($this->in) : $this->out;
+        if (!$this->rerun && $this->download === null) {
+            return $this->out;
+        }
+
+        $state = self::keepable($this->in);
+        // A file field that was reached knows better than the form: a file may
+        // have arrived in this very run, or the tool may have forgotten one.
+        foreach ($this->fileFields as $key => $field) {
+            unset($state['_file'][$key]);
+            if ($field['held'] !== []) {
+                $state['_file'][$key] = $field['held'];
+            }
+        }
+        if (($state['_file'] ?? null) === []) {
+            unset($state['_file']);
+        }
+
+        return $state;
     }
 
     public function documentTitle(): string
@@ -793,6 +985,10 @@ final class Page
             $html .= implode('', $buffer);
         }
 
+        foreach (array_keys($this->fileFields) as $key) {
+            $html = str_replace($this->filePlace((string) $key), $this->fileFieldHtml((string) $key), $html);
+        }
+
         return $html . ($this->failure === null ? '' : $this->failureHtml($this->failure));
     }
 
@@ -828,6 +1024,146 @@ final class Page
             $this->buffers[array_key_last($this->buffers)][] =
                 '<pre class="sui-echo" dir="auto">' . Text::e(rtrim($printed)) . '</pre>';
         }
+    }
+
+    private function uploads(): Uploads
+    {
+        return $this->uploads ?? throw new \LogicException('This page was started without a place for uploaded files.');
+    }
+
+    /**
+     * The endings that a file field takes, in small letters and without the dot.
+     *
+     * @param array<array-key,mixed>|null $types
+     *
+     * @return list<string> empty: every kind of file
+     */
+    private static function endings(?array $types): array
+    {
+        if ($types === null) {
+            return [];
+        }
+        if ($types === []) {
+            throw new \InvalidArgumentException('file_input(): types names no kind of file. Leave it out to take every kind.');
+        }
+
+        $endings = [];
+        foreach ($types as $type) {
+            // "csv", ".csv" and "CSV" are the same. Of "tar.gz" the last part counts, as it does in a file name.
+            $ending = is_string($type) ? strtolower(trim($type)) : '';
+            $dot = strrpos($ending, '.');
+            $ending = $dot === false ? $ending : substr($ending, $dot + 1);
+
+            if (preg_match('/^[a-z0-9]{1,16}$/D', $ending) !== 1) {
+                throw new \InvalidArgumentException(sprintf(
+                    'file_input(): types are endings of file names, such as "csv" or "pdf". %s is not one.',
+                    is_string($type) ? '"' . $type . '"' : get_debug_type($type),
+                ));
+            }
+            $endings[$ending] = true;
+        }
+
+        return array_map('strval', array_keys($endings));
+    }
+
+    /** What stands in the page where a file field goes, until the page is finished. */
+    private function filePlace(string $key): string
+    {
+        $this->mark ??= bin2hex(random_bytes(8));
+
+        return '<!--sui-file:' . $this->mark . ':' . $key . '-->';
+    }
+
+    /** Writes into what is kept for the next page view which files a field holds. */
+    private function keepFiles(string $key): void
+    {
+        unset($this->out['_file'][$key]);
+        if ($this->fileFields[$key]['held'] !== []) {
+            $this->out['_file'][$key] = $this->fileFields[$key]['held'];
+        }
+        if (($this->out['_file'] ?? null) === []) {
+            unset($this->out['_file']);
+        }
+    }
+
+    /** The tool is done with a file: it is deleted, and its field no longer shows it. */
+    private function forgetFile(string $key, string $handle): void
+    {
+        $this->uploads()->forget($handle);
+
+        $this->fileFields[$key]['held'] = array_values(array_diff($this->fileFields[$key]['held'], [$handle]));
+        $this->keepFiles($key);
+    }
+
+    /**
+     * A file field. It is drawn when the page is finished and not where the script
+     * calls it: a tool typically forgets a file further down, after it has used it,
+     * and the field has to be empty then.
+     */
+    private function fileFieldHtml(string $key): string
+    {
+        $field = $this->fileFields[$key];
+        $uploads = $this->uploads();
+        $texts = $this->texts();
+        $id = 'f-' . $key;
+
+        $kinds = implode(', ', array_map('strtoupper', $field['endings']));
+        $size = $field['limit'] === null ? '' : $texts->bytes($field['limit']);
+        $count = $texts->number($uploads->room());
+
+        $files = '';
+        $shown = 0;
+        foreach ($field['held'] as $handle) {
+            $file = $uploads->find($key, $handle);
+            if ($file === null) {
+                continue;
+            }
+
+            // The hidden field says which file the page shows. It is a handle, never a path.
+            // When "Remove" is pressed the button goes away, and the focus moves to the field.
+            $files .= '<li class="sui-file">'
+                . '<span class="sui-file-name" dir="auto">' . Text::e($file['name']) . '</span>'
+                . '<span class="sui-file-size">' . Text::e($texts->bytes($file['size'])) . '</span>'
+                . '<button type="submit" class="sui-link-btn" id="' . Text::e('b-' . $key . ':remove:' . $shown) . '" data-sui-return="' . Text::e($id) . '"'
+                . ' name="_click" value="' . Text::e($key . ':remove:' . $handle) . '" aria-label="' . Text::e($texts->get('file.remove_label', ['name' => $file['name']])) . '">'
+                . Text::e($texts->get('file.remove')) . '</button>'
+                . '<input type="hidden" name="' . Text::e('_file[' . $key . '][]') . '" value="' . Text::e($handle) . '">'
+                . '</li>';
+            $shown++;
+        }
+
+        $note = trim(
+            ($kinds === '' ? '' : $texts->get('file.types', ['types' => $kinds]))
+            . ' ' . ($size === '' ? '' : $texts->get('file.limit', ['size' => $size])),
+        );
+
+        $messages = [];
+        foreach ($field['errors'] as [$error, $name]) {
+            $messages[] = $texts->get($error, ['name' => $name, 'size' => $size, 'types' => $kinds, 'count' => $count]);
+        }
+
+        $described = implode(' ', array_filter([$note === '' ? '' : 'l-' . $key, $messages === [] ? '' : 'e-' . $key]));
+
+        // The page script reads the limits here and checks a file before it sends it.
+        $input = '<input class="sui-input sui-input-file" type="file" id="' . Text::e($id) . '" name="' . Text::e($field['multiple'] ? $key . '[]' : $key) . '"'
+            . ($field['multiple'] ? ' multiple' : '')
+            . ($field['endings'] === [] ? '' : ' accept="' . Text::e('.' . implode(',.', $field['endings'])) . '"')
+            . ($field['limit'] === null ? '' : ' data-sui-max="' . $field['limit'] . '" data-sui-too-large="'
+                . Text::e($texts->get('file.too_large', ['name' => '{name}', 'size' => $size])) . '"')
+            . ($field['multiple'] ? ' data-sui-room="' . max(0, $uploads->room() - $shown) . '" data-sui-too-many="'
+                . Text::e($texts->get('file.too_many', ['count' => $count])) . '"' : '')
+            // A server in front of PHP may take less than PHP does. Nobody here knows its limit.
+            . ' data-sui-refused="' . Text::e($texts->get('error.too_large_text')) . '"'
+            . ($described === '' ? '' : ' aria-describedby="' . Text::e($described) . '"')
+            . '>';
+
+        return '<div class="sui-field sui-field-file"><label for="' . Text::e($id) . '" dir="auto">' . Text::e($field['label']) . '</label>'
+            . ($files === '' ? '' : '<ul class="sui-files">' . $files . '</ul>')
+            . $input
+            . ($note === '' ? '' : '<p class="sui-help sui-file-limit" id="' . Text::e('l-' . $key) . '" dir="auto">' . Text::e($note) . '</p>')
+            . ($messages === [] ? '' : '<p class="sui-field-error" id="' . Text::e('e-' . $key) . '" role="alert" dir="auto">' . Text::lines(implode("\n", $messages)) . '</p>')
+            . ($field['help'] === null ? '' : '<p class="sui-help" dir="auto">' . Text::e($field['help']) . '</p>')
+            . '</div>';
     }
 
     private function claim(?string $key, string $label): string
@@ -1064,6 +1400,6 @@ final class Page
             }
         }
 
-        return $keep + Table::keepable($in);
+        return $keep + Table::keepable($in) + Uploads::keepable($in);
     }
 }

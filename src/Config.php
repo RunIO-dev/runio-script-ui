@@ -30,6 +30,8 @@ final class Config
      * @param string|null            $language the language of the built-in texts on every page, such as "de".
      *                                         null means: each page follows the language its title is written in
      * @param array<array-key,mixed> $texts    your own built-in texts: language => (id => text)
+     * @param string|null            $uploads  the folder that keeps uploaded files until a tool is done with them.
+     *                                         null means a folder of its own inside PHP's temp folder
      */
     public function __construct(
         ?callable $auth = null,
@@ -38,6 +40,7 @@ final class Config
         public readonly ?string $name = null,
         public readonly ?string $language = null,
         public readonly array $texts = [],
+        public readonly ?string $uploads = null,
     ) {
         Texts::check($language, $texts);
 
@@ -57,6 +60,7 @@ final class Config
         ?string $name = null,
         ?string $language = null,
         ?array $texts = null,
+        ?string $uploads = null,
     ): self {
         return new self(
             $auth ?? $this->auth,
@@ -65,6 +69,7 @@ final class Config
             $name ?? $this->name,
             $language ?? $this->language,
             $texts ?? $this->texts,
+            $uploads ?? $this->uploads,
         );
     }
 

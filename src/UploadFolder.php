@@ -40,6 +40,7 @@ final class UploadFolder
      * @param (\Closure():int)|null              $clock      the time. null: the real one
      * @param bool|null                          $strict     the folder has to belong to this user and be closed to everybody
      *                                                       else. null: only for the folder inside PHP's temp folder
+     * @param int|null                           $countLimit how many files PHP takes in one request. null: what php.ini says
      */
     public function __construct(
         private readonly ?string $path = null,
@@ -49,6 +50,7 @@ final class UploadFolder
         private readonly ?bool $switchedOn = null,
         ?\Closure $clock = null,
         private readonly ?bool $strict = null,
+        private readonly ?int $countLimit = null,
     ) {
         $this->move = $move ?? move_uploaded_file(...);
         $this->clock = $clock ?? time(...);
@@ -57,7 +59,17 @@ final class UploadFolder
     /** Does PHP take uploads at all? */
     public function switchedOn(): bool
     {
-        return $this->switchedOn ?? (bool) ini_get('file_uploads');
+        // PHP has two switches: file_uploads, and max_file_uploads set to nothing.
+        return ($this->switchedOn ?? (bool) ini_get('file_uploads')) && $this->countLimit() > 0;
+    }
+
+    /**
+     * How many files PHP takes in one request. It drops the others without telling
+     * the script, so a page has to say the number before somebody chooses more.
+     */
+    public function countLimit(): int
+    {
+        return max(0, $this->countLimit ?? (int) ini_get('max_file_uploads'));
     }
 
     /**

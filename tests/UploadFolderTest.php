@@ -246,6 +246,17 @@ final class UploadFolderTest extends TestCase
         self::assertSame((bool) ini_get('file_uploads'), $folder->switchedOn());
     }
 
+    public function testPhpAlsoLimitsHowManyFilesOneRequestBrings(): void
+    {
+        self::assertSame(5, (new UploadFolder(countLimit: 5))->countLimit());
+        self::assertSame(max(0, (int) ini_get('max_file_uploads')), (new UploadFolder())->countLimit());
+
+        // No file at all is the same as uploads switched off.
+        self::assertFalse((new UploadFolder(switchedOn: true, countLimit: 0))->switchedOn());
+        self::assertTrue((new UploadFolder(switchedOn: true, countLimit: 1))->switchedOn());
+        self::assertFalse((new UploadFolder(switchedOn: false, countLimit: 20))->switchedOn());
+    }
+
     // ------------------------------------------------------------- the upload
 
     private function upload(string $content, string $name = 'report.csv', ?\Closure $forget = null): Upload

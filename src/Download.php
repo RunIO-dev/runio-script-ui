@@ -46,12 +46,13 @@ final class Download
      * Makes a safe file name out of what the tool passed, which may contain
      * something a user typed. Nothing in it can name a folder, break out of the
      * header it is sent in, hide the file, or show another name than the real one.
-     * It never fails: what leaves nothing becomes "download".
+     * It never fails: what leaves nothing becomes "download", or the word passed
+     * for that.
      *
      * The ending is kept as it is, and the ending decides what a computer does
      * with the file. A tool should not take it from what a user typed.
      */
-    public static function name(string $file): string
+    public static function name(string $file, string $fallback = 'download'): string
     {
         $name = mb_scrub($file, 'UTF-8');
         // Marks that turn the direction of text make "exe.csv" read like "vsc.exe".
@@ -62,7 +63,7 @@ final class Download
         if ($name !== '' && $name[0] === '.') {
             // ".csv" is what is left of $typed . '.csv' when nothing was typed. A name
             // that starts with a dot would also be a hidden file.
-            $name = 'download' . $name;
+            $name = $fallback . $name;
         }
 
         if (mb_strlen($name, 'UTF-8') > self::MAX_NAME_LENGTH) {
@@ -72,7 +73,7 @@ final class Download
             $name = rtrim(mb_substr($name, 0, self::MAX_NAME_LENGTH - mb_strlen($ending, 'UTF-8'), 'UTF-8'), ' .') . $ending;
         }
 
-        return $name === '' ? 'download' : $name;
+        return $name === '' ? $fallback : $name;
     }
 
     /** Rows can only be written as CSV or JSON. Any other name would be a file with the wrong content. */
@@ -152,7 +153,7 @@ final class Download
     }
 
     /** The ending of a file name in small letters: "csv" for "Orders.CSV". */
-    private static function ending(string $name): string
+    public static function ending(string $name): string
     {
         return strtolower(pathinfo($name, PATHINFO_EXTENSION));
     }

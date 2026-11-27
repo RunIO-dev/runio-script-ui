@@ -51,6 +51,22 @@ return [
     'cell.yes' => 'نعم',
     'cell.no' => 'لا',
     'number.thousands' => ',',
+    'number.decimal' => '.',
+
+    // الملفات
+    'file.remove' => 'إزالة',
+    'file.remove_label' => 'إزالة {name}',
+    'file.types' => 'المسموح: {types}.',
+    'file.limit' => 'حتى {size}.',
+    'file.too_large' => '«{name}» أكبر من {size}.',
+    'file.wrong_type' => '«{name}» غير مسموح هنا. المسموح: {types}.',
+    'file.too_many' => 'لا يتسع هذا الحقل لأكثر من {count} ملفاً.',
+    'file.failed' => 'لم يصل «{name}». حاول مرة أخرى.',
+    'file.gone' => 'ملف كان هنا لم يعد موجوداً. اختره مرة أخرى.',
+    'size.b' => '{n} بايت',
+    'size.kb' => '{n} كيلوبايت',
+    'size.mb' => '{n} ميغابايت',
+    'size.gb' => '{n} غيغابايت',
 
     // Charts
     'chart.empty' => 'لا توجد بيانات للرسم.',
@@ -80,4 +96,7 @@ return [
     'error.expired' => 'انتهت صلاحية هذه الصفحة',
     'error.expired_text' => 'انتهت جلستك، أو لم يُرسل النموذج من هذه الصفحة. افتح الصفحة من جديد وكرر ما فعلته.',
     'error.expired_link' => 'فتح الصفحة من جديد',
+    'error.too_large' => 'الحجم كبير جداً',
+    'error.too_large_text' => 'ما أُرسل أكبر مما يقبله هذا الخادم. اختر ملفاً أصغر.',
+    'error.too_large_link' => 'العودة إلى الصفحة',
 ];

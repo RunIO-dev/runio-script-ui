@@ -32,7 +32,8 @@ final class Renderer
         $address = $page->address();
         $texts = $page->texts();
 
-        $form = '<form id="sui-form" method="post" action="' . Text::e($address) . '" autocomplete="off" novalidate>'
+        // A form that holds a file has to be sent in parts. Without the page script the browser does that.
+        $form = '<form id="sui-form" method="post" action="' . Text::e($address) . '"' . ($page->hasFileField() ? ' enctype="multipart/form-data"' : '') . ' autocomplete="off" novalidate>'
             . '<input type="hidden" name="_token" value="' . Text::e($token) . '">'
             // Pressing Enter in a field submits through the first submit button of the form.
             // This one has no name, so Enter reruns the page and never triggers an action.

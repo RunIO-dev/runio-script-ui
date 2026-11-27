@@ -24,6 +24,8 @@ final class Request
      * @param array<string,string>   $headers header name => value, in any case
      * @param bool                   $secure   the browser reached the site over HTTPS
      * @param string                 $protocol the version of HTTP the request arrived with, such as "HTTP/1.1"
+     * @param array<array-key,mixed> $files    the uploaded files, the way PHP hands them over in \$_FILES
+     * @param int|null               $contentLength how many bytes the browser said it sends, when it said so
      */
     public function __construct(
         string $method,
@@ -34,6 +36,8 @@ final class Request
         public readonly string $remoteAddr = '127.0.0.1',
         public readonly bool $secure = false,
         public readonly string $protocol = 'HTTP/1.1',
+        public readonly array $files = [],
+        public readonly ?int $contentLength = null,
     ) {
         $this->method = strtoupper($method);
 
@@ -64,6 +68,7 @@ final class Request
         // what the browser used. This only decides whether the session cookie is
         // marked "Secure", so a false claim can lock out nobody but its sender.
         $forwarded = strtolower(trim(explode(',', $headers['X-FORWARDED-PROTO'] ?? '')[0]));
+        $length = $_SERVER['CONTENT_LENGTH'] ?? null;
 
         return new self(
             is_string($_SERVER['REQUEST_METHOD'] ?? null) ? $_SERVER['REQUEST_METHOD'] : 'GET',
@@ -74,6 +79,8 @@ final class Request
             is_string($_SERVER['REMOTE_ADDR'] ?? null) ? $_SERVER['REMOTE_ADDR'] : '',
             $https || $forwarded === 'https',
             is_string($_SERVER['SERVER_PROTOCOL'] ?? null) ? $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.1',
+            $_FILES,
+            is_string($length) && preg_match('/^\d{1,18}$/D', $length) === 1 ? (int) $length : null,
         );
     }
 

@@ -85,6 +85,24 @@ final class Texts
         return number_format($number, 0, '', $this->get('number.thousands'));
     }
 
+    /**
+     * A number of bytes the way people read it: "14 B", "1.5 KB", "2 MB".
+     * It is cut and not rounded. A limit of 1.99 MB is not "2 MB".
+     */
+    public function bytes(int $bytes): string
+    {
+        foreach (['size.gb' => 1073741824, 'size.mb' => 1048576, 'size.kb' => 1024] as $id => $unit) {
+            if ($bytes >= $unit) {
+                $tenths = (int) floor($bytes / $unit * 10);
+                $rest = $tenths % 10;
+
+                return $this->get($id, ['n' => $this->number(intdiv($tenths, 10)) . ($rest === 0 ? '' : $this->get('number.decimal') . $rest)]);
+            }
+        }
+
+        return $this->get('size.b', ['n' => $this->number($bytes)]);
+    }
+
     public function rightToLeft(): bool
     {
         return in_array(self::base($this->language), self::RIGHT_TO_LEFT, true);

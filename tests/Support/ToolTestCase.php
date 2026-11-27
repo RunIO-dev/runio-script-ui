@@ -10,6 +10,7 @@ use Runio\ScriptUi\Http\Request;
 use Runio\ScriptUi\Http\Response;
 use Runio\ScriptUi\Kernel;
 use Runio\ScriptUi\Session\ArraySession;
+use Runio\ScriptUi\UploadFolder;
 
 /**
  * Runs a tool (a closure) through the kernel the way a browser session would.
@@ -25,6 +26,27 @@ abstract class ToolTestCase extends TestCase
     /** @var list<array<string,mixed>> */
     protected array $logged = [];
 
+    /** Where uploaded files are kept in this test. Made on first use and removed after the test. */
+    protected ?string $uploadFolder = null;
+
+    /** The largest file PHP takes in this test, in bytes. 0 means no limit. */
+    protected int $fileLimit = 1048576;
+
+    /** The largest request PHP takes in this test, in bytes. 0 means no limit. */
+    protected int $bodyLimit = 4194304;
+
+    /** Whether PHP takes uploads at all in this test. */
+    protected bool $uploadsOn = true;
+
+    /** How many files PHP takes in one request in this test. */
+    protected int $countLimit = 20;
+
+    /** The time in this test. null is the real time. */
+    protected ?int $now = null;
+
+    /** @var list<string> files that wait to be picked up, as PHP leaves them after an upload */
+    private array $arrived = [];
+
     private ?string $errorLogFile = null;
 
     private string|false $errorLogBefore = false;
@@ -34,6 +56,12 @@ abstract class ToolTestCase extends TestCase
         $this->session = new ArraySession();
         $this->config = null;
         $this->logged = [];
+        $this->uploadFolder = null;
+        $this->fileLimit = 1048576;
+        $this->bodyLimit = 4194304;
+        $this->uploadsOn = true;
+        $this->countLimit = 20;
+        $this->now = null;
     }
 
     protected function tearDown(): void
@@ -43,6 +71,70 @@ abstract class ToolTestCase extends TestCase
             @unlink($this->errorLogFile);
             $this->errorLogFile = null;
         }
+
+        foreach ($this->arrived as $file) {
+            @unlink($file);
+        }
+        $this->arrived = [];
+
+        if ($this->uploadFolder !== null && is_dir($this->uploadFolder)) {
+            foreach (scandir($this->uploadFolder) ?: [] as $entry) {
+                if ($entry !== '.' && $entry !== '..') {
+                    @unlink($this->uploadFolder . '/' . $entry);
+                }
+            }
+            @rmdir($this->uploadFolder);
+        }
+    }
+
+    /**
+     * A file the way PHP hands it to a script after an upload: it lies in a temp
+     * folder under a name of PHP's choosing. Pass it to post() under the key of its field.
+     *
+     * @return array{name: string, type: string, tmp_name: string, error: int, size: int}
+     */
+    protected function arrived(string $name, string $content, int $error = UPLOAD_ERR_OK): array
+    {
+        $file = '';
+        if ($error === UPLOAD_ERR_OK) {
+            $file = (string) tempnam(sys_get_temp_dir(), 'script-ui-arrived-');
+            file_put_contents($file, $content);
+            $this->arrived[] = $file;
+        }
+
+        return ['name' => $name, 'type' => 'application/octet-stream', 'tmp_name' => $file, 'error' => $error, 'size' => $error === UPLOAD_ERR_OK ? strlen($content) : 0];
+    }
+
+    /**
+     * Several files for one field, in the shape PHP gives them.
+     *
+     * @param array<string,string> $files name => content
+     *
+     * @return array<string,list<mixed>>
+     */
+    protected function arrivedTogether(array $files): array
+    {
+        $together = ['name' => [], 'type' => [], 'tmp_name' => [], 'error' => [], 'size' => []];
+        foreach ($files as $name => $content) {
+            foreach ($this->arrived((string) $name, $content) as $part => $value) {
+                $together[$part][] = $value;
+            }
+        }
+
+        return $together;
+    }
+
+    /** The files that lie in the upload folder now. */
+    protected function stored(): array
+    {
+        if ($this->uploadFolder === null || !is_dir($this->uploadFolder)) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            scandir($this->uploadFolder) ?: [],
+            static fn (string $entry): bool => preg_match('/^[0-9a-f]{32}$/', $entry) === 1,
+        ));
     }
 
     /**
@@ -73,7 +165,18 @@ abstract class ToolTestCase extends TestCase
             debug: true,
         );
 
-        return new Kernel($this->config, $this->session);
+        $this->uploadFolder ??= sys_get_temp_dir() . '/script-ui-test-' . bin2hex(random_bytes(6));
+
+        return new Kernel($this->config, $this->session, new UploadFolder(
+            $this->uploadFolder,
+            // A test file never went through PHP's upload handling, so it is moved the plain way.
+            rename(...),
+            $this->fileLimit,
+            $this->bodyLimit,
+            $this->uploadsOn,
+            fn (): int => $this->now ?? time(),
+            countLimit: $this->countLimit,
+        ));
     }
 
     /**
@@ -90,12 +193,13 @@ abstract class ToolTestCase extends TestCase
      *
      * @param array<string,mixed>  $fields
      * @param array<string,string> $headers
+     * @param array<string,mixed>  $files   uploaded files, as PHP hands them over: see arrived()
      */
-    protected function post(callable $tool, array $fields = [], array $headers = []): Response
+    protected function post(callable $tool, array $fields = [], array $headers = [], array $files = []): Response
     {
         $fields += ['_token' => $this->token()];
 
-        return $this->kernel()->handle(new Request('POST', '/tool', [], $fields, $headers), 'tool', $tool);
+        return $this->kernel()->handle(new Request('POST', '/tool', [], $fields, $headers, files: $files), 'tool', $tool);
     }
 
     protected function token(): string

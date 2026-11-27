@@ -162,6 +162,41 @@ function date_input(
     return Runtime::page()->date($label, $default, $min, $max, $help, $key);
 }
 
+/**
+ * A field that takes a file from the user's computer.
+ *
+ * It returns the file once it is there, on every run, until the user removes
+ * it or the tool forgets it:
+ *
+ *     $file = file_input('Orders', types: ['csv']);
+ *     if ($file && button('Import')) {
+ *         import($file->path);
+ *         $file->forget();
+ *     }
+ *
+ * The file lies in a folder that only PHP reads, for a day at most. Nothing
+ * about it is trusted: its name is made safe, its content is whatever the user
+ * sent, and its ending says nothing about what is in it.
+ *
+ * @param list<string>|null $types    the endings a file may have, such as ['csv', 'xlsx']. null takes every kind of file
+ * @param bool              $multiple take several files, up to 20. The function then returns a list
+ * @param int|null          $maxSize  the largest file in bytes. PHP's own limits (upload_max_filesize and
+ *                                    post_max_size in php.ini) count as well, and the smaller one wins
+ *
+ * @return ($multiple is true ? list<Upload> : Upload|null) the file, or null while there is none.
+ *                                                          With $multiple the files, in the order they arrived
+ */
+function file_input(
+    string $label,
+    ?array $types = null,
+    bool $multiple = false,
+    ?int $maxSize = null,
+    ?string $help = null,
+    ?string $key = null,
+): Upload|array|null {
+    return Runtime::page()->fileInput($label, $types, $multiple, $maxSize, $help, $key);
+}
+
 // --------------------------------------------------------------------- data
 
 /**
@@ -342,6 +377,9 @@ function user(): ?string
  *                                              By default each page follows the language its title is written in
  * @param array<array-key,mixed>|null $texts    your own built-in texts, per language: ['de' => ['page.reset' => 'Leeren']].
  *                                              All texts and their ids are in resources/texts/en.php
+ * @param string|null                 $uploads  the folder that keeps uploaded files until a tool is done with them.
+ *                                              It must not be a folder the web server serves. By default a folder
+ *                                              of its own inside PHP's temp folder
  */
 function configure(
     ?callable $auth = null,
@@ -350,8 +388,23 @@ function configure(
     ?string $name = null,
     ?string $language = null,
     ?array $texts = null,
+    ?string $uploads = null,
 ): void {
-    Runtime::configure($auth, $log, $debug, $name, $language, $texts);
+    Runtime::configure($auth, $log, $debug, $name, $language, $texts, $uploads);
+}
+
+/**
+ * Deletes the uploaded files that are older than a day. The library does this
+ * itself while files arrive. Call it from a scheduled job when the files of
+ * users who left must not wait for the next upload to be cleaned away.
+ *
+ * @param string|null $folder the folder you passed as uploads:. null: the folder inside PHP's temp folder
+ *
+ * @return int how many files were deleted
+ */
+function clean_uploads(?string $folder = null): int
+{
+    return (new UploadFolder($folder))->clean();
 }
 
 /**
@@ -373,6 +426,9 @@ function configure(
  *                                              By default each page follows the language its title is written in
  * @param array<array-key,mixed>|null $texts    your own built-in texts, per language: ['de' => ['page.reset' => 'Leeren']].
  *                                              All texts and their ids are in resources/texts/en.php
+ * @param string|null                 $uploads  the folder that keeps uploaded files until a tool is done with them.
+ *                                              It must not be a folder the web server serves. By default a folder
+ *                                              of its own inside PHP's temp folder
  */
 function serve(
     string $directory,
@@ -383,6 +439,7 @@ function serve(
     ?string $base = null,
     ?string $language = null,
     ?array $texts = null,
+    ?string $uploads = null,
 ): void {
-    Runtime::serve($directory, $auth, $log, $name, $debug, $base, $language, $texts);
+    Runtime::serve($directory, $auth, $log, $name, $debug, $base, $language, $texts, $uploads);
 }

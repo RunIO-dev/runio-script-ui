@@ -22,10 +22,18 @@ final class Kernel
     /** A message that waits in the session for the reloaded page is cut to this length. */
     private const MAX_MESSAGE_BYTES = 4096;
 
+    /** Where uploaded files are kept. */
+    private readonly UploadFolder $folder;
+
+    /**
+     * @param UploadFolder|null $folder where uploaded files are kept. null: the folder the settings name
+     */
     public function __construct(
         private readonly Config $config,
         private readonly Session $session,
+        ?UploadFolder $folder = null,
     ) {
+        $this->folder = $folder ?? new UploadFolder($config->uploads);
     }
 
     /**
@@ -179,9 +187,10 @@ final class Kernel
         }
 
         if ($page->isPost) {
-            // A run that failed half way must not overwrite what was saved before.
+            // A run that failed half way must not overwrite what was saved before,
+            // and it deletes no file either.
             if ($failure === null) {
-                $this->saveState($page);
+                $page->settleFiles($this->saveState($page));
             }
             if (!$this->audit($page) && $page->fileToSend() !== null) {
                 // Who took which data out is exactly what a log is for. When the entry
@@ -290,6 +299,16 @@ final class Kernel
         $token = $this->token();
         $isPost = $request->method === 'POST';
 
+        if ($isPost && $request->post === [] && $request->files === []) {
+            // PHP throws a request away that is larger than it takes: no field and no
+            // file of it arrives, and the token is gone with them. Saying "the page has
+            // expired" would send the user round in circles.
+            $limit = $this->folder->bodyLimit();
+            if ($limit !== null && $request->contentLength !== null && $request->contentLength > $limit) {
+                return $this->message(413, 'error.too_large', 'error.too_large_text', [$selfUrl, 'error.too_large_link']);
+            }
+        }
+
         if ($isPost) {
             $sent = $request->post['_token'] ?? null;
             $crossSite = strtolower((string) $request->header('sec-fetch-site')) === 'cross-site';
@@ -310,6 +329,7 @@ final class Kernel
                 unset($states[$stateKey]);
                 $this->session->set('state', $states);
                 $this->takeMessages($stateKey);
+                (new Uploads($this->folder, $this->session, $stateKey))->forgetAll();
             }
 
             return new Response(303, '', self::headers() + ['Location' => $selfUrl]);
@@ -319,11 +339,17 @@ final class Kernel
         $saved = is_array($saved) && self::savedAt($saved, $selfUrl) ? $saved : [];
         unset($saved['_route']);
 
+        $uploads = new Uploads($this->folder, $this->session, $stateKey, $isPost ? $request->files : []);
+
         if ($isPost) {
             $in = $request->post;
             $linked = [];
             $carried = [];
-            $inputsChanged = self::inputsChanged($saved, $in);
+            // A file that arrives or is taken away is a changed input too: a table
+            // that shows what is in the file starts again at its first page.
+            $inputsChanged = self::inputsChanged($saved, $in)
+                || $uploads->brought()
+                || (is_string($in['_click'] ?? null) && preg_match('/:remove:[0-9a-f]{32}$/D', $in['_click']) === 1);
         } else {
             [$in, $linked] = self::prefill($saved, $request->query);
             $carried = $this->takeMessages($stateKey);
@@ -349,6 +375,7 @@ final class Kernel
             $this->config->texts,
             $inputsChanged,
             $this->secret(),
+            $uploads,
         );
     }
 
@@ -474,7 +501,8 @@ final class Kernel
         return is_array($messages) ? $messages : [];
     }
 
-    private function saveState(Page $page): void
+    /** @return array<array-key,mixed> what was kept */
+    private function saveState(Page $page): array
     {
         $states = $this->session->get('state');
         $states = is_array($states) ? $states : [];
@@ -494,11 +522,14 @@ final class Kernel
 
         if ($state === [] || strlen(serialize($state)) > self::MAX_STATE_BYTES) {
             unset($states[$page->stateKey]);
+            $state = [];
         } else {
             $states[$page->stateKey] = $state;
         }
 
         $this->session->set('state', $states);
+
+        return $state;
     }
 
     /**

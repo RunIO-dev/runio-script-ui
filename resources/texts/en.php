@@ -48,6 +48,22 @@ return [
     'cell.yes' => 'Yes',
     'cell.no' => 'No',
     'number.thousands' => ',',
+    'number.decimal' => '.',
+
+    // Files
+    'file.remove' => 'Remove',
+    'file.remove_label' => 'Remove {name}',
+    'file.types' => 'Allowed: {types}.',
+    'file.limit' => 'Up to {size}.',
+    'file.too_large' => '"{name}" is larger than {size}.',
+    'file.wrong_type' => '"{name}" is not allowed here. Allowed: {types}.',
+    'file.too_many' => 'No more than {count} files fit here.',
+    'file.failed' => '"{name}" did not arrive. Please try again.',
+    'file.gone' => 'A file that was here is gone. Please choose it again.',
+    'size.b' => '{n} B',
+    'size.kb' => '{n} KB',
+    'size.mb' => '{n} MB',
+    'size.gb' => '{n} GB',
 
     // Charts
     'chart.empty' => 'No data to draw.',
@@ -77,4 +93,7 @@ return [
     'error.expired' => 'This page has expired',
     'error.expired_text' => 'Your session ended, or the form was not sent from this page. Open the page again and repeat what you did.',
     'error.expired_link' => 'Open the page again',
+    'error.too_large' => 'Too large',
+    'error.too_large_text' => 'What was sent is larger than this server takes. Choose a smaller file.',
+    'error.too_large_link' => 'Back to the page',
 ];

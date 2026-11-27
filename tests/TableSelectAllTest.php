@@ -190,6 +190,52 @@ final class TableSelectAllTest extends ToolTestCase
         self::assertSame([], $picked);
     }
 
+    public function testItTicksTheRowsTheUserSawAndNotARowThatArrivedSince(): void
+    {
+        // The newest order is on top. One more arrives between the page view and the click.
+        $count = 60;
+        $picked = null;
+        $tool = function () use (&$picked, &$count): void {
+            $picked = table(array_reverse(self::rows($count)), selectable: true);
+        };
+
+        $first = $this->get($tool);
+        $count = 61;
+        $response = $this->press($tool, $first, 'table:all');
+
+        // Rows 60 down to 36 were on the page. Row 61 is on it now and nobody has
+        // seen it. Row 36 moved to the next page and was meant.
+        self::assertSame(range(60, 36), self::ids($picked));
+        self::assertSame('Rows 1 to 25 of 61 · 25 selected (1 on other pages)', $this->foot($response));
+        self::assertSame('mixed', $this->attr($response, self::ALL, 'aria-checked'));
+        self::assertSame(['Ava 61'], $this->texts($response, '//table//tbody/tr[not(.//input[@checked])]/td[3]'));
+
+        // The next click is about the page as it is now: it ticks row 61 too.
+        $this->press($tool, $response, 'table:all');
+        self::assertSame(range(61, 36), self::ids($picked));
+    }
+
+    public function testAClickWithoutTheRowsOfThePageTicksNothing(): void
+    {
+        $tool = $this->tool($picked);
+
+        $form = ['_click' => 'table:all'] + $this->form($this->get($tool));
+        self::assertNotSame('', $form['_rows']['table'] ?? '', 'the page says which rows it shows');
+
+        unset($form['_rows']);
+        $this->post($tool, $form);
+        self::assertSame([], $picked);
+
+        // Rows that are made up are no rows.
+        foreach (['not json', '[["nested"]]', json_encode([str_repeat('0', 20), 'x', 5, null]), ['list'], str_repeat('[', 5000)] as $forged) {
+            $form['_rows'] = ['table' => $forged];
+            $response = $this->post($tool, $form);
+
+            self::assertSame(200, $response->status);
+            self::assertSame([], $picked);
+        }
+    }
+
     public function testAPageViewNeverTicksAnything(): void
     {
         $tool = $this->tool($picked);
@@ -227,6 +273,23 @@ final class TableSelectAllTest extends ToolTestCase
         self::assertSame(range(1, 100), array_slice(self::ids($picked), 0, 100), 'the first rows of the page got the ticks that were left');
         self::assertSame(['No more than 1,000 rows can be selected.'], $this->texts($response, '//*[contains(@class,"sui-table-limit")]'));
         self::assertSame('mixed', $this->attr($response, self::ALL, 'aria-checked'));
+    }
+
+    public function testTheLimitIsStillNamedWhenTheClickUnticksThePage(): void
+    {
+        $tool = $this->tool($picked, 1300, 200);
+
+        $first = $this->get($tool);
+        $boxes = $this->tickBoxes($tool);
+
+        // A form that names 1,005 rows, the 200 of this page first. Five are too many.
+        $form = $this->form($first);
+        $form['_kept']['table'] = json_encode(array_map(static fn (int $id): string => $boxes[$id], range(1, 1005)));
+        $response = $this->post($tool, ['_click' => 'table:all'] + $form);
+
+        // Every row of the page was ticked, so the click unticked the page.
+        self::assertSame(range(201, 1000), self::ids($picked));
+        self::assertSame(['No more than 1,000 rows can be selected.'], $this->texts($response, '//*[contains(@class,"sui-table-limit")]'));
     }
 
     // -------------------------------------------------------- clear selection

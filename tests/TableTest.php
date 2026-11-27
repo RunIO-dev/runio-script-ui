@@ -414,6 +414,33 @@ final class TableTest extends ToolTestCase
         self::assertSame(['Select row 3'], $labels($second));
     }
 
+    public function testTicksWaitWhileTheTableHasNoRows(): void
+    {
+        $rows = self::ORDERS;
+        $picked = null;
+        $tool = function () use (&$picked, &$rows): void {
+            $picked = table($rows, selectable: true);
+        };
+
+        $first = $this->get($tool);
+        $ticked = $this->post($tool, ['_sel' => ['table' => [$this->tickBox($first, 1001), $this->tickBox($first, 1003)]]] + $this->form($first));
+        self::assertCount(2, $picked);
+
+        // A filter of the tool leaves nothing for a moment. A typing mistake, say.
+        $rows = [];
+        $empty = $this->post($tool, $this->form($ticked));
+        self::assertSame([], $picked);
+        $this->get($tool);
+        self::assertSame([], $picked);
+
+        // The rows are back, and so are the ticks.
+        $rows = self::ORDERS;
+        $this->get($tool);
+        self::assertSame([self::ORDERS[0], self::ORDERS[2]], $picked);
+        $this->post($tool, $this->form($empty));
+        self::assertSame([self::ORDERS[0], self::ORDERS[2]], $picked);
+    }
+
     public function testClickingAHeaderSortsByThatColumn(): void
     {
         $tool = function (): void {

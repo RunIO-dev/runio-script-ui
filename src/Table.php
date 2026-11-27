@@ -29,6 +29,9 @@ final class Table
     /** The ticks of the rows that are not on the page travel as one field. A longer one is not read. */
     public const MAX_KEPT_BYTES = 24000;
 
+    /** The rows of the page travel as one field too, for the box in the header. */
+    private const MAX_ROWS_BYTES = 5000;
+
     /** What the tick box of a row sends: a fingerprint of the row. See rowIds(). */
     private const WIRE = '/^[0-9a-f]{20}$/D';
 
@@ -110,6 +113,14 @@ final class Table
                 $hidden .= self::hidden($name, $key, $value);
             }
 
+            // The ticks wait as well. Without rows there is nothing to check them
+            // against. That is done when the rows are back.
+            $waiting = $selectable && $click !== $key . ':none' ? array_slice(self::wanted($key, $in), 0, self::MAX_SELECTED) : [];
+            if ($waiting !== []) {
+                $keep['_sel'] = $waiting;
+                $hidden .= self::hidden('_kept', $key, Text::json($waiting, false));
+            }
+
             return new self('<p class="sui-empty" dir="auto">' . Text::e($empty ?? $texts->get('table.empty')) . '</p>' . $hidden, keep: $keep);
         }
 
@@ -178,8 +189,13 @@ final class Table
         $first = ($page - 1) * $pageSize;
         $visible = array_slice($order, $first, $pageSize);
 
-        if ($selectable && $seen !== null && $click === $key . ':all') {
-            [$chosen, $tooMany] = self::tickPage($chosen, $visible, count($parked));
+        if ($selectable) {
+            if ($seen !== null && $click === $key . ':all') {
+                [$chosen, $stopped] = self::tickPage($chosen, self::shownRows($key, $in, $positions, $listed), count($parked));
+                $tooMany = $tooMany || $stopped;
+            }
+            // The page says which rows it shows. The next click on the box in the header is about these.
+            $hidden .= self::hidden('_rows', $key, Text::json(array_map(static fn (int $index): string => $ids[$index]['wire'], $visible), false));
         }
 
         $named = null;
@@ -507,21 +523,25 @@ final class Table
     }
 
     /**
-     * A click on the box in the header. When every row of the page is ticked, it
-     * unticks them. Otherwise it ticks the ones that are not, as far as the limit allows.
+     * A click on the box in the header. It is about the rows the user saw when
+     * they clicked. When every one of them is ticked, it unticks them. Otherwise
+     * it ticks the ones that are not, as far as the limit allows.
      *
-     * @param array<int,true> $chosen  the ticked rows of the list
-     * @param list<int>       $visible the rows of the page
-     * @param int             $parked  how many more rows are ticked behind the search
+     * A row that arrived after the page was drawn may be on the page now. Nobody
+     * has seen it yet, so it is left as it is.
+     *
+     * @param array<int,true> $chosen the ticked rows of the list
+     * @param list<int>       $rows   the rows the user saw
+     * @param int             $parked how many more rows are ticked behind the search
      *
      * @return array{array<int,true>, bool} the ticked rows now, and whether the limit stopped it
      */
-    private static function tickPage(array $chosen, array $visible, int $parked): array
+    private static function tickPage(array $chosen, array $rows, int $parked): array
     {
-        $missing = array_values(array_filter($visible, static fn (int $index): bool => !isset($chosen[$index])));
+        $missing = array_values(array_filter($rows, static fn (int $index): bool => !isset($chosen[$index])));
 
         if ($missing === []) {
-            foreach ($visible as $index) {
+            foreach ($rows as $index) {
                 unset($chosen[$index]);
             }
 
@@ -535,6 +555,32 @@ final class Table
         ksort($chosen);
 
         return [$chosen, count($missing) > $room];
+    }
+
+    /**
+     * The rows that were on the page when the user clicked, as far as they are
+     * still in the list. The form names them.
+     *
+     * The user could tick each of these rows by hand. So naming other rows here
+     * gives a forged form nothing that ticking them would not give it as well.
+     *
+     * @param array<array-key,mixed> $in
+     * @param array<string,int>      $positions what a tick box sends => the position of its row in the data
+     * @param array<int,true>        $listed    the rows of the list
+     *
+     * @return list<int> positions in the data
+     */
+    private static function shownRows(string $key, array $in, array $positions, array $listed): array
+    {
+        $rows = [];
+        foreach (self::wires(is_array($in['_rows'] ?? null) ? ($in['_rows'][$key] ?? null) : null, self::MAX_ROWS_BYTES) as $wire) {
+            $index = $positions[$wire] ?? null;
+            if ($index !== null && isset($listed[$index])) {
+                $rows[$index] = true;
+            }
+        }
+
+        return array_keys($rows);
     }
 
     /**

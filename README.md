@@ -114,9 +114,9 @@ The table starts again at its first page when it is sorted or searched, and when
 
 `table($rows, selectable: true)` returns the ticked rows. A row is found again by its `id` column (name another one with `rowKey:`), so give every row an id of its own. A row without an id, or with an id that another row has too, is recognised by what is in it, and it loses its tick when it changes. A tick never moves to a different row. In the log a ticked row is called by its id, or by its place in the rows (`#3`) when it has none.
 
-A tick stays when the user turns the page or sorts, so the rows you get back can come from any page. The line under the table says how many rows are ticked and how many of them are on other pages. The box in the header ticks the rows of the page, or unticks them when all are ticked. "Clear selection" unticks every page. One table takes up to 1,000 ticks.
+A tick stays when the user turns the page or sorts, so the rows you get back can come from any page. The line under the table says how many rows are ticked and how many of them are on other pages. The box in the header ticks the rows of the page, or unticks them when all are ticked. It acts on the rows the user saw: a row that arrived in the meantime is left alone. "Clear selection" unticks every page. One table takes up to 1,000 ticks.
 
-The search only hides rows. A ticked row that it hides is not returned, so a button never acts on a row that is not in the list on screen. The line under the table says how many ticked rows are hidden, and each is ticked again as soon as the search shows it.
+The search only hides rows. A ticked row that it hides is not returned, so a button never acts on a row that is not in the list on screen. The line under the table says how many ticked rows are hidden, and each is ticked again as soon as the search shows it. Ticks also wait while a filter of your tool leaves the table without rows.
 
 ### Downloads
 

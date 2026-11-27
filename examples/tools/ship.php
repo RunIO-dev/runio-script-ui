@@ -19,7 +19,8 @@ if ($orders === []) {
 }
 
 // All paid orders go in. The table shows ten at a time and searches all of them.
-// A tick stays when the page changes. A row that the search hides loses its tick.
+// A tick stays when the page changes. A ticked row that the search hides is not
+// in $picked, and it is ticked again when the search shows it.
 $picked = table(
     $orders,
     selectable: true,

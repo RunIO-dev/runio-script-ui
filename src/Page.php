@@ -870,7 +870,6 @@ final class Page
         };
 
         $claimed = count($this->used);
-        $results = count($this->messages);
         $failed = true;
 
         $this->flushPrinted();
@@ -890,9 +889,10 @@ final class Page
 
             // Without the page script the server does not hear that the box was opened.
             // A click on something inside proves that it was. And what a part has to
-            // say about a button that was pressed, or about its own failure, must not
-            // stay out of sight.
-            $open = $open || $failed || count($this->messages) > $results || $this->clickedIn(array_slice($this->used, $claimed, null, true));
+            // say about its own failure must not stay out of sight. A message alone
+            // opens nothing: a box with a tip in it would spring open after every
+            // click on the page.
+            $open = $open || $failed || $this->clickedIn(array_slice($this->used, $claimed, null, true));
             $this->out['_open'][$key] = $open ? '1' : '0';
 
             $this->add(

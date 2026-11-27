@@ -479,20 +479,22 @@ final class ExpanderTest extends ToolTestCase
         self::assertFalse($this->isOpen($other, 'danger-zone'));
     }
 
-    public function testAResultOfAButtonOutsideOpensThePartThatShowsIt(): void
+    public function testAButtonOutsideOpensNoBoxWhateverTheBoxSays(): void
     {
+        // A box with a tip or a warning in it would spring open after every click on
+        // the page. What a button has to say belongs where the button is.
         $tool = function (): void {
             $saved = button('Save');
-            expander('Result', static function () use ($saved): void {
-                info('Shown on every run. It opens nothing.');
+            expander('Help', static function () use ($saved): void {
+                info('A tip that is shown on every run.');
                 if ($saved) {
                     success('Saved.');
                 }
             });
         };
 
-        self::assertFalse($this->isOpen($this->get($tool), 'result'), 'a message that is always there does not hold the part open');
-        self::assertTrue($this->isOpen($this->post($tool, ['_click' => 'save']), 'result'));
+        self::assertFalse($this->isOpen($this->get($tool), 'help'));
+        self::assertFalse($this->isOpen($this->post($tool, ['_click' => 'save']), 'help'));
     }
 
     public function testAPartThatFailedIsDrawnOpen(): void

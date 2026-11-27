@@ -589,6 +589,38 @@ fieldset.sui-field {
   break-inside: avoid;
 }
 
+/* -------------------------------------------------------------- expander */
+
+/* A part of the page under a line that opens and closes it. */
+.sui-expander {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* The whole line takes the click, and it is tall enough for a finger. */
+.sui-expander > summary {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sui-expander > summary:hover {
+  background: var(--wash);
+}
+
+.sui-expander[open] > summary {
+  border-bottom: 1px solid var(--hair);
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.sui-expander-body {
+  padding: 14px;
+}
+
 /* --------------------------------------------------------------- buttons */
 
 .sui-btn {

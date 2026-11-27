@@ -389,6 +389,21 @@ function columns(callable ...$columns): void
     Runtime::page()->columns(...$columns);
 }
 
+/**
+ * A part of the page under a line that opens and closes it. For what is not
+ * needed every time: advanced options, the details of a row, a long explanation.
+ *
+ * The content always runs, and the inputs inside keep working and keep their
+ * values while the part is closed. Closed only means out of sight.
+ *
+ * @param callable():mixed $content draws what is inside
+ * @param bool             $open    how it starts. From then on it stays the way the user left it
+ */
+function expander(string $label, callable $content, bool $open = false, ?string $key = null): void
+{
+    Runtime::page()->expander($label, $content, $open, $key);
+}
+
 /** Ends the run here. Everything drawn so far is shown. */
 function stop(): never
 {

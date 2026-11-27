@@ -29,6 +29,7 @@
   let swapping = false;    // the content of the page is being replaced
   let busyTimer = 0;
   let pauseTimer = 0;      // a run that waits until the user pauses: see soon()
+  const turned = new Map(); // parts the user opened or closed since the last request left: name of the field => what it says now
   let stepping = false;    // an arrow key is down: the change that follows comes from it, not from a click
 
   const isText = (el) => el instanceof HTMLTextAreaElement
@@ -125,6 +126,11 @@
     if (status.textContent !== text) status.textContent = text;
   };
 
+  // A part that opens and closes (expander) keeps the state the user gave it.
+  // The server only knows the state that the last request carried.
+  const expanders = () => body.querySelectorAll('details.sui-expander');
+  const stateOf = (box) => box.querySelector(':scope > input[type="hidden"]');
+
   const show = ({ html, title, origin }) => {
     const keep = origin || place(document.activeElement);
 
@@ -137,6 +143,16 @@
       swapping = false;
     }
     if (title) document.title = title;
+
+    // What the user opened or closed while the answer was on its way stays that
+    // way. The answer was made before the server could know about it.
+    expanders().forEach((box) => {
+      const field = stateOf(box);
+      if (field && turned.has(field.name)) {
+        field.value = turned.get(field.name);
+        box.open = field.value === '1';
+      }
+    });
 
     refocus(keep);
     announce();
@@ -257,6 +273,8 @@
     stop = new AbortController();
     const id = ++serial;
     clearTimeout(pauseTimer);
+    // This request carries how every part stands now.
+    turned.clear();
 
     // Files travel as they are. Without them the form goes the short way, as text.
     const { data, files } = collect();
@@ -466,6 +484,22 @@
       }
     }
   });
+
+  // A part that the user opens or closes says so in a hidden field. The field
+  // travels with every request, and the server draws the part the way the user
+  // left it. (The event does not bubble.)
+  body.addEventListener('toggle', (event) => {
+    const box = event.target;
+    if (!(box instanceof HTMLDetailsElement) || !box.classList.contains('sui-expander')) return;
+
+    const field = stateOf(box);
+    const state = box.open ? '1' : '0';
+    // The event also comes for a part that the server drew open. Then nothing changed.
+    if (!field || field.value === state) return;
+
+    field.value = state;
+    turned.set(field.name, state);
+  }, true);
 
   // The page can change while a file dialog is open: the user typed into a field
   // and went straight on to choose a file, and the answer to the typed text came

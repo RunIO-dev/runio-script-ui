@@ -835,6 +835,89 @@ final class Page
         }
     }
 
+    /**
+     * @param callable():mixed $content draws what is inside
+     */
+    public function expander(string $label, callable $content, bool $open, ?string $key): void
+    {
+        $key = $this->claim($key, $label);
+
+        // The browser opens and closes the box on its own, without a request. The
+        // page script writes into a hidden field how the user left it, and the next
+        // run draws it that way. Anything but "1" and "0" is the way it starts.
+        $sent = is_array($this->in['_open'] ?? null) ? ($this->in['_open'][$key] ?? null) : null;
+        $open = match ($sent) {
+            '1' => true,
+            '0' => false,
+            default => $open,
+        };
+
+        $claimed = count($this->used);
+        $results = count($this->messages);
+        $failed = true;
+
+        $this->flushPrinted();
+        $this->buffers[] = [];
+        try {
+            $this->part($content);
+            $failed = false;
+        } catch (Stop $signal) {
+            // rerun() or a download: the run ends, and it did not fail.
+            $failed = false;
+
+            throw $signal;
+        } finally {
+            // Also when the content failed: what was drawn stays visible.
+            $this->flushPrinted();
+            $inside = implode('', (array) array_pop($this->buffers));
+
+            // Without the page script the server does not hear that the box was opened.
+            // A click on something inside proves that it was. And what a part has to
+            // say about a button that was pressed, or about its own failure, must not
+            // stay out of sight.
+            $open = $open || $failed || count($this->messages) > $results || $this->clickedIn(array_slice($this->used, $claimed, null, true));
+            $this->out['_open'][$key] = $open ? '1' : '0';
+
+            $this->add(
+                '<details class="sui-expander"' . ($open ? ' open' : '') . '>'
+                . '<summary id="' . Text::e('x-' . $key) . '" dir="auto">' . Text::e($label) . '</summary>'
+                . '<input type="hidden" name="' . Text::e('_open[' . $key . ']') . '" value="' . ($open ? '1' : '0') . '">'
+                . '<div class="sui-expander-body sui-flow">' . $inside . '</div>'
+                . '</details>',
+            );
+        }
+    }
+
+    /**
+     * Draws a part of the page that can be out of sight: what is inside an
+     * expander or behind a tab. stop() inside it ends the part and not the page.
+     * A page that ends inside something nobody sees would end for no reason that
+     * anybody could find. rerun() and a download still end the run.
+     *
+     * @param callable():mixed $content
+     */
+    private function part(callable $content): void
+    {
+        try {
+            $content();
+        } catch (Stop $signal) {
+            if ($signal::class !== Stop::class || $this->download !== null) {
+                throw $signal;
+            }
+        }
+    }
+
+    /**
+     * Did the click of this run come from one of these inputs, buttons or tables?
+     * A click names its key first: "save", "save:yes:1f3a", "orders:page:2".
+     *
+     * @param array<array-key,true> $keys
+     */
+    private function clickedIn(array $keys): bool
+    {
+        return $this->click !== '' && isset($keys[explode(':', $this->click, 2)[0]]);
+    }
+
     public function stop(): never
     {
         throw new Stop();
@@ -1644,6 +1727,28 @@ final class Page
             $keep['_seen'] = array_values(array_filter($keep['_seen'], static fn (string $name): bool => !isset($left[$name])));
         }
 
-        return $keep + Table::keepable($in) + Uploads::keepable($in);
+        return $keep + self::layout($in) + Table::keepable($in) + Uploads::keepable($in);
+    }
+
+    /**
+     * How the user left the parts of a page that open and close, as far as a form
+     * says it: which expanders are open. Checked and limited in size.
+     *
+     * @param array<array-key,mixed> $in
+     *
+     * @return array{_open?: array<array-key,string>}
+     */
+    public static function layout(array $in): array
+    {
+        $layout = [];
+
+        // Which expanders are open: the key of each, and "1" or "0".
+        foreach (is_array($in['_open'] ?? null) ? $in['_open'] : [] as $key => $state) {
+            if (Keys::isValid((string) $key) && ($state === '0' || $state === '1') && count($layout['_open'] ?? []) < self::MAX_SAVED_FIELDS) {
+                $layout['_open'][$key] = $state;
+            }
+        }
+
+        return $layout;
     }
 }

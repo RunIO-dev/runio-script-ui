@@ -298,6 +298,77 @@ final class UploadFolderTest extends TestCase
         self::assertSame('new', file_get_contents($this->base . '/there.csv'));
     }
 
+    public function testASavedCopyIsForThisUserOnly(): void
+    {
+        if (!self::hasPermissions()) {
+            self::markTestSkipped('This system has no file permissions of this kind.');
+        }
+
+        // What a user uploads is often not meant for everybody on the machine.
+        $upload = $this->upload('private');
+
+        $upload->saveTo($this->base . '/new.csv');
+        self::assertSame(0600, fileperms($this->base . '/new.csv') & 0777);
+
+        file_put_contents($this->base . '/old.csv', 'old');
+        chmod($this->base . '/old.csv', 0644);
+        $upload->saveTo($this->base . '/old.csv', overwrite: true);
+        self::assertSame(0600, fileperms($this->base . '/old.csv') & 0777);
+    }
+
+    public function testOverwritingReplacesALinkAndDoesNotWriteThroughIt(): void
+    {
+        if (!self::hasPermissions()) {
+            self::markTestSkipped('This system has no links of this kind.');
+        }
+
+        // Somebody put a link where the copy goes. It points at a file that must stay as it is.
+        file_put_contents($this->base . '/victim.txt', 'do not touch');
+        symlink($this->base . '/victim.txt', $this->base . '/kept.csv');
+        $upload = $this->upload('new');
+
+        try {
+            $upload->saveTo($this->base . '/kept.csv');
+            self::fail('a link was taken for a free place');
+        } catch (\RuntimeException) {
+            self::assertSame('do not touch', file_get_contents($this->base . '/victim.txt'));
+        }
+
+        $upload->saveTo($this->base . '/kept.csv', overwrite: true);
+
+        self::assertSame('do not touch', file_get_contents($this->base . '/victim.txt'));
+        self::assertFalse(is_link($this->base . '/kept.csv'));
+        self::assertSame('new', file_get_contents($this->base . '/kept.csv'));
+    }
+
+    public function testSavingAFileOverItselfLeavesItWhole(): void
+    {
+        $upload = $this->upload('still here');
+
+        $upload->saveTo($upload->path, overwrite: true);
+
+        self::assertSame('still here', $upload->contents());
+    }
+
+    public function testAnOverwriteThatFailsLeavesTheOldFileAndNothingElse(): void
+    {
+        $upload = $this->upload('new');
+        mkdir($this->base . '/taken', 0700);
+        file_put_contents($this->base . '/there.csv', 'old');
+
+        // A folder cannot be replaced by a file.
+        try {
+            $upload->saveTo($this->base . '/taken', overwrite: true);
+            self::fail('a folder was replaced by a file');
+        } catch (\RuntimeException) {
+            self::assertDirectoryExists($this->base . '/taken');
+        }
+
+        // No half-written file is left next to the target.
+        self::assertSame(['taken', 'there.csv', 'uploads'], array_values(array_diff(scandir($this->base) ?: [], ['.', '..'])));
+        self::assertSame('old', file_get_contents($this->base . '/there.csv'));
+    }
+
     public function testSavingIntoAFolderThatIsNotThereIsAnError(): void
     {
         $upload = $this->upload('x');

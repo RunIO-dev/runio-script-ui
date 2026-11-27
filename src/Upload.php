@@ -53,6 +53,10 @@ final class Upload
      * name the user gave, remember that a ".php" in a folder the web server
      * serves is a program.
      *
+     * The copy is for the PHP user only, as the upload was. Call chmod() on it
+     * when somebody else has to read it, such as a web server that runs as
+     * another user.
+     *
      * @param bool $overwrite replace a file that is already there. Without it that is an error
      *
      * @throws \RuntimeException when the copy could not be made
@@ -64,25 +68,34 @@ final class Upload
             throw new \RuntimeException(sprintf('The uploaded file "%s" is no longer there.', $this->name));
         }
 
-        // "x" makes the file and fails when it is already there, in one step.
-        // Asking first and writing after would leave a gap between the two.
-        $to = @fopen($path, $overwrite ? 'wb' : 'xb');
-        if ($to === false) {
+        // When a file is replaced, the copy is written next to it and moved onto it
+        // once it is complete. The old file is then never half written, and a link
+        // that somebody put at the target is replaced, not followed.
+        $written = $overwrite ? $path . '.' . bin2hex(random_bytes(6)) . '.part' : $path;
+
+        try {
+            // "x" makes the file and fails when something is there already, in one step.
+            // Asking first and writing after would leave a gap between the two.
+            $to = @fopen($written, 'xb');
+            if ($to === false) {
+                throw new \RuntimeException(
+                    !$overwrite && (file_exists($path) || is_link($path))
+                        ? sprintf('"%s" is already there. Pass overwrite: true to replace it.', $path)
+                        : sprintf('"%s" could not be written.', $path),
+                );
+            }
+
+            @chmod($written, 0600);
+            $copied = stream_copy_to_stream($from, $to);
+            $closed = fclose($to);
+
+            if ($copied === false || !$closed || ($overwrite && !@rename($written, $path))) {
+                @unlink($written);
+
+                throw new \RuntimeException(sprintf('"%s" could not be written.', $path));
+            }
+        } finally {
             fclose($from);
-
-            throw new \RuntimeException(
-                !$overwrite && file_exists($path)
-                    ? sprintf('"%s" is already there. Pass overwrite: true to replace it.', $path)
-                    : sprintf('"%s" could not be written.', $path),
-            );
-        }
-
-        $copied = stream_copy_to_stream($from, $to);
-        fclose($from);
-        if (!fclose($to) || $copied === false) {
-            @unlink($path);
-
-            throw new \RuntimeException(sprintf('"%s" could not be written.', $path));
         }
     }
 

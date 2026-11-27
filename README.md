@@ -74,7 +74,7 @@ The page works without JavaScript as a plain form. With JavaScript it updates in
 | Inputs | `text` `textarea` `number` `select` `radio` `multiselect` `checkbox` `date_input` `file_input` |
 | Data | `table` `chart` `metric` |
 | Actions | `button` `download` `csv` |
-| Layout and flow | `columns` `stop` `rerun` |
+| Layout and flow | `columns` `expander` `tabs` `stop` `rerun` |
 | Hosting | `serve` `configure` `user` `clean_uploads` |
 
 All of them are documented in [`src/functions.php`](src/functions.php). Import the ones you use, or give the namespace a short name:
@@ -212,6 +212,33 @@ The file is made in memory. For a very long export pass the rows as a function t
 
 The run ends where the file is made, as after `stop()`. With JavaScript the page stays in place and shows that it is busy, and a second click does not send a second file. Without it the browser saves the file from the plain form.
 
+### Expanders and tabs
+
+Two ways to keep a long page short.
+
+```php
+expander('Advanced options', function () use (&$limit): void {
+    $limit = number('Limit', default: 100);
+});
+
+tabs([
+    'Orders' => fn () => table($orders),
+    'Customers' => fn () => table($customers),
+]);
+```
+
+`expander()` puts a part of the page under a line that opens and closes it. `tabs()` puts several parts behind headers and shows one of them at a time.
+
+**What is out of sight still runs.** The content of a closed expander and of every tab runs on every run, like the rest of the script. The inputs inside keep their values and give them to the script, an uploaded file stays where it is, and the log names all of them. So opening an expander or changing the tab asks nothing of the server, and neither is an action. Work that takes long belongs behind a button, not into a tab.
+
+- The page remembers what the user left open, also over a reload. A part that a run does not draw is forgotten, like an input, and starts the way the script says when it comes back.
+- `stop()` inside ends that part and not the page. `rerun()` and `download()` end the run as they do everywhere.
+- A part that fails is drawn open. So is an expander when a button inside it was pressed: its answer must not stay out of sight.
+- The label of a tab may change between runs, as in `'Orders (' . count($orders) . ')'`. The open tab is found again by its label, and by its place when the label changed.
+- An expander has a key like an input, made from its label. Tabs have no label of their own and are numbered like tables (`tabs`, `tabs-2`) unless you pass `key:`.
+- With the keyboard, the arrow keys go from header to header, and Home and End to the first and the last. Where the headers do not fit in one line, the line moves sideways and fades out at the end where it goes on.
+- Both work without JavaScript. The expander is the browser's own `<details>`, and a header is a button that sends the form.
+
 ### Links that fill in fields
 
 `/refund?customer-email=ava@example.com` opens the tool with that field filled in. For `multiselect()` a link names every ticked option, `/customers?country[]=DE&country[]=FR`, and one option needs no brackets. A link can only fill plain fields. It can never press a button or tick a row of a table. What a link filled in is not saved until the user changes or submits something.
@@ -289,8 +316,9 @@ What stays your job: decide who may do what (`user()` tells you who is asking), 
 - While a tool works on a request, PHP holds the session, and other requests of the same user wait. That shows with a large upload that a tool reads for a long time.
 - A table gets all its rows from the script and searches, sorts and pages them itself, on every run. That is quick up to about twenty thousand rows: on a laptop a search took 0.1 seconds, and so did sorting by a text column. For more, filter in the database first.
 - `multiselect()` is a group of tick boxes. It has no search and no "select all", so it suits lists of up to a few dozen options. The ticks of one field are remembered between page views up to 8 KB of option values. Beyond that the next page view starts from the default again.
+- Every tab of `tabs()` runs on every run. There is no way yet to run only the open one, and a link cannot open a tab or an expander.
 - Charts are bar and line charts with one axis and at most 8 series.
-- State lives in the PHP session. Two tabs of the same tool share saved inputs.
+- State lives in the PHP session. Two browser tabs of the same tool share saved inputs. A session remembers the inputs of the 50 tools that were used last.
 - A script that runs on its own (without `serve()`) is told apart by its file and its path. Tools that share both and differ only in the query string (`index.php?page=refund`) work, but they do not remember their inputs separately.
 
 ## Development and tests

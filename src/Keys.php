@@ -9,7 +9,8 @@ namespace Runio\ScriptUi;
  * its saved value. By default it is made from the label.
  *
  * Keys never start with an underscore: those names belong to the library
- * (_token, _click, _seen, _sel, _kept, _rows, _sort, _page, _find, _file, _tool, _reset).
+ * (_token, _click, _seen, _sel, _kept, _rows, _sort, _page, _find, _file, _open,
+ * _tab, _tool, _reset, and in what a session keeps also _route and _no_run).
  *
  * A key holds no colon. The element of an input has the id "f-" plus its key and
  * a button "b-" plus its key. The parts inside a table, a question, a file field
@@ -17,6 +18,10 @@ namespace Runio\ScriptUi;
  * b-report:remove:0, f-status:1c5b0a93), which no key can produce. The notes under
  * a file field are "l-" and "e-" plus its key, and the help text of a group of
  * options is "h-" plus its key.
+ *
+ * The line that opens an expander is "x-" plus its key. A group of tabs is "t-"
+ * plus its key, and its headers and parts are numbered behind a colon
+ * (b-tabs:0, t-tabs:0).
  *
  * @internal
  */

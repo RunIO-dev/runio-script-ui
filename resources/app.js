@@ -132,6 +132,23 @@
   const expanders = () => body.querySelectorAll('details.sui-expander');
   const stateOf = (box) => box.querySelector(':scope > input[type="hidden"]');
 
+  // Tabs: every part is in the page, and one of them is in view. Which one, a
+  // hidden field says, as for an expander.
+  const tabGroups = () => body.querySelectorAll('.sui-tabs');
+  const headersOf = (group) => Array.from(group.querySelectorAll(':scope > [role="tablist"] > [role="tab"]'));
+
+  const putInView = (header) => {
+    const group = header.closest('.sui-tabs');
+    headersOf(group).forEach((other) => {
+      const open = other === header;
+      other.setAttribute('aria-selected', open ? 'true' : 'false');
+      const panel = document.getElementById(other.getAttribute('aria-controls') || '');
+      if (panel) panel.hidden = !open;
+    });
+    const field = stateOf(group);
+    if (field) field.value = header.getAttribute('data-sui-tab');
+  };
+
   const show = ({ html, title, origin }) => {
     const keep = origin || place(document.activeElement);
 
@@ -153,6 +170,13 @@
         field.value = turned.get(field.name);
         box.open = field.value === '1';
       }
+    });
+    tabGroups().forEach((group) => {
+      const field = stateOf(group);
+      const chosen = field && turned.has(field.name)
+        ? headersOf(group).find((header) => header.getAttribute('data-sui-tab') === turned.get(field.name))
+        : null;
+      if (chosen) putInView(chosen);
     });
 
     refocus(keep);
@@ -495,7 +519,7 @@
     reportTimer = setTimeout(() => {
       const data = new URLSearchParams();
       new FormData(form).forEach((value, name) => {
-        if (typeof value === 'string' && /^_(token$|open\[)/.test(name)) data.append(name, value);
+        if (typeof value === 'string' && /^_(token$|open\[|tab\[)/.test(name)) data.append(name, value);
       });
 
       fetch(address, {
@@ -523,6 +547,56 @@
     turned.set(field.name, state);
     report();
   }, true);
+
+  // The user chose a tab. Its part is in the page already, so nothing is asked of
+  // the server. It only hears which tab is in view now.
+  const choose = (header) => {
+    const field = stateOf(header.closest('.sui-tabs'));
+    const state = header.getAttribute('data-sui-tab');
+    if (!field || field.value === state) return;
+
+    putInView(header);
+    turned.set(field.name, state);
+    report();
+  };
+
+  const headerAt = (target) => (target instanceof Element ? target.closest('button[data-sui-tab]') : null);
+
+  // Without this script the header is a button that sends the form.
+  body.addEventListener('click', (event) => {
+    const header = headerAt(event.target);
+    if (!header) return;
+
+    event.preventDefault();
+    choose(header);
+  });
+
+  // The arrow keys go from header to header, and the tab follows them. On a page
+  // that is read from right to left, the next header is the one on the left.
+  body.addEventListener('keydown', (event) => {
+    const header = headerAt(event.target);
+    if (!header || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+
+    const headers = headersOf(header.closest('.sui-tabs'));
+    const forward = getComputedStyle(header.parentElement).direction === 'rtl' ? 'ArrowLeft' : 'ArrowRight';
+    const back = forward === 'ArrowLeft' ? 'ArrowRight' : 'ArrowLeft';
+    const at = headers.indexOf(header);
+    let next = null;
+    if (event.key === forward) {
+      next = headers[(at + 1) % headers.length];
+    } else if (event.key === back) {
+      next = headers[(at - 1 + headers.length) % headers.length];
+    } else if (event.key === 'Home') {
+      next = headers[0];
+    } else if (event.key === 'End') {
+      next = headers[headers.length - 1];
+    }
+    if (!next) return;
+
+    event.preventDefault();
+    next.focus();
+    choose(next);
+  });
 
   // The page can change while a file dialog is open: the user typed into a field
   // and went straight on to choose a file, and the answer to the typed text came

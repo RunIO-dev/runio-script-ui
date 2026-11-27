@@ -12,6 +12,10 @@ namespace Runio\ScriptUi;
  * shows and which rows are ticked. The rows themselves always come from the
  * script, so a forged form can never add one.
  *
+ * What the form says about rows is made with a secret that stays in the
+ * session. So the form holds nothing that a row, its id or a column that is
+ * not shown could be read from.
+ *
  * @internal Tools call table().
  */
 final class Table
@@ -22,11 +26,14 @@ final class Table
     /** How many rows of one table can be ticked at the same time. */
     public const MAX_SELECTED = 1000;
 
-    /** The ticks of the other pages travel as one field. A longer one is not read. */
-    public const MAX_KEPT_BYTES = 100000;
+    /** The ticks of the rows that are not on the page travel as one field. A longer one is not read. */
+    public const MAX_KEPT_BYTES = 24000;
 
-    /** A longer value of the id column travels through the form as a fingerprint. */
-    private const MAX_ID_BYTES = 40;
+    /** What the tick box of a row sends: a fingerprint of the row. See rowIds(). */
+    private const WIRE = '/^[0-9a-f]{20}$/D';
+
+    /** How many tables of one form are kept between page views. No page has more. */
+    private const MAX_TABLES = 50;
 
     /** How many characters of a search are read. */
     private const MAX_QUERY_LENGTH = 200;
@@ -53,6 +60,7 @@ final class Table
      * @param array<array-key,mixed>      $in            the bag of this run
      * @param string                      $click         the button the user pressed, or ''
      * @param bool                        $inputsChanged the user changed an input of the tool since the page was drawn
+     * @param string                      $secret        a secret of the session that no page and no form ever holds
      */
     public static function draw(
         string $key,
@@ -66,10 +74,15 @@ final class Table
         array $in,
         string $click,
         bool $inputsChanged,
+        string $secret,
         Texts $texts,
     ): self {
         if ($pageSize < 1 || $pageSize > self::MAX_PAGE_SIZE) {
             throw new \InvalidArgumentException(sprintf('table(): pageSize has to be between 1 and %d.', self::MAX_PAGE_SIZE));
+        }
+        if ($secret === '') {
+            // Without it, what the form carries could be made from the rows alone.
+            throw new \LogicException('A table cannot be drawn without the secret of the session.');
         }
 
         $originals = [];
@@ -116,15 +129,21 @@ final class Table
         $total = count($order);
 
         $ids = [];
+        $positions = [];
+        $listed = [];
         $chosen = [];
         $parked = [];
         $tooMany = false;
         if ($selectable) {
-            $ids = self::rowIds($records, $rowKey, $fields);
+            $ids = self::rowIds($records, $rowKey, $fields, $secret);
+            foreach ($ids as $index => $id) {
+                $positions[$id['wire']] = $index;
+            }
+            $listed = array_fill_keys($order, true);
             [$chosen, $parked, $tooMany] = $click === $key . ':none'
                 // "Clear selection": every tick goes, also the ones the search hides.
                 ? [[], [], false]
-                : self::ticked($key, $in, $ids, $order);
+                : self::ticked(self::wanted($key, $in), $ids, $positions, $listed);
         }
 
         if ($total === 0) {
@@ -144,8 +163,8 @@ final class Table
 
         // A page number belongs to one list: these rows, searched and sorted like this, cut into pages of this size.
         $pages = (int) ceil($total / $pageSize);
-        $view = hash('crc32b', ($keep['_sort'] ?? '') . "\0" . $pageSize . "\0" . implode(' ', $words));
-        $list = hash('crc32b', $given . "\0" . Text::json($records[0], false) . "\0" . Text::json($records[$given - 1], false));
+        $view = self::fingerprint('view', ($keep['_sort'] ?? '') . "\0" . $pageSize . "\0" . implode(' ', $words), $secret);
+        $list = self::fingerprint('list', $given . "\0" . Text::json($records[0], false) . "\0" . Text::json($records[$given - 1], false), $secret);
         $seen = self::seenPage($key, $in, $view, $list, $inputsChanged);
         $page = 1;
         if ($seen !== null) {
@@ -156,7 +175,8 @@ final class Table
         }
         $keep['_page'] = $page . '.' . $view . '.' . $list;
         $hidden .= self::hidden('_page', $key, $keep['_page']);
-        $visible = array_slice($order, ($page - 1) * $pageSize, $pageSize);
+        $first = ($page - 1) * $pageSize;
+        $visible = array_slice($order, $first, $pageSize);
 
         if ($selectable && $seen !== null && $click === $key . ':all') {
             [$chosen, $tooMany] = self::tickPage($chosen, $visible, count($parked));
@@ -194,8 +214,8 @@ final class Table
 
         $status = $pages > 1
             ? $texts->get('table.range', [
-                'from' => $texts->number(($page - 1) * $pageSize + 1),
-                'to' => $texts->number(($page - 1) * $pageSize + count($visible)),
+                'from' => $texts->number($first + 1),
+                'to' => $texts->number($first + count($visible)),
                 'count' => $texts->number($total),
             ])
             : ($total === 1 ? $texts->get('table.rows_one') : $texts->get('table.rows', ['count' => $texts->number($total)]));
@@ -213,7 +233,7 @@ final class Table
 
         $html = '<div class="sui-table-block">'
             . $box
-            . self::grid($key, $fields, $records, $visible, $ids, $chosen, $sort, $selectable, $texts)
+            . self::grid($key, $fields, $records, $visible, $first, $ids, $chosen, $sort, $selectable, $rowKey, $texts)
             . '<div class="sui-table-bar">'
             // The page script reads this line to people who use a screen reader.
             . '<p class="sui-table-foot" data-sui-status>' . Text::e($status) . '</p>'
@@ -242,20 +262,32 @@ final class Table
      */
     public static function keepable(array $in): array
     {
+        // A table is named by its key. What is filed under another name belongs to no table.
+        $tables = static function (mixed $field): array {
+            $tables = [];
+            foreach (is_array($field) ? $field : [] as $table => $state) {
+                if (Keys::isValid((string) $table) && count($tables) < self::MAX_TABLES) {
+                    $tables[$table] = $state;
+                }
+            }
+
+            return $tables;
+        };
+
         $keep = [];
 
         foreach (['_sort' => 16, '_page' => 32, '_find' => 4 * self::MAX_QUERY_LENGTH, '_kept' => self::MAX_KEPT_BYTES] as $name => $longest) {
-            foreach (is_array($in[$name] ?? null) ? $in[$name] : [] as $table => $state) {
+            foreach ($tables($in[$name] ?? null) as $table => $state) {
                 if (is_string($state) && strlen($state) <= $longest) {
                     $keep[$name][$table] = $state;
                 }
             }
         }
 
-        foreach (is_array($in['_sel'] ?? null) ? $in['_sel'] : [] as $table => $boxes) {
+        foreach ($tables($in['_sel'] ?? null) as $table => $boxes) {
             $kept = [];
             foreach (is_array($boxes) ? $boxes : [] as $wire) {
-                if (is_string($wire) && strlen($wire) <= 64 && count($kept) < self::MAX_SELECTED) {
+                if (is_string($wire) && preg_match(self::WIRE, $wire) === 1 && count($kept) < self::MAX_SELECTED) {
                     $kept[] = $wire;
                 }
             }
@@ -263,6 +295,16 @@ final class Table
         }
 
         return $keep;
+    }
+
+    /**
+     * A short fingerprint that only this session can make. Whoever holds the form
+     * cannot make it from the rows, so it cannot be used to try out guesses about
+     * what a row holds.
+     */
+    private static function fingerprint(string $kind, string $of, string $secret): string
+    {
+        return substr(hash_hmac('sha256', $kind . "\0" . $of, $secret), 0, 8);
     }
 
     private static function hidden(string $name, string $key, string $value): string
@@ -496,8 +538,54 @@ final class Table
     }
 
     /**
-     * Which rows are ticked. The form names them twice: the boxes of the page
-     * the user looked at, and one field with the ticks of all other pages.
+     * A field that names rows: a list of what their tick boxes send.
+     *
+     * @return list<string>
+     */
+    private static function wires(mixed $field, int $longest): array
+    {
+        if (!is_string($field) || strlen($field) > $longest) {
+            return [];
+        }
+
+        $wires = [];
+        // A flat list and nothing deeper.
+        $list = json_decode($field, true, 2);
+        foreach (is_array($list) ? $list : [] as $wire) {
+            if (is_string($wire) && preg_match(self::WIRE, $wire) === 1) {
+                $wires[] = $wire;
+            }
+        }
+
+        return $wires;
+    }
+
+    /**
+     * The rows the form says are ticked. It names them twice: one field with the
+     * ticks of the rows that are not on the page, and the boxes of the page.
+     *
+     * @param array<array-key,mixed> $in
+     *
+     * @return list<string> what the tick boxes of these rows send, each once
+     */
+    private static function wanted(string $key, array $in): array
+    {
+        // The ticks of the other pages come first. When there are too many, the
+        // boxes that come back unticked are on the page the user is looking at.
+        $wanted = self::wires(is_array($in['_kept'] ?? null) ? ($in['_kept'][$key] ?? null) : null, self::MAX_KEPT_BYTES);
+
+        $boxes = is_array($in['_sel'] ?? null) ? ($in['_sel'][$key] ?? null) : null;
+        foreach (is_array($boxes) ? $boxes : [] as $wire) {
+            if (is_string($wire) && preg_match(self::WIRE, $wire) === 1) {
+                $wanted[] = $wire;
+            }
+        }
+
+        return array_values(array_unique($wanted));
+    }
+
+    /**
+     * Which rows are ticked.
      *
      * Only a row of the data can be ticked, whatever the form says. And only a
      * row of the list counts: one that the search leaves. So every row the script
@@ -508,53 +596,22 @@ final class Table
      * form and is back when the row is. A typing mistake in the search box does
      * not throw away what the user ticked.
      *
-     * @param array<array-key,mixed>                       $in
+     * @param list<string>                                 $wanted    the rows the form says are ticked
      * @param array<int,array{wire: string, name: string}> $ids
-     * @param list<int>                                    $listed
+     * @param array<string,int>                            $positions what a tick box sends => the position of its row in the data
+     * @param array<int,true>                              $listed    the rows of the list
      *
      * @return array{array<int,true>, list<string>, bool} the ticked rows of the list by their position in the data,
      *                                                    what the boxes of the ticked rows outside the list send,
      *                                                    and whether some ticks were dropped
      */
-    private static function ticked(string $key, array $in, array $ids, array $listed): array
+    private static function ticked(array $wanted, array $ids, array $positions, array $listed): array
     {
-        $wanted = [];
-
-        $kept = is_array($in['_kept'] ?? null) ? ($in['_kept'][$key] ?? null) : null;
-        if (is_string($kept) && strlen($kept) <= self::MAX_KEPT_BYTES) {
-            // A flat list and nothing deeper.
-            $list = json_decode($kept, true, 2);
-            foreach (is_array($list) ? $list : [] as $wire) {
-                if (is_string($wire)) {
-                    $wanted[] = $wire;
-                }
-            }
-        }
-
-        $boxes = is_array($in['_sel'] ?? null) ? ($in['_sel'][$key] ?? null) : null;
-        foreach (is_array($boxes) ? $boxes : [] as $wire) {
-            if (is_string($wire)) {
-                $wanted[] = $wire;
-            }
-        }
-
-        if ($wanted === []) {
-            return [[], [], false];
-        }
-
-        $positions = [];
-        foreach ($ids as $index => $id) {
-            $positions[$id['wire']] = $index;
-        }
-        $inList = array_fill_keys($listed, true);
-
-        // The ticks of the other pages are counted first. When there are too many,
-        // the boxes that come back unticked are on the page the user is looking at.
         $ticked = [];
         $tooMany = false;
         foreach ($wanted as $wire) {
             $index = $positions[$wire] ?? null;
-            if ($index === null || isset($ticked[$index])) {
+            if ($index === null) {
                 continue;
             }
             if (count($ticked) >= self::MAX_SELECTED) {
@@ -568,7 +625,7 @@ final class Table
         $chosen = [];
         $parked = [];
         foreach (array_keys($ticked) as $index) {
-            if (isset($inList[$index])) {
+            if (isset($listed[$index])) {
                 $chosen[$index] = true;
             } else {
                 $parked[] = $ids[$index]['wire'];
@@ -601,11 +658,13 @@ final class Table
      * @param list<array{field: array-key, label: string}> $fields
      * @param list<array<array-key,mixed>>                 $records
      * @param list<int>                                    $visible
+     * @param int                                          $first   how many rows of the list come before the page
      * @param array<int,array{wire: string, name: string}> $ids
      * @param array<int,true>                              $chosen
      * @param array{int, string}|null                      $sort
+     * @param string                                       $rowKey  the id column
      */
-    private static function grid(string $key, array $fields, array $records, array $visible, array $ids, array $chosen, ?array $sort, bool $selectable, Texts $texts): string
+    private static function grid(string $key, array $fields, array $records, array $visible, int $first, array $ids, array $chosen, ?array $sort, bool $selectable, string $rowKey, Texts $texts): string
     {
         // A column of numbers is set to the right so the digits line up. All rows
         // decide, not only those of the page: a column must not jump between pages.
@@ -625,6 +684,12 @@ final class Table
                 }
             }
             $numeric[$column] = $numeric[$column] && $found;
+        }
+
+        // Does the table show the id column? Only then may the id be named elsewhere on the page.
+        $idShown = false;
+        foreach ($fields as $field) {
+            $idShown = $idShown || (string) $field['field'] === $rowKey;
         }
 
         $html = '<div class="sui-table-wrap"><table class="sui-table"><thead><tr>';
@@ -650,8 +715,14 @@ final class Table
         foreach ($visible as $position => $index) {
             $html .= '<tr' . (isset($chosen[$index]) ? ' class="sui-picked"' : '') . '>';
             if ($selectable) {
+                // A screen reader calls the box by the id of its row when the table shows
+                // the id, and else by the number of the row in the list.
+                $id = $idShown ? ($records[$index][$rowKey] ?? null) : null;
+                $called = is_int($id) || is_float($id) || (is_string($id) && $id !== '')
+                    ? self::cell($id)
+                    : $texts->number($first + $position + 1);
                 $html .= '<td class="sui-pick"><input type="checkbox" id="' . Text::e('f-' . $key . ':' . $position) . '" name="' . Text::e('_sel[' . $key . '][]') . '" value="' . Text::e($ids[$index]['wire']) . '"'
-                    . ' aria-label="' . Text::e($texts->get('table.select_row', ['row' => $ids[$index]['name']])) . '"' . (isset($chosen[$index]) ? ' checked' : '') . '></td>';
+                    . ' aria-label="' . Text::e($texts->get('table.select_row', ['row' => $called])) . '"' . (isset($chosen[$index]) ? ' checked' : '') . '></td>';
             }
             foreach ($fields as $column => $field) {
                 $value = $records[$index][$field['field']] ?? null;
@@ -671,38 +742,44 @@ final class Table
     }
 
     /**
-     * What the tick box of each row sends, and what the row is called in the log.
+     * What the tick box of each row sends, and what the row is called.
      *
-     * A row is known by the value in its id column ("...:k:1042"). When several
-     * rows share a value, the later ones are numbered ("...:k2:1042"), so one tick
-     * never selects two rows. The numbering follows the order the rows were passed
-     * in, over all of them, so sorting the table or turning its page changes nothing.
-     * A value that is long or not text travels as its fingerprint ("...:x:5f0c...").
+     * A row is known by the value in its id column. A row without one, and a row
+     * whose id another row has too, is known by what is in it. Rows that are the
+     * same in everything are numbered in the order they were passed in. So one
+     * tick never selects two rows, and sorting the table or turning its page
+     * changes nothing.
      *
-     * A row without a usable id is known by what is in it ("...:h:9f2c..."). The
-     * tick follows the row when the list is filtered or grows. When the row itself
-     * changes, the tick is dropped. It never moves to a row the user did not tick.
+     * A tick follows its row when the list is filtered or grows. A row that is
+     * known by what is in it loses its tick when it changes. A tick never moves
+     * to a row the user did not tick.
      *
-     * Every value starts with a mark made from the id column and the columns of
-     * the table. A tick made in a table of orders then never counts in a table of
-     * customers that is drawn in its place.
+     * The box does not send the id. It sends a fingerprint that is made with the
+     * secret of the session and with the kind of table: its id column and the
+     * columns it shows. The same row sends the same for as long as the session
+     * lasts. In the browser it says nothing: not the id, and nothing about a
+     * column that is not shown, because nobody can try out guesses against it.
+     * And a tick made in a table of orders never counts in a table of customers
+     * that is drawn in its place.
+     *
+     * In the log a row is called by its id, or by its place in the data ("#3")
+     * when it has none.
      *
      * @param list<array<array-key,mixed>>                 $records
      * @param list<array{field: array-key, label: string}> $fields
      *
      * @return array<int,array{wire: string, name: string}>
      */
-    private static function rowIds(array $records, string $rowKey, array $fields): array
+    private static function rowIds(array $records, string $rowKey, array $fields, string $secret): array
     {
         $shape = $rowKey;
         foreach ($fields as $field) {
             $shape .= "\0" . $field['field'];
         }
-        $mark = substr(hash('sha256', $shape), 0, 6);
+        $secretOfTable = hash_hmac('sha256', "rows\0" . $shape, $secret, true);
 
-        $ids = [];
-        $seen = [];
-
+        $names = [];
+        $times = [];
         foreach ($records as $index => $record) {
             $value = $record[$rowKey] ?? null;
             $name = match (true) {
@@ -711,27 +788,36 @@ final class Table
                 is_float($value) => Text::exactNumber($value),
                 default => '',
             };
-
+            $names[$index] = $name;
             if ($name !== '') {
-                // A form field carries text. An id that is long, or that is bytes and
-                // not text (a binary UUID), goes through it as a fingerprint.
-                $isText = preg_match('/^[^\p{C}]*$/Du', $name) === 1;
-                [$kind, $short] = $isText && strlen($name) <= self::MAX_ID_BYTES
-                    ? ['k', $name]
-                    : ['x', substr(hash('sha256', $name), 0, 32)];
-                if (!$isText && !mb_check_encoding($name, 'UTF-8')) {
-                    $name = '0x' . bin2hex($name);
-                }
-            } else {
-                $name = '#' . ($index + 1);
-                $kind = 'h';
-                $short = substr(hash('sha256', Text::json($record, false)), 0, 16);
+                $times[$name] = ($times[$name] ?? 0) + 1;
+            }
+        }
+
+        $ids = [];
+        $seen = [];
+        foreach ($records as $index => $record) {
+            $name = $names[$index];
+            $wire = substr(hash_hmac(
+                'sha256',
+                $name !== '' && $times[$name] === 1 ? "id\0" . $name : "row\0" . Text::json($record, false),
+                $secretOfTable,
+            ), 0, 20);
+
+            // The same in everything as a row before it: this one gets a number.
+            $count = $seen[$wire] = ($seen[$wire] ?? 0) + 1;
+            if ($count > 1) {
+                $wire = substr(hash_hmac('sha256', "twin\0" . $count . "\0" . $wire, $secretOfTable), 0, 20);
             }
 
-            $count = $seen[$kind . $short] = ($seen[$kind . $short] ?? 0) + 1;
             $ids[$index] = [
-                'wire' => $mark . ':' . $kind . ($count === 1 ? '' : $count) . ':' . $short,
-                'name' => $name,
+                'wire' => $wire,
+                'name' => match (true) {
+                    $name === '' => '#' . ($index + 1),
+                    // Bytes that are no text, a binary UUID for example.
+                    !mb_check_encoding($name, 'UTF-8') => '0x' . bin2hex($name),
+                    default => $name,
+                },
             ];
         }
 

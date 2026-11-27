@@ -34,6 +34,12 @@ final class Keys
         return $slug === '' ? 'field' : $slug;
     }
 
+    /** Could this be the key of an input, a button or a table? */
+    public static function isValid(string $key): bool
+    {
+        return preg_match('/^[\p{L}\p{N}][\p{L}\p{M}\p{N}_-]{0,63}$/uD', $key) === 1;
+    }
+
     /**
      * Checks a key that the developer chose.
      *
@@ -41,7 +47,7 @@ final class Keys
      */
     public static function assertValid(string $key): string
     {
-        if (preg_match('/^[\p{L}\p{N}][\p{L}\p{M}\p{N}_-]{0,63}$/uD', $key) !== 1) {
+        if (!self::isValid($key)) {
             throw new \InvalidArgumentException(sprintf(
                 '"%s" cannot be used as a key. Use letters, digits, "-" and "_", start with a letter or a digit, and use at most %d characters.',
                 $key,

@@ -83,6 +83,7 @@ final class Page
      * @param array<array-key,mixed> $ownTexts built-in texts the application replaced: language => (id => text)
      * @param bool                   $inputsChanged the user changed an input of the tool since the page was drawn,
      *                                              or a link filled one in
+     * @param string                 $secret   a secret of the session. No page and no form ever holds it
      */
     public function __construct(
         public readonly string $toolId,
@@ -99,6 +100,7 @@ final class Page
         private readonly ?string $setLanguage = null,
         private readonly array $ownTexts = [],
         private readonly bool $inputsChanged = false,
+        private readonly string $secret = '',
     ) {
         $this->stateKey = $stateKey ?? $toolId;
 
@@ -438,7 +440,7 @@ final class Page
     public function table(iterable $rows, bool $selectable, ?array $columns, ?string $key, string $rowKey, int $pageSize, bool $search, ?string $empty): array
     {
         $key = $this->claimTable($key);
-        $table = Table::draw($key, $rows, $selectable, $columns, $rowKey, $pageSize, $search, $empty, $this->in, $this->click, $this->inputsChanged, $this->texts());
+        $table = Table::draw($key, $rows, $selectable, $columns, $rowKey, $pageSize, $search, $empty, $this->in, $this->click, $this->inputsChanged, $this->secret, $this->texts());
 
         foreach ($table->keep as $name => $value) {
             $this->out[$name][$key] = $value;

@@ -216,11 +216,11 @@ final class TableSelectAllTest extends ToolTestCase
         $tool = $this->tool($picked, 1300, 200);
 
         $first = $this->get($tool);
-        $mark = substr($this->texts($first, '//input[@name="_sel[table][]"]/@value')[0], 0, 6);
+        $boxes = $this->tickBoxes($tool);
 
         // 900 rows of other pages are ticked already. This page has 200 more.
         $form = $this->form($first);
-        $form['_kept']['table'] = json_encode(array_map(static fn (int $id): string => $mark . ':k:' . $id, range(201, 1100)));
+        $form['_kept']['table'] = json_encode(array_map(static fn (int $id): string => $boxes[$id], range(201, 1100)));
         $response = $this->post($tool, ['_click' => 'table:all'] + $form);
 
         self::assertCount(1000, $picked);
@@ -290,31 +290,32 @@ final class TableSelectAllTest extends ToolTestCase
     public function testTicksThatAreTooManyToKeepDoNotCostTheOtherInputs(): void
     {
         // What a tool keeps between page views has a size limit. Thousands of
-        // ticks with long ids reach it. Then the ticks are not kept, but what
+        // ticks in many tables reach it. Then the ticks are not kept, but what
         // the user typed still is.
-        $rows = array_map(static fn (int $n): array => ['id' => str_pad('customer-' . $n, 40, '-'), 'n' => $n], range(1, 1000));
+        $rows = array_map(static fn (int $n): array => ['id' => 'customer-' . $n, 'n' => $n], range(1, 1000));
+        $tables = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'];
         $picked = [];
         $note = null;
-        $tool = function () use (&$picked, &$note, $rows): void {
+        $tool = function () use (&$picked, &$note, $rows, $tables): void {
             $note = text('Note');
-            foreach (['a', 'b', 'c', 'd', 'e'] as $key) {
+            foreach ($tables as $key) {
                 $picked[$key] = table($rows, selectable: true, pageSize: 200, key: $key);
             }
         };
 
-        $first = $this->get($tool);
-        $form = ['note' => 'call back'] + $this->form($first);
-        foreach (['a', 'b', 'c', 'd', 'e'] as $key) {
-            $mark = substr($this->texts($first, '//input[@name="_sel[' . $key . '][]"]/@value')[0], 0, 6);
-            $form['_kept'][$key] = json_encode(array_map(static fn (array $row): string => $mark . ':k:' . $row['id'], $rows));
+        // The same rows send the same in every one of the tables.
+        $all = json_encode(array_values($this->tickBoxes($tool, 'a')));
+        $form = ['note' => 'call back'] + $this->form($this->get($tool));
+        foreach ($tables as $key) {
+            $form['_kept'][$key] = $all;
         }
         $this->post($tool, $form);
-        self::assertSame([1000, 1000, 1000, 1000, 1000], array_values(array_map('count', $picked)));
+        self::assertSame(array_fill(0, 9, 1000), array_values(array_map('count', $picked)));
 
         $this->get($tool);
 
         self::assertSame('call back', $note);
-        self::assertSame([0, 0, 0, 0, 0], array_values(array_map('count', $picked)));
+        self::assertSame(array_fill(0, 9, 0), array_values(array_map('count', $picked)));
     }
 
     // ---------------------------------------------------------------- the log

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Runio\ScriptUi\Tests;
 
 use Runio\ScriptUi\Http\Response;
+use Runio\ScriptUi\Session\ArraySession;
 use Runio\ScriptUi\Tests\Support\ToolTestCase;
 
 use function Runio\ScriptUi\button;
@@ -28,16 +29,10 @@ final class TableTest extends ToolTestCase
         return $this->texts($response, '//input[@name="_sel[' . $table . '][]"]/@value');
     }
 
-    /** What the tick box of the row with this id sends. */
+    /** What the tick box of the row with this id sends. The table has to show the id. */
     private function box(callable $tool, int|string $id, string $table = 'table'): string
     {
-        foreach ($this->boxes($this->get($tool), $table) as $value) {
-            if (str_ends_with($value, ':k:' . $id)) {
-                return $value;
-            }
-        }
-
-        self::fail('no tick box for row ' . $id);
+        return $this->tickBox($this->get($tool), $id, $table);
     }
 
     public function testItShowsOneColumnPerKeyAndOneRowPerItem(): void
@@ -128,9 +123,10 @@ final class TableTest extends ToolTestCase
         $response = $this->get($tool);
         self::assertSame([], $picked);
         self::assertSame(3, $this->hits($response, '//input[@type="checkbox" and @name="_sel[table][]"]'));
-        // A tick box sends the id of its row, and in front of it a mark of the table it sits in.
+        // A tick box sends a fingerprint of its row. The id itself is not what travels.
         $boxes = $this->boxes($response);
-        self::assertMatchesRegularExpression('/^[0-9a-f]{6}:k:1001$/', $boxes[0]);
+        self::assertMatchesRegularExpression('/^[0-9a-f]{20}$/', $boxes[0]);
+        self::assertCount(3, array_unique($boxes));
 
         $response = $this->post($tool, ['_sel' => ['table' => [$boxes[1], $boxes[2]]]]);
         self::assertSame([self::ORDERS[1], self::ORDERS[2]], $picked);
@@ -144,9 +140,10 @@ final class TableTest extends ToolTestCase
             $picked = table(self::ORDERS, selectable: true);
         };
         $real = $this->box($tool, 1001);
-        $invented = substr($real, 0, 6) . ':k:9999';
+        // It looks like what a box sends, and it belongs to no row.
+        $invented = str_repeat('0', 20);
 
-        $this->post($tool, ['_sel' => ['table' => [$invented, '1001', 'k:1001', $real, ['nested'], $real]]]);
+        $this->post($tool, ['_sel' => ['table' => [$invented, '1001', 'k:1001', strtoupper($real), $real, ['nested'], $real]]]);
 
         self::assertSame([self::ORDERS[0]], $picked);
     }
@@ -188,7 +185,7 @@ final class TableTest extends ToolTestCase
 
         $values = $this->boxes($this->get($tool));
         self::assertCount(2, $values);
-        self::assertMatchesRegularExpression('/^[0-9a-f]{6}:h:[0-9a-f]{16}$/', $values[0]);
+        self::assertMatchesRegularExpression('/^[0-9a-f]{20}$/', $values[0]);
         self::assertNotSame($values[0], $values[1]);
 
         $this->post($tool, ['_sel' => ['table' => [$values[1]]]]);
@@ -268,8 +265,7 @@ final class TableTest extends ToolTestCase
         };
 
         $values = $this->boxes($this->get($tool));
-        $mark = substr($values[0], 0, 6);
-        self::assertSame([$mark . ':k:7', $mark . ':k2:7', $mark . ':k:8'], $values);
+        self::assertCount(3, array_unique($values));
 
         $response = $this->post($tool, ['_sel' => ['table' => [$values[0]]]]);
         self::assertSame([$rows[0]], $picked);
@@ -285,22 +281,42 @@ final class TableTest extends ToolTestCase
         self::assertSame($values[1], $this->attr($response, '//input[@name="_sel[table][]" and @checked]', 'value'));
     }
 
+    public function testATickOnARowThatSharesItsIdNeverMovesToTheOtherRow(): void
+    {
+        // Orders with the customer as their id column: it says who, not which order.
+        $rows = [['id' => 7, 'name' => 'first'], ['id' => 7, 'name' => 'second'], ['id' => 8, 'name' => 'third']];
+        $picked = null;
+        $tool = function () use (&$picked, &$rows): void {
+            $picked = table($rows, selectable: true);
+        };
+
+        $first = $this->boxes($this->get($tool))[0];
+        $this->post($tool, ['_sel' => ['table' => [$first]]]);
+        self::assertSame([['id' => 7, 'name' => 'first']], $picked);
+
+        // The ticked row is deleted. The other row with id 7 was never ticked.
+        $rows = [['id' => 7, 'name' => 'second'], ['id' => 8, 'name' => 'third']];
+        $response = $this->post($tool, ['_sel' => ['table' => [$first]]]);
+
+        self::assertSame([], $picked);
+        self::assertSame(0, $this->hits($response, '//input[@name="_sel[table][]" and @checked]'));
+    }
+
     public function testAnIdCannotPassForAPosition(): void
     {
-        // The first row's id looks like the position of the second row.
-        $rows = [['id' => '#1', 'name' => 'looks like a position'], ['id' => null, 'name' => 'has no id']];
+        // The log calls a row without an id by its position: "#2". The id of the first row looks like one.
+        $rows = [['id' => '#2', 'name' => 'looks like a position'], ['id' => null, 'name' => 'has no id']];
         $picked = null;
         $tool = function () use (&$picked, $rows): void {
             $picked = table($rows, selectable: true);
         };
 
         $values = $this->boxes($this->get($tool));
-        self::assertStringEndsWith(':k:#1', $values[0]);
-
         $this->post($tool, ['_sel' => ['table' => [$values[0]]]]);
         self::assertSame([$rows[0]], $picked);
 
-        $this->post($tool, ['_sel' => ['table' => ['#1', substr($values[0], 0, 6) . ':#1']]]);
+        // Neither an id nor a position is what a box sends.
+        $this->post($tool, ['_sel' => ['table' => ['#2', '#1', '2', '1', '0']]]);
         self::assertSame([], $picked);
     }
 
@@ -343,6 +359,59 @@ final class TableTest extends ToolTestCase
 
         self::assertSame(['ID', 'Name'], array_slice($this->texts($response, '//table//th'), 1));
         self::assertSame([$second], $picked);
+    }
+
+    public function testWhatTheFormCarriesSaysNothingAboutTheRows(): void
+    {
+        // The table shows names only. The id and the note stay on the server.
+        $rows = [
+            ['id' => 'CUST-0077', 'name' => 'Ava', 'note' => 'only-for-hr-a'],
+            ['id' => null, 'name' => 'Ben', 'note' => 'only-for-hr-b'],
+        ];
+        $tool = function () use ($rows): void {
+            table($rows, selectable: true, columns: ['name']);
+        };
+        $page = fn (Response $response): array => explode('.', (string) $this->attr($response, '//input[@name="_page[table]"]', 'value'));
+
+        $first = $this->get($tool);
+        $boxes = $this->boxes($first);
+        self::assertCount(2, $boxes);
+        self::assertStringNotContainsString('CUST-0077', $first->body);
+        self::assertStringNotContainsString('only-for-hr', $first->body);
+
+        // What the form carries is made with a secret that stays in the session.
+        // From the rows alone nobody can make it, so nobody can try out guesses
+        // against it. In another session the same rows send something else.
+        $this->session = new ArraySession();
+        $second = $this->get($tool);
+
+        self::assertSame([], array_intersect($boxes, $this->boxes($second)));
+        self::assertCount(3, $page($first));
+        self::assertNotSame($page($first)[1], $page($second)[1]);
+        self::assertNotSame($page($first)[2], $page($second)[2]);
+
+        // Within one session it stays the same. A tick has to survive the next page view.
+        self::assertSame($this->boxes($second), $this->boxes($this->get($tool)));
+    }
+
+    public function testATickBoxIsNamedAfterItsIdOnlyWhenTheTableShowsTheId(): void
+    {
+        $labels = fn (Response $response): array => $this->texts($response, '//input[@name="_sel[table][]"]/@aria-label');
+
+        $shown = $this->get(function (): void {
+            table(self::ORDERS, selectable: true);
+        });
+        self::assertSame(['Select row 1001', 'Select row 1002', 'Select row 1003'], $labels($shown));
+
+        // Without the id column a box is called by the number of its row in the list.
+        $tool = function (): void {
+            table(self::ORDERS, selectable: true, columns: ['customer'], pageSize: 2);
+        };
+        $first = $this->get($tool);
+        self::assertSame(['Select row 1', 'Select row 2'], $labels($first));
+
+        $second = $this->post($tool, ['_click' => 'table:page:2'] + $this->form($first));
+        self::assertSame(['Select row 3'], $labels($second));
     }
 
     public function testClickingAHeaderSortsByThatColumn(): void
@@ -416,7 +485,8 @@ final class TableTest extends ToolTestCase
 
     public function testAnIdThatIsNotTextCanStillBeTicked(): void
     {
-        // A database may keep a UUID as 16 bytes. Bytes cannot sit in a form field.
+        // A database may keep a UUID as 16 bytes. Bytes cannot sit in a form field,
+        // and they do not have to: a box sends a fingerprint of the id.
         $first = hex2bin('018f3a7c9d2b7e41a6c05b1e9f3d2c10');
         $second = hex2bin('ff8f3a7c9d2b7e41a6c05b1e9f3d2cff');
         $rows = [['id' => $first, 'name' => 'Ava'], ['id' => $second, 'name' => 'Ben']];
@@ -427,7 +497,7 @@ final class TableTest extends ToolTestCase
         };
 
         $boxes = $this->boxes($this->get($tool));
-        self::assertMatchesRegularExpression('/^[0-9a-f]{6}:x:[0-9a-f]{32}$/', $boxes[1]);
+        self::assertMatchesRegularExpression('/^[0-9a-f]{20}$/', $boxes[1]);
 
         $this->post($tool, ['_sel' => ['table' => [$boxes[1]]], '_click' => 'delete']);
 

@@ -171,6 +171,58 @@ abstract class ToolTestCase extends TestCase
         return $fields;
     }
 
+    /**
+     * What the tick box of one row sends. The row is the one in which a cell holds
+     * exactly this text, and it has to be on the page that $response shows.
+     */
+    protected function tickBox(Response $response, int|string $cell, string $table = 'table'): string
+    {
+        foreach ($this->xpath($response)->query('//input[@name="_sel[' . $table . '][]"]') ?: [] as $box) {
+            foreach ($box->parentNode?->parentNode?->childNodes ?? [] as $shown) {
+                if ($box instanceof \DOMElement && trim((string) $shown->textContent) === (string) $cell) {
+                    return $box->getAttribute('value');
+                }
+            }
+        }
+
+        self::fail('no tick box in a row that shows "' . $cell . '"');
+    }
+
+    /**
+     * What the tick box of every row sends, on all pages of a table: the text of
+     * the first cell of the row => what its box sends. The pages are turned the
+     * way a user turns them. What the session kept before is put back afterwards.
+     *
+     * @return array<array-key,string>
+     */
+    protected function tickBoxes(callable $tool, string $table = 'table'): array
+    {
+        $kept = $this->session->get('state');
+        $boxes = [];
+        $response = $this->get($tool);
+
+        while (true) {
+            foreach ($this->xpath($response)->query('//input[@name="_sel[' . $table . '][]"]') ?: [] as $box) {
+                $first = $box->parentNode?->nextSibling;
+                if ($box instanceof \DOMElement && $first !== null) {
+                    $shown = trim((string) $first->textContent);
+                    self::assertArrayNotHasKey($shown, $boxes, 'two rows show "' . $shown . '" in their first cell, so it cannot tell them apart');
+                    $boxes[$shown] = $box->getAttribute('value');
+                }
+            }
+
+            $next = $this->attr($response, '//button[@id="p-' . $table . ':next"]', 'value');
+            if ($next === null) {
+                break;
+            }
+            $response = $this->post($tool, ['_click' => $next] + $this->form($response));
+        }
+
+        $this->session->set('state', $kept);
+
+        return $boxes;
+    }
+
     protected function xpath(Response $response): \DOMXPath
     {
         $dom = new \DOMDocument();

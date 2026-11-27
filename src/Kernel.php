@@ -348,6 +348,7 @@ final class Kernel
             $this->config->language,
             $this->config->texts,
             $inputsChanged,
+            $this->secret(),
         );
     }
 
@@ -391,7 +392,6 @@ final class Kernel
     {
         return is_string($value) ? str_replace(["\r\n", "\r"], "\n", $value) : $value;
     }
-
 
     /**
      * Was this saved by the tool at this address? Two tools can share a script and
@@ -620,6 +620,23 @@ final class Kernel
         }
 
         return $token;
+    }
+
+    /**
+     * A secret that stays on the server. A table makes with it what its form
+     * carries about rows, so that the form says nothing about them. The form token
+     * cannot do that job: every page shows it.
+     */
+    private function secret(): string
+    {
+        $secret = $this->session->get('secret');
+
+        if (!is_string($secret) || preg_match('/^[0-9a-f]{64}$/D', $secret) !== 1) {
+            $secret = bin2hex(random_bytes(32));
+            $this->session->set('secret', $secret);
+        }
+
+        return $secret;
     }
 
     /**

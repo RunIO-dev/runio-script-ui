@@ -54,16 +54,8 @@ final class TablePagesTest extends ToolTestCase
     /** What the tick box of the row with this id sends. The row has to be on the page. */
     private function box(Response $response, int|string $id): string
     {
-        foreach ($this->texts($response, '//input[@name="_sel[table][]"]/@value') as $value) {
-            if (str_ends_with($value, ':k:' . $id)) {
-                return $value;
-            }
-        }
-
-        self::fail('no tick box for row ' . $id . ' on this page');
+        return $this->tickBox($response, $id);
     }
-
-    // ------------------------------------------------------------------ pages
 
     public function testALongTableIsShownOnePageAtATime(): void
     {
@@ -445,14 +437,16 @@ final class TablePagesTest extends ToolTestCase
         $tool = function () use (&$picked): void {
             $picked = table(self::rows(60), selectable: true);
         };
-        $real = $this->box($this->get($tool), 3);
-        $mark = substr($real, 0, 6);
+        // Row 40 is on the second page.
+        $real = $this->tickBoxes($tool)[40];
+        // It looks like what a box sends, and it belongs to no row.
+        $invented = str_repeat('0', 20);
 
-        $this->post($tool, ['_kept' => ['table' => json_encode([$mark . ':k:9999', '40', 40, null, $mark . ':k:40', $mark . ':k:40'])]]);
+        $this->post($tool, ['_kept' => ['table' => json_encode([$invented, '40', 40, null, $real, $real])]]);
         self::assertSame([40], array_column($picked, 'id'));
 
         // The field holds a flat list of texts. Anything else is not read at all.
-        $nested = json_encode([$mark . ':k:40', ['nested']]);
+        $nested = json_encode([$real, ['nested']]);
         foreach (['not json', '{"a":1}', '"text"', $nested, '[[["deep"]]]', ['list'], str_repeat('[', 5000)] as $forged) {
             $response = $this->post($tool, ['_kept' => ['table' => $forged]]);
 
@@ -497,7 +491,7 @@ final class TablePagesTest extends ToolTestCase
         self::assertSame('Rows 1 to 25 of 40 · 1 selected (1 on other pages)', $this->foot($first));
     }
 
-    public function testALongIdIsShortenedOnItsWayThroughTheForm(): void
+    public function testALongIdDoesNotMakeTheFormLong(): void
     {
         $long = str_repeat('customer-', 40);
         $rows = [['id' => $long . 'a', 'n' => 1], ['id' => $long . 'b', 'n' => 2]];
@@ -509,7 +503,7 @@ final class TablePagesTest extends ToolTestCase
 
         $boxes = $this->texts($this->get($tool), '//input[@name="_sel[table][]"]/@value');
         self::assertNotSame($boxes[0], $boxes[1]);
-        self::assertLessThanOrEqual(64, strlen($boxes[0]));
+        self::assertSame(20, strlen($boxes[0]));
 
         $this->post($tool, ['_sel' => ['table' => [$boxes[1]]], '_click' => 'delete']);
 
@@ -525,12 +519,12 @@ final class TablePagesTest extends ToolTestCase
         };
 
         $first = $this->get($tool);
-        $mark = substr($this->box($first, 1), 0, 6);
-        $wire = static fn (int $id): string => $mark . ':k:' . $id;
+        $boxes = $this->tickBoxes($tool);
+        $wire = static fn (int $id): string => $boxes[$id];
 
-        // 1,100 ticks from other pages and 200 on this one.
+        // 1,000 ticks from other pages and 200 on this one.
         $form = $this->form($first);
-        $form['_kept']['table'] = json_encode(array_map($wire, range(201, 1300)));
+        $form['_kept']['table'] = json_encode(array_map($wire, range(201, 1200)));
         $form['_sel']['table'] = array_map($wire, range(1, 200));
         $response = $this->post($tool, $form);
 
@@ -544,6 +538,39 @@ final class TablePagesTest extends ToolTestCase
         // Below the limit nothing is said.
         $response = $this->post($tool, ['_sel' => ['table' => [$wire(1)]]] + $this->form($first));
         self::assertSame(0, $this->hits($response, '//*[contains(@class,"sui-table-limit")]'));
+    }
+
+    public function testWhatIsKeptAfterARerunBelongsToATable(): void
+    {
+        // After rerun() the page keeps what the form sent. Fields that name no
+        // table are not kept, and there is an end to how many tables are.
+        $tool = function (): void {
+            table(self::rows(60), selectable: true);
+            if (button('Go')) {
+                rerun();
+            }
+        };
+
+        $form = $this->form($this->get($tool));
+        $form['_sort']['<junk>'] = '1:asc';
+        $form['_sort'][str_repeat('x', 65)] = '1:asc';
+        $form['_page']['not a key!'] = '1.00000000.00000000';
+        $form['_kept'][':colon'] = '[]';
+        $form['_sel']['_under'] = [str_repeat('0', 20)];
+        $form['_sel']['table'] = ['not what a box sends', str_repeat('0', 20)];
+        for ($n = 1; $n <= 80; $n++) {
+            $form['_find']['t' . $n] = 'x';
+        }
+        $this->post($tool, ['_click' => 'go'] + $form);
+
+        $states = $this->session->get('state');
+        self::assertIsArray($states);
+        $state = array_values($states)[0];
+        self::assertSame(['table'], array_keys($state['_page']));
+        self::assertArrayNotHasKey('_sort', $state);
+        self::assertArrayNotHasKey('_kept', $state);
+        self::assertSame(['table' => [str_repeat('0', 20)]], $state['_sel']);
+        self::assertCount(50, $state['_find']);
     }
 
     // ------------------------------------------------------------- the markup

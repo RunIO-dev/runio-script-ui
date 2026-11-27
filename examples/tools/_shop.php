@@ -137,8 +137,11 @@ final class Shop
                     $problems[] = 'Line ' . $line . ': no customer has the email "' . $email . '".';
                 } elseif ($row['items'] === '') {
                     $problems[] = 'Line ' . $line . ': the items are missing.';
-                } elseif (!is_numeric($row['total']) || (float) $row['total'] <= 0) {
-                    $problems[] = 'Line ' . $line . ': "' . $row['total'] . '" is not an amount.';
+                } elseif (mb_strlen($row['items']) > 200) {
+                    $problems[] = 'Line ' . $line . ': the items are longer than 200 characters.';
+                } elseif (!is_numeric($row['total']) || (float) $row['total'] <= 0 || (float) $row['total'] > 1_000_000) {
+                    // "1e999" is a number to PHP, and an endless one. No shop sells for that.
+                    $problems[] = 'Line ' . $line . ': "' . mb_substr($row['total'], 0, 40) . '" is not an amount.';
                 } else {
                     $orders[] = ['email' => $email, 'customer' => $customers[$email], 'items' => $row['items'], 'total' => round((float) $row['total'], 2)];
                 }
@@ -235,7 +238,9 @@ final class Shop
             mkdir(dirname(self::FILE), 0777, true);
         }
 
-        file_put_contents(self::FILE, json_encode($this->data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), LOCK_EX);
+        // A value that cannot be written as JSON is an error here. Without the flag
+        // the result would be false, and the file would be emptied.
+        file_put_contents(self::FILE, json_encode($this->data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), LOCK_EX);
     }
 
     /**

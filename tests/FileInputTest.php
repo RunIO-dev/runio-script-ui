@@ -926,7 +926,7 @@ final class FileInputTest extends ToolTestCase
 
         self::assertSame(413, $response->status);
         self::assertStringContainsString('Too large', $response->body);
-        self::assertStringContainsString('What was sent is larger than this server takes.', $response->body);
+        self::assertStringContainsString('This is more than the server takes at once.', $response->body);
         self::assertSame('/tool', $this->attr($response, '//a[contains(@class,"sui-link")]', 'href'));
 
         // A small request without a token is what it always was.
@@ -950,9 +950,23 @@ final class FileInputTest extends ToolTestCase
         $response = $this->get($this->tool($file));
 
         self::assertSame(
-            'What was sent is larger than this server takes. Choose a smaller file.',
+            'This is more than the server takes at once. Choose a smaller file, or fewer files.',
             $this->attr($response, '//input[@id="f-report"]', 'data-sui-refused'),
         );
+    }
+
+    public function testThePageScriptLearnsHowMuchOneRequestMayCarry(): void
+    {
+        // Several files can each be small enough and still be too much together.
+        $this->bodyLimit = 3000;
+        $response = $this->get($this->tool($files, multiple: true));
+        self::assertSame('3000', $this->attr($response, '//input[@id="f-report"]', 'data-sui-total'));
+
+        // Without a limit in PHP there is nothing to check.
+        $this->bodyLimit = 0;
+        $this->session = new ArraySession();
+        $response = $this->get($this->tool($files, multiple: true));
+        self::assertNull($this->attr($response, '//input[@id="f-report"]', 'data-sui-total'));
     }
 
     public function testAToolSaysSoWhenPhpTakesNoUploads(): void
@@ -1031,6 +1045,8 @@ final class FileInputTest extends ToolTestCase
         $response = $this->post($tool, files: ['report' => $this->arrivedTogether(['a.csv' => 'A', 'b.csv' => 'B'])]);
 
         self::assertSame(['b-report:remove:0', 'b-report:remove:1'], $this->texts($response, '//li[contains(@class,"sui-file")]//button/@id'));
+        // After a change the page script reads out which files the field holds.
+        self::assertSame(['a.csv', 'b.csv'], $this->texts($response, '//div[contains(@class,"sui-field-file")]//*[@data-sui-status]'));
         // An error belongs to its field, for a screen reader too.
         $refused = $this->post($this->tool($file, maxSize: 1), files: ['report' => $this->arrived('big.csv', 'xx')]);
         self::assertSame('alert', $this->attr($refused, '//p[contains(@class,"sui-field-error")]', 'role'));

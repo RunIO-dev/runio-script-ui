@@ -75,6 +75,12 @@ final class Uploads
         return $this->folder->fileLimit();
     }
 
+    /** How much one request may carry in all, in bytes, or null when PHP sets no limit. */
+    public function bodyLimit(): ?int
+    {
+        return $this->folder->bodyLimit();
+    }
+
     /**
      * The files that arrived for one field in this request.
      *

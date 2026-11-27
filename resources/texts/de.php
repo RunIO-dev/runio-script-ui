@@ -89,6 +89,6 @@ return [
     'error.expired_text' => 'Ihre Sitzung ist beendet, oder das Formular wurde nicht von dieser Seite gesendet. Öffnen Sie die Seite erneut und wiederholen Sie den Vorgang.',
     'error.expired_link' => 'Seite erneut öffnen',
     'error.too_large' => 'Zu groß',
-    'error.too_large_text' => 'Was gesendet wurde, ist größer, als dieser Server annimmt. Wählen Sie eine kleinere Datei.',
+    'error.too_large_text' => 'Das ist mehr, als der Server auf einmal annimmt. Wählen Sie eine kleinere Datei oder weniger Dateien.',
     'error.too_large_link' => 'Zurück zur Seite',
 ];

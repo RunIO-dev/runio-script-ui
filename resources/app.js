@@ -33,6 +33,7 @@
   const isText = (el) => el instanceof HTMLTextAreaElement
     || (el instanceof HTMLInputElement && /^(text|search|email|url|tel|password)$/.test(el.type));
   const isTyped = (el) => isText(el) || (el instanceof HTMLInputElement && el.type === 'number');
+  const isFile = (el) => el instanceof HTMLInputElement && el.type === 'file';
 
   const busy = (on) => {
     clearTimeout(busyTimer);
@@ -112,11 +113,12 @@
 
   // Swapping the content says nothing to a screen reader. When the user is in a
   // table, its status line is written into a place that is read out when it
-  // changes: "Rows 26 to 50 of 80".
+  // changes: "Rows 26 to 50 of 80". In a field for files it is the names of the
+  // files the field holds now.
   const announce = () => {
     if (!status) return;
     const focused = document.activeElement;
-    const table = focused ? focused.closest('.sui-table-block') : null;
+    const table = focused ? focused.closest('.sui-table-block, .sui-field-file') : null;
     const lines = table ? Array.from(table.querySelectorAll('[data-sui-status]'), (line) => line.textContent.trim()) : [];
     const text = lines.join(' ');
     if (status.textContent !== text) status.textContent = text;
@@ -153,10 +155,84 @@
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   };
 
-  const run = (submitter) => {
+  // What the form holds now. A file field in which nothing was chosen sends a
+  // file without a name, and that one is left out.
+  const collect = () => {
+    const data = new FormData(form);
+    let files = false;
+    Array.from(data).forEach(([name, value]) => {
+      if (typeof value === 'string') return;
+      if (value.name === '' && value.size === 0) {
+        data.delete(name);
+      } else {
+        files = true;
+      }
+    });
+    return { data, files };
+  };
+
+  // How many bytes a request with these fields has, at most. Around every field
+  // the browser writes a few lines, and 200 bytes are more than they ever take.
+  const weight = (data) => Array.from(data).reduce((sum, [name, value]) => sum + 200 + new Blob([name]).size
+    + (typeof value === 'string' ? new Blob([value]).size : value.size + new Blob([value.name]).size), 0);
+
+  // Says under a file field what is wrong with the files, where the server says it too.
+  const complain = (input, problems) => {
+    const key = input.id.slice(2);
+    let note = document.getElementById('e-' + key);
+    if (!note) {
+      note = document.createElement('p');
+      note.id = 'e-' + key;
+      note.className = 'sui-field-error';
+      note.setAttribute('role', 'alert');
+      note.dir = 'auto';
+      (document.getElementById('l-' + key) || input).after(note);
+    }
+
+    // File names are text. They never go into the page as markup.
+    note.replaceChildren();
+    problems.forEach((problem, index) => {
+      if (index > 0) note.append(document.createElement('br'));
+      note.append(problem);
+    });
+
+    const described = (input.getAttribute('aria-describedby') || '').split(' ').filter(Boolean);
+    if (!described.includes(note.id)) input.setAttribute('aria-describedby', described.concat(note.id).join(' '));
+  };
+
+  // What is wrong with the files that were chosen, in the words the page brought
+  // along. The server checks all of it again. Saying it here saves the user the
+  // wait for an upload that would be turned down.
+  const unfit = (input) => {
+    const files = Array.from(input.files);
+    // A file name can hold "$&". As a plain replacement that would be read as a pattern.
+    const say = (attribute, name) => (input.getAttribute(attribute) || '').replace('{name}', () => name);
+
+    const room = input.getAttribute('data-sui-room');
+    if (room !== null && files.length > Number(room)) return [say('data-sui-too-many', '')];
+
+    const max = Number(input.getAttribute('data-sui-max'));
+    const large = max > 0 ? files.filter((file) => file.size > max) : [];
+    if (large.length > 0) return large.map((file) => say('data-sui-too-large', file.name));
+
+    // PHP throws a request away that is too large as a whole, with everything in it.
+    const total = Number(input.getAttribute('data-sui-total'));
+    return total > 0 && weight(collect().data) > total ? [say('data-sui-refused', '')] : [];
+  };
+
+  // Opens the page again after a request that left it as it was, and puts the
+  // focus back. A locked page takes the focus away from whatever had it.
+  const unlock = (origin) => {
+    body.inert = false;
+    const from = origin && document.getElementById(origin.id);
+    if (from && body.contains(from)) from.focus({ preventScroll: true });
+  };
+
+  const run = (submitter, chooser) => {
     const action = Boolean(submitter && submitter.name);
 
-    // A button is being handled. Do not start anything that could drop its answer.
+    // A button is being handled, or a file is on its way. Do not start anything
+    // that could drop the answer.
     if (acting) {
       if (!action) queued = true;
       return;
@@ -167,21 +243,24 @@
     const id = ++serial;
     clearTimeout(typingTimer);
 
-    const data = new URLSearchParams(new FormData(form));
+    // Files travel as they are. Without them the form goes the short way, as text.
+    const { data, files } = collect();
     if (action) data.append(submitter.name, submitter.value);
 
     // While a button is being handled the page is locked. A change made now would
     // be overwritten by the answer, and the user would not notice that it was lost.
-    const origin = action ? place(submitter) || place(document.activeElement) : null;
-    if (action) body.inert = true;
+    // The same goes for a file on its way: its upload is never dropped half way.
+    const locked = action || files;
+    const origin = locked ? place(submitter) || place(chooser) || place(document.activeElement) : null;
+    if (locked) body.inert = true;
 
-    acting = action;
+    acting = locked;
     dirty = false;
     busy(true);
 
     fetch(address, {
       method: 'POST',
-      body: data,
+      body: files ? data : new URLSearchParams(data),
       credentials: 'same-origin',
       redirect: 'follow',
       signal: stop.signal,
@@ -208,13 +287,26 @@
           save(blob, name);
 
           // The page was locked while the file was made. Give the focus back to the button.
-          body.inert = false;
-          const pressed = origin && document.getElementById(origin.id);
-          if (pressed) pressed.focus({ preventScroll: true });
+          unlock(origin);
 
           // The file was made from what the form holds now. If the page still shows
           // an older answer, the run below brings it up to date.
           queued = true;
+          return;
+        }
+
+        if (response.status === 413 && files) {
+          // More than a server takes at once. It did not look at the form at all, so
+          // the page stays as it is and says so. The files leave their fields, or
+          // every later request would carry them again.
+          offline(false);
+          body.querySelectorAll('input[type="file"]').forEach((input) => {
+            if (input.files.length === 0) return;
+            const refused = input.getAttribute('data-sui-refused') || '';
+            input.value = '';
+            complain(input, [refused]);
+          });
+          unlock(origin);
           return;
         }
 
@@ -258,7 +350,9 @@
         }
       })
       .catch((error) => {
-        if (id === serial && error.name !== 'AbortError') offline(true);
+        if (id !== serial || error.name === 'AbortError') return;
+        offline(true);
+        if (locked) unlock(origin);
       })
       .finally(() => {
         if (id !== serial) return;
@@ -308,9 +402,50 @@
     if (isLive(event.target)) typed();
   });
 
+  // A file was chosen or dropped onto its field. It is sent at once, and the
+  // page is locked until the answer is there, as it is for a button.
+  const chosen = (input) => {
+    // The dialog was closed without a choice.
+    if (input.files.length === 0) return;
+
+    const problems = unfit(input);
+    if (problems.length > 0) {
+      input.value = '';
+      complain(input, problems);
+      return;
+    }
+
+    run(null, input);
+  };
+
   // Choices, tick boxes, dates and numbers rerun the page as soon as they change.
   body.addEventListener('change', (event) => {
-    if (!isText(event.target)) run(null);
+    if (isFile(event.target)) {
+      chosen(event.target);
+    } else if (!isText(event.target)) {
+      run(null);
+    }
+  });
+
+  // The page can change while a file dialog is open: the user typed into a field
+  // and went straight on to choose a file, and the answer to the typed text came
+  // in behind the dialog. The field that the dialog belongs to is then no longer
+  // on the page, and what is chosen in it would reach nobody. Its files are
+  // handed to the field that took its place.
+  const watched = new WeakSet();
+  body.addEventListener('click', (event) => {
+    const input = event.target;
+    if (!isFile(input) || watched.has(input)) return;
+    watched.add(input);
+
+    input.addEventListener('change', () => {
+      if (body.contains(input) || input.files.length === 0) return;
+      const heir = document.getElementById(input.id);
+      if (isFile(heir) && body.contains(heir)) {
+        heir.files = input.files;
+        chosen(heir);
+      }
+    });
   });
 
   // Text reruns the page when the user leaves the field (or presses Enter, which submits).
@@ -342,6 +477,35 @@
     pointerDown = false;
     settle();
   };
+
+  // A file that is dragged over the page: the fields that take one light up, and
+  // everywhere else the browser is told that nothing can be dropped. Without that,
+  // a file that misses its field is opened in place of the page, and what the
+  // user typed is gone.
+  const carriesFiles = (event) => Boolean(event.dataTransfer)
+    && Array.from(event.dataTransfer.types || []).includes('Files');
+  let dragTimer = 0;
+
+  window.addEventListener('dragover', (event) => {
+    if (!carriesFiles(event)) return;
+
+    // Nothing says reliably that a drag has left the window. It only stops saying
+    // that it is over the page.
+    root.classList.add('sui-dragging');
+    clearTimeout(dragTimer);
+    dragTimer = setTimeout(() => root.classList.remove('sui-dragging'), 500);
+
+    if (!isFile(event.target)) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'none';
+    }
+  });
+
+  window.addEventListener('drop', (event) => {
+    clearTimeout(dragTimer);
+    root.classList.remove('sui-dragging');
+    if (carriesFiles(event) && !isFile(event.target)) event.preventDefault();
+  });
 
   window.addEventListener('pointerdown', () => { pointerDown = true; }, true);
   window.addEventListener('pointerup', release, true);

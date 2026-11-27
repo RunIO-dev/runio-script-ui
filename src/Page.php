@@ -1121,8 +1121,9 @@ final class Page
 
             // The hidden field says which file the page shows. It is a handle, never a path.
             // When "Remove" is pressed the button goes away, and the focus moves to the field.
+            // The names are what the page script reads out after a change. See announce() there.
             $files .= '<li class="sui-file">'
-                . '<span class="sui-file-name" dir="auto">' . Text::e($file['name']) . '</span>'
+                . '<span class="sui-file-name" data-sui-status dir="auto">' . Text::e($file['name']) . '</span>'
                 . '<span class="sui-file-size">' . Text::e($texts->bytes($file['size'])) . '</span>'
                 . '<button type="submit" class="sui-link-btn" id="' . Text::e('b-' . $key . ':remove:' . $shown) . '" data-sui-return="' . Text::e($id) . '"'
                 . ' name="_click" value="' . Text::e($key . ':remove:' . $handle) . '" aria-label="' . Text::e($texts->get('file.remove_label', ['name' => $file['name']])) . '">'
@@ -1152,6 +1153,8 @@ final class Page
                 . Text::e($texts->get('file.too_large', ['name' => '{name}', 'size' => $size])) . '"')
             . ($field['multiple'] ? ' data-sui-room="' . max(0, $uploads->room() - $shown) . '" data-sui-too-many="'
                 . Text::e($texts->get('file.too_many', ['count' => $count])) . '"' : '')
+            // PHP throws a request away that is larger than this, form and files together.
+            . ($uploads->bodyLimit() === null ? '' : ' data-sui-total="' . $uploads->bodyLimit() . '"')
             // A server in front of PHP may take less than PHP does. Nobody here knows its limit.
             . ' data-sui-refused="' . Text::e($texts->get('error.too_large_text')) . '"'
             . ($described === '' ? '' : ' aria-describedby="' . Text::e($described) . '"')

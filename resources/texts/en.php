@@ -94,6 +94,6 @@ return [
     'error.expired_text' => 'Your session ended, or the form was not sent from this page. Open the page again and repeat what you did.',
     'error.expired_link' => 'Open the page again',
     'error.too_large' => 'Too large',
-    'error.too_large_text' => 'What was sent is larger than this server takes. Choose a smaller file.',
+    'error.too_large_text' => 'This is more than the server takes at once. Choose a smaller file, or fewer files.',
     'error.too_large_link' => 'Back to the page',
 ];

@@ -428,6 +428,91 @@ textarea.sui-input {
   font-size: 13px;
 }
 
+/* What is wrong with what a field holds. It stands right under the field. */
+.sui-field-error {
+  margin: 0;
+  color: var(--bad-ink);
+  font-size: 13px;
+}
+
+/* ----------------------------------------------------------------- files */
+
+/* The files a field holds: a name, a size and a way to take the file away. */
+.sui-files {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sui-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 4px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+/* A long name breaks into lines. It never pushes the button out of the page. */
+.sui-file-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sui-file-size {
+  flex: none;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Large enough for a finger. */
+.sui-file .sui-link-btn {
+  flex: none;
+  min-width: 24px;
+  min-height: 28px;
+}
+
+/* The whole field takes a file that is dropped onto it, so it looks like a place for one. */
+.sui-input-file {
+  padding: 9px 10px;
+  border-style: dashed;
+  color: var(--ink-2);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sui-input-file::file-selector-button {
+  margin-inline-end: 10px;
+  padding: 4px 12px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--control);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sui-input-file:hover::file-selector-button {
+  border-color: var(--ink-2);
+}
+
+/* While a file is dragged over the page, the fields that take one say so. */
+.sui-dragging .sui-input-file {
+  background: var(--wash);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
 .sui-check {
   display: inline-flex;
   align-items: center;

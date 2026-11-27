@@ -54,6 +54,9 @@ return [
     // Choices
     'choices.none' => 'Nichts zur Auswahl.',
 
+    // What is wrong with a field. Read out in front of the message, and not shown.
+    'field.error' => 'Fehler:',
+
     // Dateien
     'file.remove' => 'Entfernen',
     'file.remove_label' => '{name} entfernen',

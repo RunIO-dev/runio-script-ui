@@ -319,20 +319,36 @@
       note = document.createElement('p');
       note.id = 'e-' + key;
       note.className = 'sui-field-error';
-      note.setAttribute('role', 'alert');
       note.dir = 'auto';
       (document.getElementById('l-' + key) || input).after(note);
     }
+    // A note of the tool that stands here already may be one that is not read out.
+    note.setAttribute('role', 'alert');
 
     // File names are text. They never go into the page as markup.
     note.replaceChildren();
+    const word = input.getAttribute('data-sui-error');
+    if (word) {
+      // For somebody who does not see that the note is red. It is read out, and not shown.
+      const read = document.createElement('span');
+      read.className = 'sui-sr';
+      read.textContent = word;
+      note.append(read, ' ');
+    }
     problems.forEach((problem, index) => {
       if (index > 0) note.append(document.createElement('br'));
       note.append(problem);
     });
 
+    // What is wrong is read first, before what the field takes.
     const described = (input.getAttribute('aria-describedby') || '').split(' ').filter(Boolean);
-    if (!described.includes(note.id)) input.setAttribute('aria-describedby', described.concat(note.id).join(' '));
+    if (!described.includes(note.id)) input.setAttribute('aria-describedby', [note.id].concat(described).join(' '));
+
+    // The field looks, and says, what a field does that the server found wrong.
+    // The mark goes with the note, when the page is drawn again.
+    input.setAttribute('aria-invalid', 'true');
+    const frame = input.closest('.sui-field');
+    if (frame) frame.classList.add('sui-field-invalid');
 
     // This is news for the user, like the answer to a button. A page that runs
     // again by itself must not take it away unread.

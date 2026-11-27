@@ -94,7 +94,7 @@ test('a file that is too large is turned down before it is sent', async ({ page 
 
     await orders(page).setInputFiles(sized('big.csv', MB + 1));
 
-    await expect(complaint(page)).toHaveText('"big.csv" is larger than 1 MB.');
+    await expect(complaint(page)).toHaveText('Error: "big.csv" is larger than 1 MB.');
     await expect(complaint(page)).toHaveAttribute('role', 'alert');
     await expect(orders(page)).toHaveAttribute('aria-describedby', /(^| )e-orders-as-csv( |$)/);
     expect(sent, 'nothing was sent').toHaveLength(0);
@@ -111,7 +111,7 @@ test('the name of a file is shown as text, whatever it is', async ({ page }) => 
 
     await orders(page).setInputFiles(sized('<img src=x onerror=alert(1)>$&.csv', MB + 1));
 
-    await expect(complaint(page)).toHaveText('"<img src=x onerror=alert(1)>$&.csv" is larger than 1 MB.');
+    await expect(complaint(page)).toHaveText('Error: "<img src=x onerror=alert(1)>$&.csv" is larger than 1 MB.');
     await expect(complaint(page).locator('img')).toHaveCount(0);
 });
 
@@ -120,19 +120,19 @@ test('the server checks the size and the kind again', async ({ page }) => {
 
     // Dropped onto the field, a file gets past what the dialog offers.
     await orders(page).setInputFiles(file('notes.txt', 'hello'));
-    await expect(complaint(page)).toHaveText('"notes.txt" is not allowed here. Allowed: CSV.');
+    await expect(complaint(page)).toHaveText('Error: "notes.txt" is not allowed here. Allowed: CSV.');
     await expect(names(page)).toHaveCount(0);
 
     // More than the tool takes, less than PHP takes.
     await forgetLimits(orders(page));
     await orders(page).setInputFiles(sized('big.csv', MB + 1));
-    await expect(complaint(page)).toHaveText('"big.csv" is larger than 1 MB.');
+    await expect(complaint(page)).toHaveText('Error: "big.csv" is larger than 1 MB.');
     await expect(names(page)).toHaveCount(0);
 
     // More than PHP takes for one file.
     await forgetLimits(orders(page));
     await orders(page).setInputFiles(sized('bigger.csv', 2 * MB + 100 * KB));
-    await expect(complaint(page)).toHaveText('"bigger.csv" is larger than 1 MB.');
+    await expect(complaint(page)).toHaveText('Error: "bigger.csv" is larger than 1 MB.');
     await expect(names(page)).toHaveCount(0);
 });
 
@@ -144,7 +144,7 @@ test('a request that the server throws away is explained on the page', async ({ 
     // More than PHP takes for a whole request: it reads neither the form nor the file.
     await orders(page).setInputFiles(sized('huge.csv', 3 * MB + 100 * KB));
 
-    await expect(complaint(page)).toHaveText('This is more than the server takes at once. Choose a smaller file, or fewer files.');
+    await expect(complaint(page)).toHaveText('Error: This is more than the server takes at once. Choose a smaller file, or fewer files.');
     expect(await sameDocument(page), 'no page load').toBe(true);
     expect(await waiting(orders(page)), 'the file left the field, so the next request does not carry it again').toBe(0);
     await expect(orders(page)).toBeFocused();
@@ -167,7 +167,7 @@ test('a file that did not get through leaves its field and is not sent again lat
     await attachments(page).setInputFiles(file('a.txt', 'AAAA'));
 
     await expect(page.locator('#sui-offline')).toBeVisible();
-    await expect(complaint(page)).toHaveText('"a.txt" did not arrive. Please try again.');
+    await expect(complaint(page)).toHaveText('Error: "a.txt" did not arrive. Please try again.');
     expect(await waiting(attachments(page)), 'the file left the field').toBe(0);
     await expect(attachments(page), 'the page is open again, with the focus where it was').toBeFocused();
     await page.unroute('**/test-files');
@@ -261,17 +261,17 @@ test('more files than fit are turned down before they are sent', async ({ page }
     const sent = posts(page);
 
     await attachments(page).setInputFiles(Array.from({ length: 21 }, (unused, index) => file(`${index + 1}.txt`, 'x')));
-    await expect(complaint(page)).toHaveText('No more than 20 files fit here.');
+    await expect(complaint(page)).toHaveText('Error: No more than 20 files fit here.');
     expect(sent, 'nothing was sent').toHaveLength(0);
 
     // Files that are small enough one by one, and too much for one request together.
     await attachments(page).setInputFiles(Array.from({ length: 16 }, (unused, index) => sized(`${index + 1}.bin`, 199_000)));
-    await expect(complaint(page)).toHaveText('This is more than the server takes at once. Choose a smaller file, or fewer files.');
+    await expect(complaint(page)).toHaveText('Error: This is more than the server takes at once. Choose a smaller file, or fewer files.');
     expect(sent, 'nothing was sent').toHaveLength(0);
     expect(await waiting(attachments(page))).toBe(0);
 
     await attachments(page).setInputFiles([sized('fits.bin', 199_000), sized('too-large.bin', 200_001)]);
-    await expect(complaint(page)).toHaveText('"too-large.bin" is larger than 195.3 KB.');
+    await expect(complaint(page)).toHaveText('Error: "too-large.bin" is larger than 195.3 KB.');
     expect(sent, 'nothing was sent').toHaveLength(0);
 });
 
@@ -403,7 +403,7 @@ test('an Arabic page speaks Arabic about its files', async ({ page }) => {
     await expect(page.locator('#l-report')).toHaveText('المسموح: PDF. حتى 1.5 كيلوبايت.');
 
     await report.setInputFiles(sized('كبير.pdf', 2000));
-    await expect(complaint(page)).toHaveText('«كبير.pdf» أكبر من 1.5 كيلوبايت.');
+    await expect(complaint(page)).toHaveText('خطأ: «كبير.pdf» أكبر من 1.5 كيلوبايت.');
 
     await report.setInputFiles(sized('تقرير.pdf', 700));
     await expect(names(page)).toHaveText(['تقرير.pdf']);
@@ -517,7 +517,7 @@ test.describe('without JavaScript', () => {
         await orders(page).setInputFiles(sized('big.csv', MB + 1));
         await page.getByRole('button', { name: 'Update' }).click();
 
-        await expect(complaint(page)).toHaveText('"big.csv" is larger than 1 MB.');
+        await expect(complaint(page)).toHaveText('Error: "big.csv" is larger than 1 MB.');
         await expect(names(page)).toHaveCount(0);
     });
 

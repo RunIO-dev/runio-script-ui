@@ -342,6 +342,19 @@ final class LanguageTest extends ToolTestCase
         self::assertSame(['لا توجد صفوف.', 'لا توجد بيانات للرسم.'], $this->texts($response, '//p[contains(@class,"sui-empty")]'));
     }
 
+    public function testAGroupWithoutOptionsFollowsTheTitleFromWhereItIsSetToo(): void
+    {
+        // A group is drawn when the page is finished. Its words are still the ones
+        // that were known where the script called it.
+        $response = $this->get(function (): void {
+            radio('Plan', []);
+            title('الطلبات');
+            radio('العميل', []);
+        });
+
+        self::assertSame(['Nothing to choose from.', 'لا توجد خيارات.'], $this->texts($response, '//p[contains(@class,"sui-choices-none")]'));
+    }
+
     public function testAGroupWithoutOptionsSaysItInTheLanguage(): void
     {
         $arabic = $this->get(function (): void {

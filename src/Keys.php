@@ -16,8 +16,8 @@ namespace Runio\ScriptUi;
  * a button "b-" plus its key. The parts inside a table, a question, a file field
  * or a group of options get an id with a colon (f-orders:0, b-refund:yes,
  * b-report:remove:0, f-status:1c5b0a93), which no key can produce. The notes under
- * a file field are "l-" and "e-" plus its key, and the help text of a group of
- * options is "h-" plus its key.
+ * an input are named after its key as well: "e-" for what is wrong with it, "h-"
+ * for its help text, and "l-" for what a file field takes.
  *
  * The line that opens an expander is "x-" plus its key. A group of tabs is "t-"
  * plus its key, and its headers and parts are numbered behind a colon

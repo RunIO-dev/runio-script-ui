@@ -665,6 +665,9 @@ final class Kernel
                 'confirmed' => $action['confirmed'],
                 'inputs' => $page->values(),
                 'error' => $page->failure()?->getMessage(),
+                // What the page said is wrong with its inputs: the messages by the key of
+                // their field. A press that found something wrong has usually not done its work.
+                'field_errors' => $page->fieldErrors(),
                 // For a download: which file, and how large. No size means the file could not be made.
                 'download' => $action['file'] === null ? null : [
                     'file' => $action['file'],

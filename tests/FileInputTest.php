@@ -53,10 +53,21 @@ final class FileInputTest extends ToolTestCase
         return $this->texts($response, '//*[contains(@class,"sui-file-name")]');
     }
 
-    /** @return list<string> what a page says went wrong with a file */
+    /** @return list<string> what a page says went wrong with a file, as it is shown: without the word in front that is only read out */
     private function errors(Response $response): array
     {
-        return $this->texts($response, '//p[contains(@class,"sui-field-error")]');
+        $shown = [];
+        foreach ($this->xpath($response)->query('//p[contains(@class,"sui-field-error")]') ?: [] as $note) {
+            $text = '';
+            foreach ($note->childNodes as $child) {
+                if (!$child instanceof \DOMElement || $child->getAttribute('class') !== 'sui-sr') {
+                    $text .= $child->textContent;
+                }
+            }
+            $shown[] = trim($text);
+        }
+
+        return $shown;
     }
 
     private function limitNote(Response $response): string

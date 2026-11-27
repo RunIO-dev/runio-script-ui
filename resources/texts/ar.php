@@ -62,6 +62,9 @@ return [
     // Choices
     'choices.none' => 'لا توجد خيارات.',
 
+    // What is wrong with a field. Read out in front of the message, and not shown.
+    'field.error' => 'خطأ:',
+
     // الملفات
     'file.remove' => 'إزالة',
     'file.remove_label' => 'إزالة {name}',

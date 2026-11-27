@@ -32,6 +32,18 @@ final class Page
     /** Up to this many options of radio() or multiselect() stand in one column. More are laid out in several. */
     private const MANY_CHOICES = 8;
 
+    /** How many inputs a message names at most, when it lists what field_error() could have meant. */
+    private const NAMED_INPUTS = 10;
+
+    /**
+     * A note under a field is a sentence or two. A tool that repeats in it what
+     * the user typed must not fill the page and the log with a pasted file.
+     */
+    private const MAX_ERROR_LENGTH = 500;
+
+    /** How many things field_error() can say about one field. */
+    private const MAX_ERRORS = 10;
+
     /** A page runs again by itself after this many seconds at the least and at the most. Each time is a whole run. */
     private const MIN_REFRESH = 2;
     private const MAX_REFRESH = 86400;
@@ -81,8 +93,12 @@ final class Page
     /** refresh() was called: the page runs again by itself. */
     private bool $refreshes = false;
 
-    /** How deep the run is inside parts that can be out of sight: see part(). */
-    private int $parts = 0;
+    /**
+     * @var list<array{string, string, string}> the parts that can be out of sight and that the run is inside of
+     *      right now, the outermost first. Each as what the page keeps of it: "_open" or "_tab", its key, and
+     *      what is kept when this very part is in sight. See part().
+     */
+    private array $path = [];
 
     private ?\Throwable $failure = null;
 
@@ -97,6 +113,23 @@ final class Page
      *      name of the file) and the handles of the files they hold
      */
     private array $fileFields = [];
+
+    /**
+     * @var array<array-key,array{label: string, focus: bool, path: list<array{string, string, string}>, errors: list<string>}>
+     *      the inputs of this page by key, in the order they were drawn: the label, whether the keyboard
+     *      focus can go there, the parts around the input, and what field_error() said is wrong with it.
+     *      What a file field itself turned down is kept with the file field. See isWrong().
+     */
+    private array $fields = [];
+
+    /** The key of the field that takes the keyboard focus when the page is shown. See uncover(). */
+    private ?string $focused = null;
+
+    /** The key of the field whose note is read out when the page is shown. See uncover(). */
+    private ?string $spoken = null;
+
+    /** @var array<array-key,true> the groups of tabs in which a tab broke. That tab stays in view. */
+    private array $broke = [];
 
     /** @var list<\Closure():string> what is drawn when the page is finished, by the number of its place */
     private array $places = [];
@@ -259,7 +292,7 @@ final class Page
             $help,
             '<input class="sui-input" type="text" id="' . Text::e('f-' . $key) . '" name="' . Text::e($key) . '" value="' . Text::e($value) . '"'
             . ($placeholder === null ? '' : ' placeholder="' . Text::e($placeholder) . '"')
-            . ' dir="auto">',
+            . ' dir="auto"',
         ));
 
         return $value;
@@ -280,7 +313,8 @@ final class Page
             $help,
             '<textarea class="sui-input" id="' . Text::e('f-' . $key) . '" name="' . Text::e($key) . '" rows="' . max(1, min(40, $rows)) . '"'
             . ($placeholder === null ? '' : ' placeholder="' . Text::e($placeholder) . '"')
-            . ' dir="auto">' . "\n" . Text::e($value) . '</textarea>',
+            . ' dir="auto"',
+            "\n" . Text::e($value) . '</textarea>',
         ));
 
         return $value;
@@ -331,7 +365,7 @@ final class Page
             '<input class="sui-input sui-input-number" type="number" inputmode="decimal" id="' . Text::e('f-' . $key) . '" name="' . Text::e($key) . '" value="' . Text::e($wire) . '"'
             . ($min === null ? '' : ' min="' . Text::e(Text::exactNumber($min)) . '"')
             . ($max === null ? '' : ' max="' . Text::e(Text::exactNumber($max)) . '"')
-            . ' step="' . ($step === null ? 'any' : Text::e(Text::exactNumber($step))) . '" dir="ltr">',
+            . ' step="' . ($step === null ? 'any' : Text::e(Text::exactNumber($step))) . '" dir="ltr"',
         ));
 
         return $value;
@@ -354,22 +388,23 @@ final class Page
 
         if ($choices === []) {
             $this->values[$key] = null;
-            $this->add($this->field($key, $label, $help, '<select class="sui-input" id="' . $id . '" name="' . Text::e($key) . '" disabled></select>'));
+            // A list without options is switched off, and the keyboard does not get there.
+            $this->add($this->field($key, $label, $help, '<select class="sui-input" id="' . $id . '" name="' . Text::e($key) . '" disabled', '</select>', false));
 
             return null;
         }
 
         $chosen = $this->chosen($key, $choices, $default);
 
-        $html = '<select class="sui-input" id="' . $id . '" name="' . Text::e($key) . '" dir="auto">';
+        $options = '';
         foreach ($choices as $index => $choice) {
-            $html .= '<option value="' . Text::e($choice['wire']) . '"' . ($index === $chosen ? ' selected' : '') . '>'
+            $options .= '<option value="' . Text::e($choice['wire']) . '"' . ($index === $chosen ? ' selected' : '') . '>'
                 . Text::e($choice['label']) . '</option>';
         }
 
         $value = $choices[$chosen]['value'];
         $this->remember($key, $choices[$chosen]['wire'], $value);
-        $this->add($this->field($key, $label, $help, $html . '</select>'));
+        $this->add($this->field($key, $label, $help, '<select class="sui-input" id="' . $id . '" name="' . Text::e($key) . '" dir="auto"', $options . '</select>'));
 
         return $value;
     }
@@ -390,7 +425,7 @@ final class Page
 
         if ($choices === []) {
             $this->values[$key] = null;
-            $this->add($this->choicesHtml($key, $label, $help, $horizontal, 'radio', [], []));
+            $this->add($this->choiceGroup($key, $label, $help, $horizontal, 'radio', [], []));
 
             return null;
         }
@@ -398,7 +433,7 @@ final class Page
         $chosen = $this->chosen($key, $choices, $default);
         $value = $choices[$chosen]['value'];
         $this->remember($key, $choices[$chosen]['wire'], $value);
-        $this->add($this->choicesHtml($key, $label, $help, $horizontal, 'radio', $choices, [$chosen => true]));
+        $this->add($this->choiceGroup($key, $label, $help, $horizontal, 'radio', $choices, [$chosen => true]));
 
         return $value;
     }
@@ -430,7 +465,7 @@ final class Page
             // Nobody could tick anything, so nothing is remembered: when options
             // arrive, the field starts from its default.
             $this->values[$key] = [];
-            $this->add($this->choicesHtml($key, $label, $help, $horizontal, 'checkbox', [], []));
+            $this->add($this->choiceGroup($key, $label, $help, $horizontal, 'checkbox', [], []));
 
             return [];
         }
@@ -462,7 +497,7 @@ final class Page
             }
         }
 
-        $this->add($this->choicesHtml($key, $label, $help, $horizontal, 'checkbox', $choices, $ticked));
+        $this->add($this->choiceGroup($key, $label, $help, $horizontal, 'checkbox', $choices, $ticked));
 
         return $values;
     }
@@ -486,14 +521,15 @@ final class Page
         }
         $this->values[$key] = $value;
 
-        $this->add(
-            '<div class="sui-field sui-field-check"><label class="sui-check">'
-            . '<input type="checkbox" id="' . Text::e('f-' . $key) . '" name="' . Text::e($key) . '" value="1"' . ($value ? ' checked' : '') . '>'
+        $this->input($key, $label);
+        $this->add($this->later(fn (): string => '<div class="sui-field sui-field-check' . $this->wrongClass($key) . '"><label class="sui-check">'
+            . '<input type="checkbox" id="' . Text::e('f-' . $key) . '" name="' . Text::e($key) . '" value="1"' . ($value ? ' checked' : '')
+            . $this->controlState($key, $help === null ? [] : ['h-' . $key]) . '>'
             . '<span dir="auto">' . Text::e($label) . '</span></label>'
             . '<input type="hidden" name="_seen[]" value="' . Text::e($key) . '">'
-            . ($help === null ? '' : '<p class="sui-help" dir="auto">' . Text::e($help) . '</p>')
-            . '</div>',
-        );
+            . $this->errorNote($key)
+            . self::helpNote($key, $help)
+            . '</div>'));
 
         return $value;
     }
@@ -535,7 +571,7 @@ final class Page
             '<input class="sui-input sui-input-date" type="date" id="' . Text::e('f-' . $key) . '" name="' . Text::e($key) . '" value="' . Text::e($value ?? '') . '"'
             . ($min === null ? '' : ' min="' . $min . '"')
             . ($max === null ? '' : ' max="' . $max . '"')
-            . ' dir="ltr">',
+            . ' dir="ltr"',
         ));
 
         return $value;
@@ -667,6 +703,7 @@ final class Page
         };
 
         // The field is drawn when the page is finished. See fileFieldHtml().
+        $this->input($key, $label);
         $this->add($this->later(fn (): string => $this->fileFieldHtml($key)));
 
         $files = [];
@@ -890,7 +927,7 @@ final class Page
         $this->flushPrinted();
         $this->buffers[] = [];
         try {
-            $this->part($content);
+            $this->part($content, ['_open', $key, '1']);
             $failed = false;
         } catch (Stop $signal) {
             // rerun() or a download: the run ends, and it did not fail.
@@ -910,13 +947,17 @@ final class Page
             $open = $open || $failed || $this->clickedIn(array_slice($this->used, $claimed, null, true));
             $this->out['_open'][$key] = $open ? '1' : '0';
 
-            $this->add(
-                '<details class="sui-expander"' . ($open ? ' open' : '') . '>'
-                . '<summary id="' . Text::e('x-' . $key) . '" dir="auto">' . Text::e($label) . '</summary>'
-                . '<input type="hidden" name="' . Text::e('_open[' . $key . ']') . '" value="' . ($open ? '1' : '0') . '">'
-                . '<div class="sui-expander-body sui-flow">' . $inside . '</div>'
-                . '</details>',
-            );
+            // Drawn when the page is finished: a field inside may be found wrong
+            // further down, and then the box has to be open. See uncover().
+            $this->add($this->later(function () use ($key, $label, $inside): string {
+                $open = $this->out['_open'][$key] === '1';
+
+                return '<details class="sui-expander"' . ($open ? ' open' : '') . '>'
+                    . '<summary id="' . Text::e('x-' . $key) . '" dir="auto">' . Text::e($label) . '</summary>'
+                    . '<input type="hidden" name="' . Text::e('_open[' . $key . ']') . '" value="' . ($open ? '1' : '0') . '">'
+                    . '<div class="sui-expander-body sui-flow">' . $inside . '</div>'
+                    . '</details>';
+            }));
         }
     }
 
@@ -953,13 +994,14 @@ final class Page
                 $this->flushPrinted();
                 $this->buffers[] = [];
                 try {
-                    $this->part($content);
+                    $this->part($content, ['_tab', $key, $position . ':' . $slugs[$position]]);
                 } catch (Stop $signal) {
                     // rerun() or a download: the run ends, and nothing broke.
                     throw $signal;
                 } catch (\Throwable $error) {
-                    // The tab that broke is the one to look at.
+                    // The tab that broke is the one to look at, whatever else is wrong.
                     $open = $position;
+                    $this->broke[$key] = true;
 
                     throw $error;
                 } finally {
@@ -971,7 +1013,9 @@ final class Page
             // Also when a tab failed or ended the run: every header is there, and
             // what was drawn stays visible.
             $this->out['_tab'][$key] = $open . ':' . $slugs[$open];
-            $this->add($this->tabsHtml($key, $labels, $slugs, $panels, $open));
+            // Drawn when the page is finished, like an expander: the tab in view
+            // may still change. See uncover().
+            $this->add($this->later(fn (): string => $this->tabsHtml($key, $labels, $slugs, $panels, (int) explode(':', $this->out['_tab'][$key], 2)[0])));
         }
     }
 
@@ -1080,11 +1124,13 @@ final class Page
      * A page that ends inside something nobody sees would end for no reason that
      * anybody could find. rerun() and a download still end the run.
      *
-     * @param callable():mixed $content
+     * @param callable():mixed              $content
+     * @param array{string, string, string} $where   what the page keeps of the part: "_open" or "_tab", its key,
+     *                                               and what is kept when this part is the one in sight
      */
-    private function part(callable $content): void
+    private function part(callable $content, array $where): void
     {
-        $this->parts++;
+        $this->path[] = $where;
         try {
             $content();
         } catch (Stop $signal) {
@@ -1092,7 +1138,7 @@ final class Page
                 throw $signal;
             }
         } finally {
-            $this->parts--;
+            array_pop($this->path);
         }
     }
 
@@ -1133,7 +1179,7 @@ final class Page
         if ($this->refreshes) {
             throw new \LogicException('refresh() is called twice on this page. A page runs again at one rate.');
         }
-        if ($this->parts > 0) {
+        if ($this->path !== []) {
             // The page stops by itself when nobody was there. Behind a closed tab nobody
             // would see that it did, or find the button that starts it again.
             throw new \LogicException('refresh() is called inside expander() or tabs(). Its line says when the page stands still and holds the button that starts it again, so it must not be out of sight. Call it outside, near the top of the script.');
@@ -1157,6 +1203,151 @@ final class Page
             . ' data-sui-resume="' . Text::e($this->t('refresh.resume')) . '">' . Text::e($this->t('refresh.pause')) . '</button>'
             . '</p>',
         );
+    }
+
+    // ----------------------------------------------- what is wrong with a field
+
+    /**
+     * @param string $field   the label of an input that was drawn, or its key
+     * @param string $message what the user has to change
+     */
+    public function fieldError(string $field, string $message): void
+    {
+        // The message also goes to the log, which may be written as JSON.
+        $message = trim(mb_scrub($message, 'UTF-8'));
+        if ($message === '') {
+            throw new \InvalidArgumentException('field_error() needs a message that tells the user what to change.');
+        }
+
+        if (mb_strlen($message, 'UTF-8') > self::MAX_ERROR_LENGTH) {
+            $message = mb_substr($message, 0, self::MAX_ERROR_LENGTH - 1, 'UTF-8') . '…';
+        }
+
+        $key = $this->fieldNamed($field);
+        $said = $this->fields[$key]['errors'];
+        // A tool may check the same thing twice. It is said once.
+        if (count($said) < self::MAX_ERRORS && !in_array($message, $said, true)) {
+            $this->fields[$key]['errors'][] = $message;
+        }
+    }
+
+    /**
+     * Nothing was found wrong with a field in this run, so far: no field of the
+     * page shows a note that says what is wrong with it.
+     */
+    public function valid(): bool
+    {
+        foreach (array_keys($this->fields) as $key) {
+            if ($this->isWrong((string) $key)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * The key of the input that a script names: by its key, or by its label.
+     * Nothing is guessed. A name that is almost right would mark the wrong field
+     * one day.
+     */
+    private function fieldNamed(string $name): string
+    {
+        if (isset($this->fields[$name])) {
+            return $name;
+        }
+
+        $found = [];
+        foreach ($this->fields as $key => $field) {
+            if ($field['label'] === $name) {
+                $found[] = (string) $key;
+            }
+        }
+        if (count($found) === 1) {
+            return $found[0];
+        }
+        if ($found !== []) {
+            throw new \LogicException(sprintf(
+                'field_error(): %d inputs on this page are called "%s". Say which one by its key: "%s".',
+                count($found),
+                $name,
+                implode('" or "', $found),
+            ));
+        }
+
+        // A button, a table or a part of the page has that name, or that label.
+        foreach ([$name, Keys::slug($name)] as $taken) {
+            if (isset($this->used[$taken]) && !isset($this->fields[$taken])) {
+                throw new \LogicException(sprintf(
+                    'field_error(): "%s" is not an input. Only what the user fills in can be marked: a text, a number, a choice, '
+                    . 'a tick box, a date or a file. For a message that belongs to no field, use error().',
+                    $name,
+                ));
+            }
+        }
+
+        $labels = array_map(static fn (array $field): string => '"' . $field['label'] . '"', array_values($this->fields));
+        $more = count($labels) - self::NAMED_INPUTS;
+
+        throw new \LogicException(sprintf(
+            'field_error(): no input called "%s" was drawn before this call. An input can be marked once it is on the page, '
+            . 'in the same run: name it by its label or by its key, and call field_error() below it. %s',
+            $name,
+            match (true) {
+                $labels === [] => 'No input was drawn so far.',
+                $more > 0 => 'Drawn so far: ' . implode(', ', array_slice($labels, 0, self::NAMED_INPUTS)) . ' and ' . $more . ' more.',
+                default => 'Drawn so far: ' . implode(', ', $labels) . '.',
+            },
+        ));
+    }
+
+    /**
+     * A button was pressed, and something is wrong with a field: the user has to
+     * get to see it. Every expander around such a field is opened, and a group of
+     * tabs shows the tab with the first of them. The first wrong field of the
+     * page takes the keyboard focus, and its note is the one that is read out.
+     *
+     * Only after a pressed button. A tool may check its fields on every run, and
+     * a box that sprang open after every click on the page would be a nuisance.
+     */
+    private function uncover(): void
+    {
+        $this->focused = null;
+        $this->spoken = null;
+        if ($this->action === null) {
+            return;
+        }
+
+        $first = null;
+        // A group of tabs in which a tab broke is left as it is.
+        $turned = $this->broke;
+        foreach ($this->fields as $key => $field) {
+            $key = (string) $key;
+            if (!$this->isWrong($key)) {
+                continue;
+            }
+            $first ??= $key;
+            if ($this->focused === null && $field['focus']) {
+                $this->focused = $key;
+            }
+
+            foreach ($field['path'] as [$kept, $part, $inSight]) {
+                if ($kept === '_tab') {
+                    // A group of tabs has one tab in view: the first that holds something wrong.
+                    if (isset($turned[$part])) {
+                        continue;
+                    }
+                    $turned[$part] = true;
+                }
+                $this->out[$kept][$part] = $inSight;
+            }
+        }
+
+        // Every note read out at once would be noise, so one is: the note of the
+        // field with the focus. Software that reads the page says it there in
+        // any case, but some of it only after a pause. When no wrong field can
+        // take the focus, nothing leads to a note, and the first one speaks up.
+        $this->spoken = $this->focused ?? $first;
     }
 
     public function stop(): never
@@ -1289,6 +1480,26 @@ final class Page
         return array_map(static fn (mixed $value): mixed => $value instanceof \Closure ? $value() : $value, $this->values);
     }
 
+    /**
+     * What the page said is wrong with its inputs in this run, for the log: the
+     * messages by the key of their field, in the order of the page. They are what
+     * field_error() said, and what a file field said about a file it turned down.
+     *
+     * @return array<array-key,list<string>>
+     */
+    public function fieldErrors(): array
+    {
+        $found = [];
+        foreach (array_keys($this->fields) as $key) {
+            $said = $this->said((string) $key);
+            if ($said !== []) {
+                $found[$key] = $said;
+            }
+        }
+
+        return $found;
+    }
+
     /** Does the page have a field that takes files? Its form then has to be sent in another way. */
     public function hasFileField(): bool
     {
@@ -1322,6 +1533,10 @@ final class Page
      */
     public function state(): array
     {
+        // What a pressed button found wrong is in sight on the page that is sent,
+        // and the next page view starts from there.
+        $this->uncover();
+
         // After rerun() and after a download the inputs below that call were never
         // reached, so the checked values are incomplete. Keep what the form sent
         // instead. It is checked again when the next run reads it.
@@ -1405,6 +1620,9 @@ final class Page
             $html .= implode('', $buffer);
         }
 
+        // Now the script has said all it has to say about its fields.
+        $this->uncover();
+
         return $this->finished($html) . ($this->failure === null ? '' : $this->failureHtml($this->failure));
     }
 
@@ -1484,8 +1702,9 @@ final class Page
 
     /**
      * Keeps a place in the page for something that is drawn when the page is
-     * finished, and not where the script calls it. A file field is one: a tool
-     * typically forgets a file further down, and the field has to be empty then.
+     * finished, and not where the script calls it. A field is one: what is wrong
+     * with it the script finds out further down. A file field can be empty by
+     * then, and a box may have to be open.
      *
      * @param \Closure():string $draw
      *
@@ -1501,7 +1720,7 @@ final class Page
 
     /**
      * Fills the places that were kept. What is drawn there can hold places of its
-     * own.
+     * own: a box holds fields.
      *
      * The page is cut at the marks and put together again. A search with a
      * pattern has limits of its own, and it answers with nothing when a page is
@@ -1589,13 +1808,6 @@ final class Page
             . ' ' . ($size === '' ? '' : $texts->get('file.limit', ['size' => $size])),
         );
 
-        $messages = [];
-        foreach ($field['errors'] as [$error, $name]) {
-            $messages[] = $texts->get($error, ['name' => $name, 'size' => $size, 'types' => $kinds, 'count' => $count]);
-        }
-
-        $described = implode(' ', array_filter([$note === '' ? '' : 'l-' . $key, $messages === [] ? '' : 'e-' . $key]));
-
         // The page script reads the limits here and checks a file before it sends it.
         $input = '<input class="sui-input sui-input-file" type="file" id="' . Text::e($id) . '" name="' . Text::e($field['multiple'] ? $key . '[]' : $key) . '"'
             . ($field['multiple'] ? ' multiple' : '')
@@ -1610,16 +1822,42 @@ final class Page
             . ' data-sui-refused="' . Text::e($texts->get('error.too_large_text')) . '"'
             // The connection can break while a file is on its way.
             . ' data-sui-failed="' . Text::e($texts->get('file.failed', ['name' => '{name}'])) . '"'
-            . ($described === '' ? '' : ' aria-describedby="' . Text::e($described) . '"')
+            // The word that is read out in front of whatever the page script finds wrong.
+            . ' data-sui-error="' . Text::e($texts->get('field.error')) . '"'
+            // What the tool found wrong with the file is said in the same note as what the library found.
+            . $this->controlState($key, [$note === '' ? '' : 'l-' . $key, $field['help'] === null ? '' : 'h-' . $key])
             . '>';
 
-        return '<div class="sui-field sui-field-file"><label for="' . Text::e($id) . '" dir="auto">' . Text::e($field['label']) . '</label>'
+        return '<div class="sui-field sui-field-file' . $this->wrongClass($key) . '"><label for="' . Text::e($id) . '" dir="auto">' . Text::e($field['label']) . '</label>'
             . ($files === '' ? '' : '<ul class="sui-files">' . $files . '</ul>')
             . $input
             . ($note === '' ? '' : '<p class="sui-help sui-file-limit" id="' . Text::e('l-' . $key) . '" dir="auto">' . Text::e($note) . '</p>')
-            . ($messages === [] ? '' : '<p class="sui-field-error" id="' . Text::e('e-' . $key) . '" role="alert" dir="auto">' . Text::lines(implode("\n", $messages)) . '</p>')
-            . ($field['help'] === null ? '' : '<p class="sui-help" dir="auto">' . Text::e($field['help']) . '</p>')
+            . $this->errorNote($key)
+            . self::helpNote($key, $field['help'])
             . '</div>';
+    }
+
+    /**
+     * What a file field says about the files it turned down in this run, in the
+     * language of the page. Empty for any other field.
+     *
+     * @return list<string>
+     */
+    private function turnedDown(string $key): array
+    {
+        $field = $this->fileFields[$key] ?? null;
+        if ($field === null || $field['errors'] === []) {
+            return [];
+        }
+
+        $texts = $this->texts();
+        $with = [
+            'size' => $field['limit'] === null ? '' : $texts->bytes($field['limit']),
+            'types' => implode(', ', array_map('strtoupper', $field['endings'])),
+            'count' => $texts->number($this->uploads()->room()),
+        ];
+
+        return array_map(static fn (array $error): string => $texts->get($error[0], ['name' => $error[1]] + $with), $field['errors']);
     }
 
     private function claim(?string $key, string $label): string
@@ -1743,14 +1981,35 @@ final class Page
 
     /**
      * A group of options under one label: a radio button or a tick box for each.
+     * Like every field it is drawn when the page is finished.
      *
      * @param 'radio'|'checkbox'                                      $type
      * @param list<array{wire: string, value: mixed, label: string}> $choices
      * @param array<int,true>                                         $chosen  the places of the options that are chosen
      */
-    private function choicesHtml(string $key, string $label, ?string $help, bool $horizontal, string $type, array $choices, array $chosen): string
+    private function choiceGroup(string $key, string $label, ?string $help, bool $horizontal, string $type, array $choices, array $chosen): string
+    {
+        // Without options there is nothing the keyboard could go to.
+        $this->input($key, $label, $choices !== []);
+        // Built-in texts follow the title from where it is set, so this one is fetched here.
+        $none = $this->t('choices.none');
+
+        return $this->later(fn (): string => $this->choicesHtml($key, $label, $help, $horizontal, $type, $choices, $chosen, $none));
+    }
+
+    /**
+     * @param 'radio'|'checkbox'                                      $type
+     * @param list<array{wire: string, value: mixed, label: string}> $choices
+     * @param array<int,true>                                         $chosen
+     * @param string                                                  $none    what a group without options says
+     */
+    private function choicesHtml(string $key, string $label, ?string $help, bool $horizontal, string $type, array $choices, array $chosen, string $none): string
     {
         $name = Text::e($type === 'radio' ? $key : $key . '[]');
+        $wrong = $this->isWrong($key);
+        // The option that takes the keyboard focus for the group: the radio button
+        // that is chosen, which is where the Tab key stops, or the first tick box.
+        $focusAt = $type === 'radio' ? array_key_first($chosen) : 0;
         $layout = match (true) {
             $horizontal => ' sui-choices-row',
             count($choices) > self::MANY_CHOICES => ' sui-choices-many',
@@ -1770,18 +2029,24 @@ final class Page
             $ids[$id] = true;
 
             $items .= '<label class="sui-check"><input type="' . $type . '" id="' . Text::e($id) . '" name="' . $name . '" value="' . Text::e($choice['wire']) . '"'
-                . (isset($chosen[$index]) ? ' checked' : '') . '><span dir="auto">' . Text::e($choice['label']) . '</span></label>';
+                . (isset($chosen[$index]) ? ' checked' : '')
+                // A tick box may say of itself that it is wrong. A radio button may
+                // not, and neither may the group: for them the note says it.
+                . ($wrong && $type === 'checkbox' ? ' aria-invalid="true"' : '')
+                . ($index === $focusAt ? $this->focusMark($key) : '')
+                . '><span dir="auto">' . Text::e($choice['label']) . '</span></label>';
         }
 
-        return '<fieldset class="sui-field sui-field-choices' . ($layout === '' ? '' : ' sui-field-wide') . '" id="' . Text::e('f-' . $key) . '"'
-            . ($help === null ? '' : ' aria-describedby="' . Text::e('h-' . $key) . '"') . '>'
+        return '<fieldset class="sui-field sui-field-choices' . ($layout === '' ? '' : ' sui-field-wide') . $this->wrongClass($key) . '" id="' . Text::e('f-' . $key) . '"'
+            . self::describedBy($wrong ? 'e-' . $key : '', $help === null ? '' : 'h-' . $key) . '>'
             . '<legend dir="auto">' . Text::e($label) . '</legend>'
             . ($choices === []
-                ? '<p class="sui-help sui-choices-none" dir="auto">' . Text::e($this->t('choices.none')) . '</p>'
+                ? '<p class="sui-help sui-choices-none" dir="auto">' . Text::e($none) . '</p>'
                 : '<div class="sui-choices' . $layout . '">' . $items . '</div>')
             // See checkbox(). A group without options sends no marker: nobody could tick anything.
             . ($type === 'checkbox' && $choices !== [] ? '<input type="hidden" name="_seen[]" value="' . Text::e($key) . '">' : '')
-            . ($help === null ? '' : '<p class="sui-help" id="' . Text::e('h-' . $key) . '" dir="auto">' . Text::e($help) . '</p>')
+            . $this->errorNote($key)
+            . self::helpNote($key, $help)
             . '</fieldset>';
     }
 
@@ -1793,12 +2058,129 @@ final class Page
         }
     }
 
-    private function field(string $key, string $label, ?string $help, string $control): string
+    /**
+     * A field of the usual kind: a label, the control, and the notes under it. It
+     * is drawn when the page is finished, like everything that field_error() can
+     * mark: what is wrong with a field the script finds out further down.
+     *
+     * @param string $tag   the tag of the control, without the ">" that ends it. What the control says about
+     *                      itself goes in there: that it is wrong, and which notes describe it
+     * @param string $rest  what follows that ">": the options of a list and its end, or nothing
+     * @param bool   $focus whether the keyboard focus can go to the control
+     */
+    private function field(string $key, string $label, ?string $help, string $tag, string $rest = '', bool $focus = true): string
     {
-        return '<div class="sui-field"><label for="' . Text::e('f-' . $key) . '" dir="auto">' . Text::e($label) . '</label>'
-            . $control
-            . ($help === null ? '' : '<p class="sui-help" dir="auto">' . Text::e($help) . '</p>')
-            . '</div>';
+        $this->input($key, $label, $focus);
+
+        return $this->later(fn (): string => '<div class="sui-field' . $this->wrongClass($key) . '">'
+            . '<label for="' . Text::e('f-' . $key) . '" dir="auto">' . Text::e($label) . '</label>'
+            . $tag . $this->controlState($key, $help === null ? [] : ['h-' . $key]) . '>' . $rest
+            . $this->errorNote($key)
+            . self::helpNote($key, $help)
+            . '</div>');
+    }
+
+    /** Notes an input of the page, so that field_error() finds it. */
+    private function input(string $key, string $label, bool $focus = true): void
+    {
+        $this->fields[$key] = ['label' => $label, 'focus' => $focus, 'path' => $this->path, 'errors' => []];
+    }
+
+    /**
+     * Something is wrong with what a field holds: the tool said so with
+     * field_error(), or the library turned a file down. For the user that is no
+     * difference, so the page makes none: the same frame, the same note, and
+     * neither lets valid() pass.
+     */
+    private function isWrong(string $key): bool
+    {
+        return $this->fields[$key]['errors'] !== [] || ($this->fileFields[$key]['errors'] ?? []) !== [];
+    }
+
+    /**
+     * All that is wrong with what a field holds, as its note says it: first what
+     * the library found, then what the tool said.
+     *
+     * @return list<string>
+     */
+    private function said(string $key): array
+    {
+        return array_merge($this->turnedDown($key), $this->fields[$key]['errors']);
+    }
+
+    /** What the frame of a field is called while something is wrong with what the field holds. */
+    private function wrongClass(string $key): string
+    {
+        return $this->isWrong($key) ? ' sui-field-invalid' : '';
+    }
+
+    /**
+     * What a control says about itself: that what it holds is wrong, which notes
+     * under it describe it, and that it takes the keyboard focus.
+     *
+     * @param list<string> $notes the ids of the notes that are always there: the limits of a file field, a help text
+     */
+    private function controlState(string $key, array $notes = []): string
+    {
+        $wrong = $this->isWrong($key);
+
+        return ($wrong ? ' aria-invalid="true"' : '')
+            // What is wrong is read first.
+            . self::describedBy($wrong ? 'e-' . $key : '', ...$notes)
+            . $this->focusMark($key);
+    }
+
+    /** Names the notes that describe a control or a group. An empty name is a note that is not there. */
+    private static function describedBy(string ...$ids): string
+    {
+        $ids = array_filter($ids, static fn (string $id): bool => $id !== '');
+
+        return $ids === [] ? '' : ' aria-describedby="' . Text::e(implode(' ', $ids)) . '"';
+    }
+
+    /**
+     * Says that the keyboard focus goes here. The page script reads the mark and
+     * moves the focus. Without the script the browser follows "autofocus" when it
+     * loads the page. In content that is put into an open page it does not.
+     */
+    private function focusMark(string $key): string
+    {
+        if ($this->focused !== $key) {
+            return '';
+        }
+
+        return ($this->fragment ? '' : ' autofocus') . ' data-sui-focus';
+    }
+
+    /** What is wrong with what a field holds, right under the field. */
+    private function errorNote(string $key): string
+    {
+        $messages = $this->said($key);
+        if ($messages === []) {
+            return '';
+        }
+
+        // A file that was turned down was sent a moment ago, and after a pressed
+        // button the note is the answer to the press. That is news: a page that
+        // runs again by itself leaves it until the user has seen it. On any other
+        // run the user is busy with something else, and hears the note when they
+        // come back to the field.
+        $turnedDown = ($this->fileFields[$key]['errors'] ?? []) !== [];
+        $news = $turnedDown || $this->action !== null;
+        // Of the answers to a press one is read out by itself, see uncover(). A
+        // file that was turned down always is: it does not come back with the
+        // next press, and whoever misses the note never learns that it was not taken.
+        $spoken = $turnedDown || $this->spoken === $key;
+
+        return '<p class="sui-field-error" id="' . Text::e('e-' . $key) . '"' . ($spoken ? ' role="alert"' : '') . ($news ? ' data-sui-result' : '') . ' dir="auto">'
+            // For somebody who does not see that the note is red.
+            . '<span class="sui-sr">' . Text::e($this->t('field.error')) . '</span> '
+            . Text::lines(implode("\n", $messages)) . '</p>';
+    }
+
+    private static function helpNote(string $key, ?string $help): string
+    {
+        return $help === null ? '' : '<p class="sui-help" id="' . Text::e('h-' . $key) . '" dir="auto">' . Text::e($help) . '</p>';
     }
 
     /**

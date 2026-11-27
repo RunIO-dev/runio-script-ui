@@ -248,6 +248,58 @@ function file_input(
     return Runtime::page()->fileInput($label, $types, $multiple, $maxSize, $help, $key);
 }
 
+/**
+ * Says what is wrong with what an input holds, right under that input. The
+ * input is marked, and software that reads the page out says so too.
+ *
+ *     $amount = number('Amount');
+ *     $email = text('Customer email');
+ *
+ *     if (button('Refund')) {
+ *         if ($amount === null || $amount <= 0) {
+ *             field_error('Amount', 'Enter an amount above 0.');
+ *         }
+ *         if (!str_contains($email, '@')) {
+ *             field_error('Customer email', 'Enter an email address.');
+ *         }
+ *         if (valid()) {
+ *             // do the work
+ *         }
+ *     }
+ *
+ * Call it below the input, in the same run: the input has to be on the page
+ * already. After a pressed button the first input that is wrong gets the
+ * keyboard focus, and an expander or a tab that hides it comes into sight.
+ *
+ * Nothing is kept of a message. It is there in the run that says it: checked
+ * behind a button, it is gone with the next change on the page, and checked on
+ * every run, it stays until the input is right. It does not stop the script
+ * either: ask valid() before the work is done.
+ *
+ * @param string $field   the label of the input, exactly as it was written, or its key. Two inputs with
+ *                        the same label are told apart by their keys. A name that is the key of one
+ *                        input and the label of another means the one with that key
+ * @param string $message what the user has to change. It is shown as text, and cut after 500 characters.
+ *                        One input shows up to ten messages
+ */
+function field_error(string $field, string $message): void
+{
+    Runtime::page()->fieldError($field, $message);
+}
+
+/**
+ * True as long as nothing was found wrong with an input in this run: no input
+ * that was drawn so far shows a note that says what is wrong with it.
+ *
+ * Such a note comes from field_error(), or from file_input() when it turned a
+ * file down in this run: one that is too large, or of the wrong kind. That
+ * file did not arrive, and the user may believe that it is attached.
+ */
+function valid(): bool
+{
+    return Runtime::page()->valid();
+}
+
 // --------------------------------------------------------------------- data
 
 /**

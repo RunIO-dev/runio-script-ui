@@ -311,6 +311,18 @@ final class ExpanderTest extends ToolTestCase
         self::assertFalse($this->isOpen($at('GET', 'customers'), 'details'));
     }
 
+    public function testTheNameOfAFunctionIsNotTakenForAFunction(): void
+    {
+        $response = $this->get(function (): void {
+            expander('Server', 'phpinfo');
+        });
+
+        self::assertSame(500, $response->status);
+        self::assertStringNotContainsString('PHP Version', $response->body, 'phpinfo() did not run');
+        self::assertStringContainsString('A name in quotes is not run.', html_entity_decode($response->body));
+        self::assertSame(0, $this->hits($response, '//details[contains(@class,"sui-expander")]'), 'no box is drawn');
+    }
+
     public function testALinkCannotOpenIt(): void
     {
         // Like every field of the library itself: a link only fills in the fields of the tool.

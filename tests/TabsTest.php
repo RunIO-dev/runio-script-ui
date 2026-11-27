@@ -490,6 +490,46 @@ final class TabsTest extends ToolTestCase
         self::assertSame(0, $this->hits($response, '//*[@role="tablist"]'), 'it is said before anything is drawn');
     }
 
+    public function testTheNameOfAFunctionIsNotTakenForAFunction(): void
+    {
+        // "time" names a function, and PHP would call it. A text that reaches this
+        // place from a form or a database must never run because it names one.
+        $response = $this->get(function (): void {
+            tabs(['Today' => 'time']);
+        });
+
+        self::assertSame(500, $response->status);
+        self::assertStringContainsString('The tab "Today" has no function.', html_entity_decode($response->body));
+        self::assertStringContainsString('A name in quotes is not run.', html_entity_decode($response->body));
+        self::assertSame(0, $this->hits($response, '//*[@role="tablist"]'));
+    }
+
+    public function testAMethodAndAnObjectThatCanBeCalledAreFunctions(): void
+    {
+        $drawer = new class {
+            public function orders(): void
+            {
+                note('from a method');
+            }
+
+            public function __invoke(): void
+            {
+                note('from an object');
+            }
+        };
+
+        $response = $this->get(function () use ($drawer): void {
+            tabs([
+                'Method' => [$drawer, 'orders'],
+                'Object' => $drawer,
+                'Named' => $drawer->orders(...),
+            ]);
+        });
+
+        self::assertSame(200, $response->status);
+        self::assertSame(['from a method', 'from an object', 'from a method'], $this->texts($response, '//div[@role="tabpanel"]/p'));
+    }
+
     public function testNoTabOfAListWithAMistakeRuns(): void
     {
         $ran = 0;

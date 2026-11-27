@@ -233,6 +233,7 @@ tabs([
 
 - The page remembers what the user left open, also over a reload. A part that a run does not draw is forgotten, like an input, and starts the way the script says when it comes back.
 - `stop()` inside ends that part and not the page. `rerun()` and `download()` end the run as they do everywhere.
+- The content is a function: `fn () => ...`, a method, or `name(...)`. The name of a function in quotes is not run, for `columns()` too.
 - A part that fails is drawn open. So is an expander when a button inside it was pressed: its answer must not stay out of sight.
 - The label of a tab may change between runs, as in `'Orders (' . count($orders) . ')'`. The open tab is found again by its label, and by its place when the label changed.
 - An expander has a key like an input, made from its label. Tabs have no label of their own and are numbered like tables (`tabs`, `tabs-2`) unless you pass `key:`.

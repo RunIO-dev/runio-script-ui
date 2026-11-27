@@ -383,7 +383,10 @@ function csv(iterable $rows, ?array $columns = null, string $separator = ',', bo
 
 // ------------------------------------------------------------- flow, layout
 
-/** Puts things side by side. Each argument is a function that draws one column. */
+/**
+ * Puts things side by side. Each argument is a function that draws one column:
+ * fn () => ..., a method, or name(...). The name of a function in quotes is not run.
+ */
 function columns(callable ...$columns): void
 {
     Runtime::page()->columns(...$columns);
@@ -396,7 +399,8 @@ function columns(callable ...$columns): void
  * The content always runs, and the inputs inside keep working and keep their
  * values while the part is closed. Closed only means out of sight.
  *
- * @param callable():mixed $content draws what is inside
+ * @param callable():mixed $content draws what is inside: fn () => ..., a method, or name(...).
+ *                                  The name of a function in quotes is not run
  * @param bool             $open    how it starts. From then on it stays the way the user left it
  */
 function expander(string $label, callable $content, bool $open = false, ?string $key = null): void
@@ -414,7 +418,8 @@ function expander(string $label, callable $content, bool $open = false, ?string 
  * run of the tool. Work that takes long belongs behind a button.
  *
  * @param array<array-key,callable():mixed> $tabs the label of each tab and the function that draws it:
- *                                                ['Orders' => fn () => table($orders), 'Settings' => $settings]
+ *                                                ['Orders' => fn () => table($orders), 'Settings' => $settings].
+ *                                                The name of a function in quotes is not run
  */
 function tabs(array $tabs, ?string $key = null): void
 {

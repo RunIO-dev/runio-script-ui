@@ -32,6 +32,9 @@ final class Page
     /** Up to this many options of radio() or multiselect() stand in one column. More are laid out in several. */
     private const MANY_CHOICES = 8;
 
+    /** Said when a column, an expander or a tab got the name of a function where the function belongs. */
+    private const NOT_A_NAME = 'A name in quotes is not run. Pass the function itself: fn () => ..., or name(...).';
+
     /** What this tool saves in the session is filed under this. Usually the tool id. */
     public readonly string $stateKey;
 
@@ -810,6 +813,14 @@ final class Page
 
     public function columns(callable ...$columns): void
     {
+        foreach ($columns as $column) {
+            if (!self::isFunction($column)) {
+                throw new \InvalidArgumentException(
+                    'columns() takes a function for every column: columns(fn () => metric(...), fn () => chart(...)). ' . self::NOT_A_NAME,
+                );
+            }
+        }
+
         $cells = [];
 
         try {
@@ -840,6 +851,12 @@ final class Page
      */
     public function expander(string $label, callable $content, bool $open, ?string $key): void
     {
+        if (!self::isFunction($content)) {
+            throw new \InvalidArgumentException(
+                'expander() takes a function that draws what is inside: expander(\'Details\', fn () => json($row)). ' . self::NOT_A_NAME,
+            );
+        }
+
         $key = $this->claim($key, $label);
 
         // The browser opens and closes the box on its own, without a request. The
@@ -894,10 +911,11 @@ final class Page
     public function tabs(array $tabs, ?string $key): void
     {
         foreach ($tabs as $label => $content) {
-            if (!is_callable($content)) {
+            if (!self::isFunction($content)) {
                 throw new \InvalidArgumentException(sprintf(
-                    'tabs() takes a label and a function for every tab: [\'Orders\' => fn () => table($orders)]. The tab "%s" has no function.',
+                    'tabs() takes a label and a function for every tab: [\'Orders\' => fn () => table($orders)]. The tab "%s" has no function. %s',
                     (string) $label,
+                    self::NOT_A_NAME,
                 ));
             }
         }
@@ -1024,6 +1042,17 @@ final class Page
             . '<input type="hidden" name="' . Text::e('_tab[' . $key . ']') . '" value="' . Text::e($open . ':' . $slugs[$open]) . '">'
             . $bodies
             . '</div>';
+    }
+
+    /**
+     * Can this draw a part of the page? A function, a method or an object that can
+     * be called. Not the name of a function in quotes, although PHP would call
+     * that too: a text that reaches this place from a form or from a database must
+     * never be run because it happens to name a function.
+     */
+    private static function isFunction(mixed $content): bool
+    {
+        return !is_string($content) && is_callable($content);
     }
 
     /**

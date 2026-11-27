@@ -160,6 +160,18 @@ final class DisplayTest extends ToolTestCase
         self::assertSame(['a', 'b'], [$first, $second]);
     }
 
+    public function testAColumnIsDrawnByAFunctionAndNotByTheNameOfOne(): void
+    {
+        $response = $this->get(function (): void {
+            columns(static fn () => note('left'), 'phpinfo');
+        });
+
+        self::assertSame(500, $response->status);
+        self::assertStringNotContainsString('PHP Version', $response->body, 'phpinfo() did not run');
+        self::assertStringContainsString('A name in quotes is not run.', html_entity_decode($response->body));
+        self::assertSame(0, $this->hits($response, '//div[contains(@class,"sui-row")]'), 'it is said before a column is drawn');
+    }
+
     public function testStopEndsTheRunQuietly(): void
     {
         $response = $this->get(function (): void {

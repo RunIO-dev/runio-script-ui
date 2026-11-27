@@ -161,3 +161,7 @@ php vendor/bin/phpunit
 ```
 
 The suite runs every function through the same kernel a real request uses. It needs no web server.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

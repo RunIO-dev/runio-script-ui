@@ -4,11 +4,15 @@
 
 require_once __DIR__ . '/_shop.php';
 
-use function Runio\ScriptUi\{title, heading, note, radio, columns, expander, metric, chart, table};
+use function Runio\ScriptUi\{title, heading, note, radio, columns, expander, metric, chart, table, refresh};
 
 $shop = Shop::open();
 
 title('Sales dashboard');
+
+// The numbers change when somebody refunds an order in another window. The page keeps up
+// by itself, and leaves the user alone while they are in the middle of something.
+refresh(30);
 
 // Three options: all of them in view, and one click instead of two.
 $days = radio('Period', [7 => 'Last 7 days', 14 => 'Last 14 days', 30 => 'Last 30 days'], default: 14, horizontal: true);

@@ -48,6 +48,35 @@ test('the dashboard draws two charts and reacts to the period', async ({ page })
     await expect.poll(() => bars.count(), 'more days, more bars').toBeGreaterThan(twoWeeks);
 });
 
+test('the dashboard keeps itself up to date, with the period that was chosen', async ({ page }) => {
+    // The clock of the page stands still. Time passes when the test says so.
+    const start = new Date('2026-03-02T09:00:00Z');
+    await page.clock.install({ time: new Date(start.getTime() - 10_000) });
+    await page.clock.pauseAt(start);
+    await page.goto('/dashboard');
+    await markDocument(page);
+
+    const line = page.locator('.sui-refresh');
+    await expect(line).toContainText(/Updated \d\d:\d\d:\d\d/);
+    await expect(line.getByRole('button', { name: 'Pause' })).toBeVisible();
+
+    await page.getByRole('radio', { name: 'Last 30 days' }).check();
+    const bars = page.locator('.sui-bar');
+    await expect.poll(() => bars.count()).toBeGreaterThan(14);
+    const month = await bars.count();
+
+    // Half a minute later the page asks again by itself, for the same 30 days.
+    const asked = page.waitForRequest((request) => 'refresh' === request.headers()['x-script-ui']);
+    await page.clock.runFor(30_000);
+    const fields = new URLSearchParams((await asked).postData());
+    expect(fields.get('period')).toBe('30');
+    await (await (await asked).response()).finished();
+
+    await expect(page.getByRole('radio', { name: 'Last 30 days' })).toBeChecked();
+    await expect(bars).toHaveCount(month);
+    expect(await sameDocument(page)).toBe(true);
+});
+
 test('customers: the country filter takes several countries', async ({ page }) => {
     await page.goto('/customers');
     const all = await rows(page).count();

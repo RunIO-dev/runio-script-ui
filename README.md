@@ -74,7 +74,7 @@ The page works without JavaScript as a plain form. With JavaScript it updates in
 | Inputs | `text` `textarea` `number` `select` `radio` `multiselect` `checkbox` `date_input` `file_input` |
 | Data | `table` `chart` `metric` |
 | Actions | `button` `download` `csv` |
-| Layout and flow | `columns` `expander` `tabs` `stop` `rerun` |
+| Layout and flow | `columns` `expander` `tabs` `refresh` `stop` `rerun` |
 | Hosting | `serve` `configure` `user` `clean_uploads` |
 
 All of them are documented in [`src/functions.php`](src/functions.php). Import the ones you use, or give the namespace a short name:
@@ -242,6 +242,34 @@ tabs([
 - With the keyboard, the arrow keys go from header to header, and Home and End to the first and the last. Where the headers do not fit in one line, the line moves sideways and fades out at the end where it goes on.
 - Both work without JavaScript. The expander is the browser's own `<details>`, and a header is a button that sends the form.
 
+### Pages that stay up to date
+
+A dashboard or the state of a queue should show what is true now, not what was true when the page was opened.
+
+```php
+title('Queue');
+refresh(30);
+
+metric('Waiting', $queue->waiting());
+table($queue->jobs());
+```
+
+`refresh(30)` runs the script again 30 seconds after every answer, as long as somebody has the page open and in view. Where it is called, a small line says when the page was made, with a button that pauses it.
+
+**It never takes the page from under your hands.** A refresh waits while a text is half typed, while a question of a button waits for its answer, and for two seconds after the mouse or a key was last touched. It also waits while a list or a calendar is open or text is marked, for a minute at most. An answer that arrives in such a moment waits too. What a button said stays until you are back and had ten seconds to read it.
+
+**It is a run that nobody asked for.** A refresh presses no button, sends no file, writes nothing to the log and does not change the inputs that the page remembers. What a button showed is gone after the next refresh, as it is after any other run. So `refresh()` suits pages that show the same thing on every run.
+
+**It is a whole run all the same.** Whatever the script does on every run, it now does every 30 seconds with nobody at the page: counting a visit, marking a message as read, taking a job from a queue. Work of that kind belongs behind a button, as it always did.
+
+- Every refresh is a whole run of the script, so choose a rate that fits the work. The lowest is 2 seconds. The wait counts from the answer, so runs never pile up.
+- Call it near the top. A page that ends before it reaches the call, with `stop()` for example, stops refreshing. A run that fails does not end it, and neither does a server that is away for a while: the page tries again, and waits twice as long after every failure, up to five minutes.
+- Its line says "Paused" when the page stands still and holds the button that starts it again. So it has to be in sight: `refresh()` inside `expander()` or `tabs()` is an error.
+- A page that is out of sight, because another browser tab is in front, does not run. It catches up when it comes back into view.
+- A page that keeps asking keeps its session alive. So it stops by itself when nobody touched it for an hour, and says "Paused". `stopAfter:` sets another time in seconds, longer than the wait. `stopAfter: null` lets a screen on a wall run for ever.
+- The page script does that stopping, not the server. Your login check runs for a refresh as for any other request. If it logs people out after a time without a request, it should not count the requests that nobody asked for. They carry the header `X-Script-Ui: refresh`, which PHP shows as `$_SERVER['HTTP_X_SCRIPT_UI']`.
+- Without JavaScript nothing refreshes. The line then only says when the page was made.
+
 ### Links that fill in fields
 
 `/refund?customer-email=ava@example.com` opens the tool with that field filled in. For `multiselect()` a link names every ticked option, `/customers?country[]=DE&country[]=FR`, and one option needs no brackets. A link can only fill plain fields. It can never press a button or tick a row of a table. What a link filled in is not saved until the user changes or submits something.
@@ -304,6 +332,7 @@ Pages that are not a tool have no title to follow: the list of tools and pages s
 - **A strict Content-Security-Policy** on every page: no inline styles, no inline handlers, nothing from other sites, no framing.
 - **A download is a file, never a page.** It is sent with the order to save it, never as HTML or a script, and it may do nothing if it is opened in the browser after all. Its name is made safe, also when it contains something a user typed. In CSV that the library writes, formula cells are defused. Every download goes to the log with the name and the size of the file. When the log cannot be written (the `log` callback throws or returns false), the file is not sent.
 - **An uploaded file is out of reach.** It lies under a random name that says nothing about it, in a folder that only the PHP user reads. (That holds for the library's own folder on Linux and macOS. A folder you name with `uploads:` is as closed as you made it.) The page names it by a random handle that is not that name and only counts for the session, the tool and the field the file was uploaded to. No request can name a path, a file of another user or a file of another tool. The name the user gave is cleaned before it is shown or logged, and it is never used on the disk. The library does not serve uploads and does not run them.
+- **A page that refreshes changes nothing.** A run that the page starts by itself presses no button, takes no file and saves nothing, whatever its request says. It needs the token of the form like every other run.
 - **Selections come from your data.** `table()` returns rows from the array you passed in. The browser only says which rows are ticked, and a tick never moves to another row or another table. A row that the search of a table hides is not returned, and the search reads only the columns that are shown.
 - **A column you leave out stays out.** What a table puts into the page about a row, besides the cells it shows, is made with a secret that never leaves the session. Neither the id of a row nor a column you left out with `columns:` can be read from the page, or guessed by trying values against it.
 - **Files are found by listing the folder.** An address can never point outside it.
@@ -320,6 +349,7 @@ What stays your job: decide who may do what (`user()` tells you who is asking), 
 - A table gets all its rows from the script and searches, sorts and pages them itself, on every run. That is quick up to about twenty thousand rows: on a laptop a search took 0.1 seconds, and so did sorting by a text column. For more, filter in the database first.
 - `multiselect()` is a group of tick boxes. It has no search and no "select all", so it suits lists of up to a few dozen options. The ticks of one field are remembered between page views up to 8 KB of option values. Beyond that the next page view starts from the default again.
 - Every tab of `tabs()` runs on every run. There is no way yet to run only the open one, and a link cannot open a tab or an expander.
+- `refresh()` runs the whole script and swaps the whole content. There is no way yet to refresh one part of a page, and the server pushes nothing: the page asks. When something above the place you look at grows or shrinks, the page moves under your eyes.
 - Charts are bar and line charts with one axis and at most 8 series.
 - State lives in the PHP session. Two browser tabs of the same tool share saved inputs. A session remembers the inputs of the 50 tools that were used last.
 - A script that runs on its own (without `serve()`) is told apart by its file and its path. Tools that share both and differ only in the query string (`index.php?page=refund`) work, but they do not remember their inputs separately.

@@ -35,6 +35,19 @@
   let stepping = false;    // an arrow key is down: the change that follows comes from it, not from a click
   let kept = new WeakSet(); // what the user moved sideways and the last answer left in its place: see show()
 
+  // For pages that run again by themselves: see refresh() further down.
+  let refreshTimer = 0;     // the wait for the next run that the page starts by itself: see plan()
+  let refreshEvery = 0;     // seconds between two of them, as the page asks for; 0: it does not ask
+  let stopAfter = 0;        // seconds with nobody there after which they stop; 0: never
+  let paused = false;       // they stand still: the user said so, or nobody was there for that long
+  let missed = false;       // one was due while the page was out of sight
+  let failures = 0;         // runs in a row that failed: each one makes the wait longer
+  let unread = false;       // the page shows news that the user may not have seen: see hold()
+  let touched = Date.now(); // when the user last did something on the page
+  let seen = touched;       // when somebody was last there: a touch, or the page coming into view
+  let picking = false;      // a list of options or a calendar was opened, and nothing was chosen yet
+  let fresh = null;         // the answer to a run of the page's own that waits until the user rests
+
   const isText = (el) => el instanceof HTMLTextAreaElement
     || (el instanceof HTMLInputElement && /^(text|search|email|url|tel|password)$/.test(el.type));
   const isTyped = (el) => isText(el) || (el instanceof HTMLInputElement && el.type === 'number');
@@ -209,7 +222,7 @@
   // is left out, so that its line finds the open header when it comes into sight.
   const frames = () => Array.from(body.querySelectorAll('[data-sui-scroll]')).filter((frame) => frame.clientWidth > 0);
 
-  const show = ({ html, title, origin }) => {
+  const show = ({ html, title, origin, failed, own }) => {
     const keep = origin || place(document.activeElement);
     const moved = new Map();
     frames().forEach((frame) => moved.set(frame.getAttribute('data-sui-scroll'), frame.scrollLeft));
@@ -252,6 +265,12 @@
     });
     watchTabs();
 
+    // A list of options that was open is closed now, whatever became of it.
+    picking = false;
+    // First the line of refresh(): its button is only there once the line is dressed,
+    // and it may be the one that gets the focus back.
+    plan(failed, own);
+
     refocus(keep);
     announce();
   };
@@ -271,13 +290,14 @@
   };
 
   // What the form holds now. A file field in which nothing was chosen sends a
-  // file without a name, and that one is left out.
-  const collect = () => {
+  // file without a name, and that one is left out. A run of the page's own is
+  // bare of files altogether: nobody chose to send one.
+  const collect = (bare) => {
     const data = new FormData(form);
     let files = false;
     Array.from(data).forEach(([name, value]) => {
       if (typeof value === 'string') return;
-      if (value.name === '' && value.size === 0) {
+      if (bare || (value.name === '' && value.size === 0)) {
         data.delete(name);
       } else {
         files = true;
@@ -313,6 +333,11 @@
 
     const described = (input.getAttribute('aria-describedby') || '').split(' ').filter(Boolean);
     if (!described.includes(note.id)) input.setAttribute('aria-describedby', described.concat(note.id).join(' '));
+
+    // This is news for the user, like the answer to a button. A page that runs
+    // again by itself must not take it away unread.
+    note.setAttribute('data-sui-result', '');
+    hold();
   };
 
   // What is wrong with the files that were chosen, in the words the page brought
@@ -357,7 +382,160 @@
     if (from && body.contains(from)) from.focus({ preventScroll: true });
   };
 
-  const run = (submitter, chooser) => {
+  // Pages that run again by themselves: refresh()
+  //
+  // The page says in a line how often it wants to be run again. The waiting is
+  // done here. A run of the page's own is sent like any other. But nobody asked
+  // for it, so it never gets in the way: it does not start under the user's
+  // hands, and its answer is not put in under them either.
+  const QUIET = 2000;     // the user rested for this long before the page may change by itself (all four in milliseconds)
+  const AWAY = 60000;     // an open list or marked text that was left this long ago holds nothing back
+  const READ = 10000;     // news stays for at least this long once the user is back
+  const LONGEST = 300000; // failures make the wait longer, up to this
+
+  const isPicker = (el) => el instanceof HTMLSelectElement
+    || (el instanceof HTMLInputElement && /^(date|time|datetime-local|month|week|color)$/.test(el.type));
+
+  // Text of the page is marked, to be copied for example. A new page would undo that.
+  const marked = () => {
+    const selection = document.getSelection();
+    return Boolean(selection) && !selection.isCollapsed && body.contains(selection.anchorNode);
+  };
+
+  // Nothing of the user's is under way that a new page would take from them: no
+  // text half typed, no button or key held, no question that waits for its
+  // answer, no hand on the mouse. And no list open and no text marked, unless
+  // that was left behind a minute ago.
+  const calm = () => {
+    if (dirty || composing || pointerDown || body.querySelector('.sui-confirm')) return false;
+    const rested = Date.now() - touched;
+    return rested >= QUIET && (rested >= AWAY || (!picking && !marked()));
+  };
+
+  const two = (number) => String(number).padStart(2, '0');
+
+  // The line that refresh() draws: the time on the clock of the reader, whether
+  // the page still runs by itself, and the button that stops and starts that.
+  const dress = () => {
+    const line = body.querySelector('[data-sui-refresh]');
+    if (!line) return;
+
+    // The server wrote the time of its own clock.
+    const time = line.querySelector('time');
+    const made = new Date(time.dateTime);
+    if (!Number.isNaN(made.getTime())) {
+      time.textContent = [made.getHours(), made.getMinutes(), made.getSeconds()].map(two).join(':');
+    }
+
+    const word = line.querySelector('[role="status"]');
+    word.textContent = paused ? word.getAttribute('data-sui-text') : '';
+
+    const button = line.querySelector('button');
+    button.textContent = button.getAttribute(paused ? 'data-sui-resume' : 'data-sui-pause');
+    button.hidden = false;
+  };
+
+  // No run of the page's own is due any more: not after a wait, and not when
+  // the page comes into view. What happens next decides anew.
+  const halt = () => {
+    clearTimeout(refreshTimer);
+    missed = false;
+  };
+
+  // Starts the wait for the next run of the page's own. Every run that failed
+  // doubles it, up to five minutes. It is never shorter than the page asked for.
+  const wait = (least) => {
+    halt();
+    if (!refreshEvery || paused) return;
+    const rate = refreshEvery * 1000;
+    refreshTimer = setTimeout(tick, Math.max(rate, least, Math.min(rate * 2 ** failures, LONGEST)));
+  };
+
+  // The page shows news: what a button did, or that something went wrong. A run
+  // of the page's own would take it away. None starts before the user is back
+  // and had the time to read it: see touch().
+  const hold = () => {
+    halt();
+    fresh = null;
+    unread = true;
+  };
+
+  // Every answer says anew whether the page wants to be run again, and how
+  // often. An answer without the line of refresh() ends it. One that failed
+  // says nothing either way: the rate of before goes on, with longer waits.
+  const plan = (failed, own) => {
+    const line = body.querySelector('[data-sui-refresh]');
+    if (line) {
+      refreshEvery = Number(line.getAttribute('data-sui-refresh')) || 0;
+      stopAfter = Number(line.getAttribute('data-sui-stop-after')) || 0;
+    } else if (!failed) {
+      refreshEvery = 0;
+    }
+    failures = failed ? failures + 1 : 0;
+    dress();
+
+    // A run of the user that failed is news too. A run of the page's own that
+    // failed is simply tried again.
+    if ((failed && !own) || body.querySelector('[data-sui-result]')) {
+      hold();
+    } else {
+      unread = false;
+      wait(0);
+    }
+  };
+
+  // The wait is over.
+  const tick = () => {
+    clearTimeout(refreshTimer);
+    if (document.hidden) {
+      // Nobody sees the page. It catches up when it comes into view.
+      missed = true;
+      return;
+    }
+    if (stopAfter && Date.now() - seen >= stopAfter * 1000) {
+      // Nobody was there for that long. A page that goes on asking keeps its
+      // session alive and the server at work, so it stops, and says so.
+      paused = true;
+      dress();
+      return;
+    }
+    if (stop || !calm()) {
+      // Another run is on its way, or the user is in the middle of something.
+      refreshTimer = setTimeout(tick, 500);
+      return;
+    }
+    run(null, null, true);
+  };
+
+  // The answer to a run of the page's own waits until the user rests. It is
+  // never pushed in. A run of the user drops it: their answer is the newer one.
+  const later = () => {
+    setTimeout(() => {
+      if (!fresh) return;
+      if (!calm()) {
+        later();
+        return;
+      }
+      const page = fresh;
+      fresh = null;
+      show(page);
+    }, 250);
+  };
+
+  // The user did something on the page.
+  const touch = () => {
+    touched = Date.now();
+    seen = touched;
+    if (!unread) return;
+
+    // They are back. They get the time to read the news, then the page runs again.
+    unread = false;
+    body.querySelectorAll('[data-sui-result]').forEach((news) => news.removeAttribute('data-sui-result'));
+    wait(READ);
+  };
+
+  // own: the page starts this run by itself, to show what is new. See tick().
+  const run = (submitter, chooser, own = false) => {
     const action = Boolean(submitter && submitter.name);
 
     // A button is being handled, or a file is on its way. Do not start anything
@@ -374,9 +552,16 @@
     // This request carries how every part stands now, so nothing is left to report.
     clearTimeout(reportTimer);
     turned.clear();
+    // The waiting starts anew when the answer to this run is there. And an answer
+    // that still waits to be shown is an old one now.
+    halt();
+    fresh = null;
+    // Whoever starts a run is there, also when no mouse and no key was touched for
+    // it: software that reads the page to its user changes a field without either.
+    if (!own) seen = Date.now();
 
     // Files travel as they are. Without them the form goes the short way, as text.
-    const { data, files } = collect();
+    const { data, files } = collect(own);
     if (action) data.append(submitter.name, submitter.value);
 
     // While a button is being handled the page is locked. A change made now would
@@ -388,7 +573,11 @@
 
     acting = locked;
     dirty = false;
-    busy(true);
+    // Nobody waits for a run of the page's own, so the page does not look busy.
+    if (!own) busy(true);
+
+    let failed = false; // the server did not answer, or the tool broke
+    let drawn = false;  // the answer is a page: it is shown, or it waits to be
 
     fetch(address, {
       method: 'POST',
@@ -396,8 +585,10 @@
       credentials: 'same-origin',
       redirect: 'follow',
       signal: stop.signal,
-      // Ask for the content of the page only, without the frame around it.
-      headers: { 'X-Script-Ui': 'fragment' },
+      // Ask for the content of the page only, without the frame around it. The
+      // server is told when nobody asked for the run: it then presses no button
+      // and remembers nothing.
+      headers: { 'X-Script-Ui': own ? 'refresh' : 'fragment' },
     })
       .then((response) => {
         // A download button was pressed and the answer is the file, not the page.
@@ -408,6 +599,26 @@
       })
       .then(({ response, html, blob, file }) => {
         if (id !== serial) return;
+
+        // The tool marks its answers. Anything else comes from somewhere else: a
+        // page to log in on, or a server in front of the tool.
+        const fromTool = response.headers.get('X-Script-Ui-Fragment') === '1';
+        if (own && (paused || unread)) {
+          // While this run of the page's own was on its way, the user stopped the
+          // page from changing by itself, or the page got news for them. The
+          // answer is not shown. It still says that the server is there again.
+          if (fromTool) offline(false);
+          return;
+        }
+        if (own && !fromTool && response.status >= 500) {
+          // A server in front of the tool says that it is away, or that it has
+          // too much to do. Loaded anew, the page would be that message, with
+          // nothing on it that tries again. So this run failed, and the next
+          // one is tried later.
+          failed = true;
+          offline(true);
+          return;
+        }
 
         if (blob) {
           let name = 'download';
@@ -436,7 +647,7 @@
           return;
         }
 
-        if (response.headers.get('X-Script-Ui-Fragment') !== '1') {
+        if (!fromTool) {
           // Not the content of a tool: the session expired or access was taken away.
           // Load the page properly and let it say so.
           location.reload();
@@ -448,7 +659,8 @@
         try {
           title = decodeURIComponent(response.headers.get('X-Script-Ui-Title') || '');
         } catch (error) { /* keep the old title */ }
-        const page = { html, title, origin };
+        failed = response.status >= 500;
+        const page = { html, title, origin, failed, own };
         body.inert = false;
 
         // From now on the saved inputs are the truth, not what a link filled in.
@@ -463,7 +675,11 @@
         // locked, so there is no click and no character to lose. And an answer
         // that waits is dropped when a newer request starts: with it would go the
         // news that an action was done, or that a file is on the server.
-        if ((pointerDown || composing) && !locked) {
+        drawn = true;
+        if (own && !calm()) {
+          fresh = page;
+          later();
+        } else if ((pointerDown || composing) && !locked) {
           // Swapping the page under a pressed mouse button would lose the click.
           // Under a character that is being composed it would lose the character.
           waiting = { id, page };
@@ -481,6 +697,7 @@
       })
       .catch((error) => {
         if (id !== serial || error.name === 'AbortError') return;
+        failed = true;
         offline(true);
         // A server in front of PHP that finds a request too large often just closes
         // the connection. That looks the same from here.
@@ -496,6 +713,9 @@
         if (queued) {
           queued = false;
           run(null);
+        } else if (!drawn) {
+          // The page stayed as it was: a file was saved, or no answer came.
+          plan(failed, own);
         }
       });
   };
@@ -768,20 +988,59 @@
     if (carriesFiles(event) && !isFile(event.target)) event.preventDefault();
   });
 
-  window.addEventListener('pointerdown', () => {
+  window.addEventListener('pointerdown', (event) => {
     pointerDown = true;
     stepping = false;
+    // A list of options or a calendar opens under this press. Or the press is
+    // somewhere else, and closes one.
+    picking = isPicker(event.target);
+    touch();
   }, true);
   window.addEventListener('pointerup', release, true);
   window.addEventListener('pointercancel', release, true);
 
   window.addEventListener('keydown', (event) => {
     stepping = /^(Arrow|Page|Home$|End$)/.test(event.key || '');
+    // In a list or a calendar most keys open it or move in it. These three leave it.
+    if (isPicker(event.target)) picking = !/^(Escape|Enter|Tab)$/.test(event.key || '');
+    touch();
   }, true);
   window.addEventListener('keyup', () => { stepping = false; }, true);
   // A key that is down when the window loses the focus never comes up here.
   window.addEventListener('blur', () => { stepping = false; });
 
+  // A hand on the mouse or on its wheel is busy too. (A finger on the screen presses first.)
+  ['pointermove', 'wheel'].forEach((kind) => window.addEventListener(kind, touch, { capture: true, passive: true }));
+
+  // A page that nobody sees does not run. When it comes into view somebody is
+  // there again, and a run that was due in the meantime is made up for.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    seen = Date.now();
+    if (missed) {
+      missed = false;
+      tick();
+    }
+  });
+
+  // "Pause" lets the page stand still, with what is on it. "Resume" runs it at
+  // once, and from then on it runs by itself again.
+  body.addEventListener('click', (event) => {
+    const button = event.target instanceof Element ? event.target.closest('[data-sui-refresh] button') : null;
+    if (!button) return;
+
+    paused = !paused;
+    dress();
+    if (paused) {
+      halt();
+      fresh = null;
+    } else {
+      run(null);
+    }
+  });
+
   // The page as the server drew it: the header of an open tab may be out of sight.
   watchTabs();
+  // And it may ask to be run again.
+  plan(false, true);
 })();

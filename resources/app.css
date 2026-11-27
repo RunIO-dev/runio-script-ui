@@ -964,6 +964,33 @@ th[aria-sort="descending"] .sui-sort::after {
   color: var(--bad-ink);
 }
 
+/* The line of refresh(): when the page was made, and the button that stops it from running again by itself. */
+.sui-refresh {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sui-refresh-paused {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* The word is not there while the page runs. Its place stays in the page all the same: what is written into it later is read out. */
+.sui-refresh-paused:not(:empty),
+.sui-refresh-time {
+  margin-inline-end: 10px;
+}
+
+/* Large enough for a finger. */
+.sui-refresh .sui-link-btn {
+  min-width: 24px;
+  min-height: 28px;
+}
+
 /* A small button that reads like a link, next to a line of text. */
 .sui-link-btn {
   padding: 0;

@@ -9,7 +9,8 @@
   const form = document.getElementById('sui-form');
   const body = document.getElementById('sui-body');
   const status = document.getElementById('sui-status');
-  if (!form || !body || !window.fetch || !window.AbortController) {
+  // A browser that lacks one of these keeps the plain form.
+  if (!form || !body || !window.fetch || !window.AbortController || !window.ResizeObserver) {
     return;
   }
 
@@ -136,6 +137,36 @@
   // hidden field says, as for an expander.
   const tabGroups = () => body.querySelectorAll('.sui-tabs');
   const headersOf = (group) => Array.from(group.querySelectorAll(':scope > [role="tablist"] > [role="tab"]'));
+  const openIn = (group) => headersOf(group).find((header) => header.getAttribute('aria-selected') === 'true');
+
+  // The line of headers can be wider than the page. It says at which of its
+  // ends more headers stand out of sight, and the style sheet lets it fade out there.
+  const edges = (list) => {
+    const hidden = list.scrollWidth - list.clientWidth;
+    // On a page from right to left the line starts at the right and counts down from 0.
+    const moved = Math.abs(list.scrollLeft);
+    list.classList.toggle('sui-more-before', moved > 1);
+    list.classList.toggle('sui-more-after', moved < hidden - 1);
+  };
+
+  // A header is kept this far from an end where the line goes on. It stays clear
+  // of the fading, and a little of the header next to it shows that there is more.
+  const PEEK = 32;
+
+  // Moves the header into sight, without moving the page.
+  const reveal = (header) => {
+    if (!header) return;
+    const list = header.parentElement;
+    const line = list.getBoundingClientRect();
+    const own = header.getBoundingClientRect();
+    // At the first and the last header the browser stops where the line ends.
+    if (own.left < line.left + PEEK) {
+      list.scrollLeft -= line.left + PEEK - own.left;
+    } else if (own.right > line.right - PEEK) {
+      list.scrollLeft += own.right - line.right + PEEK;
+    }
+    edges(list);
+  };
 
   const putInView = (header) => {
     const group = header.closest('.sui-tabs');
@@ -147,6 +178,21 @@
     });
     const field = stateOf(group);
     if (field) field.value = header.getAttribute('data-sui-tab');
+    reveal(header);
+  };
+
+  // The room for a line of headers changes: the window does, or the part of the
+  // page that holds the line comes into sight. Then the open header is brought
+  // into sight again, and the line says anew at which ends it goes on.
+  const watcher = new ResizeObserver((lines) => {
+    lines.forEach((line) => reveal(openIn(line.target.parentElement)));
+  });
+
+  // Watches the lines that are on the page now, and lets go of the ones that
+  // were replaced. Each line is looked at once right away.
+  const watchTabs = () => {
+    watcher.disconnect();
+    body.querySelectorAll('.sui-tab-list').forEach((list) => watcher.observe(list));
   };
 
   const show = ({ html, title, origin }) => {
@@ -178,6 +224,7 @@
         : null;
       if (chosen) putInView(chosen);
     });
+    watchTabs();
 
     refocus(keep);
     announce();
@@ -598,6 +645,23 @@
     choose(next);
   });
 
+  // A header that the keyboard reaches is moved into sight like the open one.
+  // Never one that a mouse or a finger is pressing: it would move away from under
+  // the press, and the click would land next to it.
+  body.addEventListener('focusin', (event) => {
+    const header = headerAt(event.target);
+    let byKeyboard = false;
+    try {
+      byKeyboard = Boolean(header) && header.matches(':focus-visible');
+    } catch (error) { /* an old browser: it brings the header into sight in its own way */ }
+    if (byKeyboard) reveal(header);
+  });
+
+  // The user moved the line of headers. (The event does not bubble.)
+  body.addEventListener('scroll', (event) => {
+    if (event.target instanceof Element && event.target.classList.contains('sui-tab-list')) edges(event.target);
+  }, true);
+
   // The page can change while a file dialog is open: the user typed into a field
   // and went straight on to choose a file, and the answer to the typed text came
   // in behind the dialog. The field that the dialog belongs to is then no longer
@@ -691,4 +755,7 @@
   window.addEventListener('keyup', () => { stepping = false; }, true);
   // A key that is down when the window loses the focus never comes up here.
   window.addEventListener('blur', () => { stepping = false; });
+
+  // The page as the server drew it: the header of an open tab may be out of sight.
+  watchTabs();
 })();

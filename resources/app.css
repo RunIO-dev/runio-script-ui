@@ -632,11 +632,35 @@ fieldset.sui-field {
 
 /* The headers stand in one line. Where they do not fit, the line is moved sideways. */
 .sui-tab-list {
+  --toward: right;
+  --before: #000;
+  --after: #000;
   display: flex;
   gap: 2px;
   overflow-x: auto;
   box-shadow: inset 0 -1px 0 var(--hair);
   scrollbar-width: thin;
+}
+
+[dir="rtl"] .sui-tab-list {
+  --toward: left;
+}
+
+/*
+ * The page script says at which ends more headers stand out of sight. The line
+ * fades out there, so that it does not look as if it ended.
+ */
+.sui-tab-list.sui-more-before {
+  --before: transparent;
+}
+
+.sui-tab-list.sui-more-after {
+  --after: transparent;
+}
+
+.sui-tab-list.sui-more-before,
+.sui-tab-list.sui-more-after {
+  mask-image: linear-gradient(to var(--toward), var(--before), #000 28px, #000 calc(100% - 28px), var(--after));
 }
 
 /* Tall enough for a finger. */

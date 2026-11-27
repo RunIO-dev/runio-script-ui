@@ -570,7 +570,14 @@ final class Kernel
             }
 
             // The page script posts to the address of the form, like the form itself.
-            $this->store($states, $stateKey, $saved, (string) parse_url($selfUrl, PHP_URL_QUERY));
+            $route = (string) parse_url($selfUrl, PHP_URL_QUERY);
+
+            // A report must never cost the user their saved inputs. One that would
+            // make the whole more than a session keeps for a tool is dropped. The
+            // form still carries what it said, and the next run saves it.
+            if (strlen(serialize($saved + ['_route' => $route])) <= self::MAX_STATE_BYTES) {
+                $this->store($states, $stateKey, $saved, $route);
+            }
         }
 
         return new Response(204, '', self::headers());

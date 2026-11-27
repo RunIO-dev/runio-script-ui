@@ -20,6 +20,7 @@ use function Runio\ScriptUi\stop;
 use function Runio\ScriptUi\success;
 use function Runio\ScriptUi\table;
 use function Runio\ScriptUi\text;
+use function Runio\ScriptUi\textarea;
 
 /**
  * expander() puts a part of the page under a line that opens and closes it.
@@ -270,6 +271,34 @@ final class ExpanderTest extends ToolTestCase
         self::assertCount(500, $kept);
         self::assertSame('details', array_key_first($kept), 'what the last report named is kept first');
         self::assertTrue($this->isOpen($this->get($tool), 'details'));
+    }
+
+    public function testAReportThatDoesNotFitLeavesTheSavedInputsAlone(): void
+    {
+        // The saved inputs of this tool are close to all that a session keeps for a tool.
+        $tool = function (): void {
+            for ($n = 1; $n <= 31; $n++) {
+                textarea('Text ' . $n);
+            }
+            expander('Details', static fn () => note('inside'));
+        };
+        $long = [];
+        for ($n = 1; $n <= 31; $n++) {
+            $long['text-' . $n] = str_repeat('x', 8192);
+        }
+        $this->post($tool, $long);
+        $before = $this->session->get('state');
+        self::assertSame(8192, strlen(array_values($before)[0]['text-31'] ?? ''), 'the inputs were saved');
+
+        // A report that names as many boxes as a form may hold. Kept, the whole would be too much.
+        $made = [];
+        for ($n = 0; $n < 500; $n++) {
+            $made[str_repeat('k', 60) . $n] = '1';
+        }
+        $response = $this->post($tool, ['_open' => $made], ['X-Script-Ui' => 'layout']);
+
+        self::assertSame(204, $response->status);
+        self::assertSame($before, $this->session->get('state'), 'the report is dropped, and not the inputs');
     }
 
     public function testAReportIsNoRunToCompareTheNextFormWith(): void

@@ -51,6 +51,26 @@ final class Text
         return isset($match[1]) ? 'he' : 'ar';
     }
 
+    /**
+     * Writes a number so that reading it again gives the same number.
+     * PHP's own conversion keeps 14 digits, which changes 1234567890.123456.
+     */
+    public static function exactNumber(int|float $number): string
+    {
+        if (is_int($number) || !is_finite($number)) {
+            return (string) $number;
+        }
+
+        foreach ([15, 16, 17] as $digits) {
+            $text = sprintf('%.' . $digits . 'G', $number);
+            if ((float) $text === $number) {
+                return $text;
+            }
+        }
+
+        return (string) $number;
+    }
+
     /** Pretty JSON that can never fail: broken values are replaced, not thrown. */
     public static function json(mixed $value, bool $pretty = true): string
     {

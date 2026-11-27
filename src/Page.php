@@ -276,7 +276,7 @@ final class Page
             }
         }
 
-        $wire = $value === null ? '' : self::numberText($value);
+        $wire = $value === null ? '' : Text::exactNumber($value);
         $this->remember($key, $wire, $value);
 
         $this->add($this->field(
@@ -284,9 +284,9 @@ final class Page
             $label,
             $help,
             '<input class="sui-input sui-input-number" type="number" inputmode="decimal" id="' . Text::e('f-' . $key) . '" name="' . Text::e($key) . '" value="' . Text::e($wire) . '"'
-            . ($min === null ? '' : ' min="' . Text::e(self::numberText($min)) . '"')
-            . ($max === null ? '' : ' max="' . Text::e(self::numberText($max)) . '"')
-            . ' step="' . ($step === null ? 'any' : Text::e(self::numberText($step))) . '" dir="ltr">',
+            . ($min === null ? '' : ' min="' . Text::e(Text::exactNumber($min)) . '"')
+            . ($max === null ? '' : ' max="' . Text::e(Text::exactNumber($max)) . '"')
+            . ' step="' . ($step === null ? 'any' : Text::e(Text::exactNumber($step))) . '" dir="ltr">',
         ));
 
         return $value;
@@ -434,7 +434,7 @@ final class Page
         $records = [];
         foreach ($rows as $row) {
             $originals[] = $row;
-            $records[] = self::record($row);
+            $records[] = Rows::record($row);
         }
 
         if ($records === []) {
@@ -443,7 +443,7 @@ final class Page
             return [];
         }
 
-        $fields = self::tableColumns($records, $columns);
+        $fields = Rows::columns($records, $columns, 'table()');
         $sort = $this->tableSort($key, count($fields));
 
         $order = array_keys($records);
@@ -522,11 +522,11 @@ final class Page
 
         $records = [];
         foreach ($rows as $row) {
-            $records[] = self::record($row);
+            $records[] = Rows::record($row);
         }
 
         $series = [];
-        foreach (self::columnList((array) $y, self::columnNames($records), 'chart() needs column names for y.') as $column) {
+        foreach (Rows::chosen((array) $y, Rows::names($records), 'chart() needs column names for y.') as $column) {
             $series[$column['field']] = $column['label'];
         }
 
@@ -970,26 +970,6 @@ final class Page
         return null;
     }
 
-    /**
-     * Writes a number so that reading it again gives the same number.
-     * PHP's own conversion keeps 14 digits, which changes 1234567890.123456.
-     */
-    private static function numberText(int|float $number): string
-    {
-        if (is_int($number) || !is_finite($number)) {
-            return (string) $number;
-        }
-
-        foreach ([15, 16, 17] as $digits) {
-            $text = sprintf('%.' . $digits . 'G', $number);
-            if ((float) $text === $number) {
-                return $text;
-            }
-        }
-
-        return (string) $number;
-    }
-
     private static function dateArgument(string|\DateTimeInterface|null $date): ?string
     {
         if ($date === null) {
@@ -1047,100 +1027,6 @@ final class Page
         }
 
         return null;
-    }
-
-    /** @return array<array-key,mixed> */
-    private static function record(mixed $row): array
-    {
-        return match (true) {
-            is_array($row) => $row,
-            $row instanceof \JsonSerializable => (array) $row->jsonSerialize(),
-            $row instanceof \Traversable => iterator_to_array($row),
-            is_object($row) => get_object_vars($row),
-            default => ['value' => $row],
-        };
-    }
-
-    /**
-     * @param list<array<array-key,mixed>> $records
-     * @param array<array-key,mixed>|null  $columns
-     *
-     * @return list<array{field: array-key, label: string}>
-     */
-    private static function tableColumns(array $records, ?array $columns): array
-    {
-        $fields = [];
-
-        if ($columns === null) {
-            $seen = [];
-            foreach ($records as $record) {
-                foreach (array_keys($record) as $field) {
-                    if (!isset($seen[$field])) {
-                        $seen[$field] = true;
-                        $fields[] = ['field' => $field, 'label' => Text::humanise((string) $field)];
-                    }
-                }
-            }
-
-            return $fields;
-        }
-
-        $fields = self::columnList($columns, self::columnNames($records), 'table() needs column names as text.');
-
-        if ($fields === []) {
-            throw new \InvalidArgumentException('table() needs at least one column.');
-        }
-
-        return $fields;
-    }
-
-    /**
-     * Every column name that occurs in the rows.
-     *
-     * @param list<array<array-key,mixed>> $records
-     *
-     * @return array<array-key,true>
-     */
-    private static function columnNames(array $records): array
-    {
-        $names = [];
-        foreach ($records as $record) {
-            foreach ($record as $name => $value) {
-                $names[$name] = true;
-            }
-        }
-
-        return $names;
-    }
-
-    /**
-     * Reads a list of columns: ['id', 'total'] chooses columns, ['total' => 'Amount'] also renames one.
-     *
-     * PHP turns the key '2024' into the number 2024, and then it looks like a position
-     * in a list. The rows settle it: an entry with a number as key is "column => label"
-     * when that number is a column of the rows and the text is not.
-     *
-     * @param array<array-key,mixed> $list
-     * @param array<array-key,true>  $known the columns of the rows
-     *
-     * @return list<array{field: array-key, label: string}>
-     */
-    private static function columnList(array $list, array $known, string $complaint): array
-    {
-        $columns = [];
-
-        foreach ($list as $key => $value) {
-            if (!is_string($value) && !is_int($value)) {
-                throw new \InvalidArgumentException($complaint);
-            }
-
-            $renamed = is_string($key) || (isset($known[$key]) && !isset($known[$value]));
-            $columns[] = $renamed
-                ? ['field' => $key, 'label' => (string) $value]
-                : ['field' => $value, 'label' => Text::humanise((string) $value)];
-        }
-
-        return $columns;
     }
 
     /**

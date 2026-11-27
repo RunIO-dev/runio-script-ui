@@ -1,8 +1,11 @@
 # Script UI
 
+[![CI](https://github.com/RunIO-dev/runio-script-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/RunIO-dev/runio-script-ui/actions/workflows/ci.yml)
+[![Latest version](https://img.shields.io/packagist/v/runio/script-ui.svg)](https://packagist.org/packages/runio/script-ui)
+
 Turn one PHP script into an internal tool with a web page. You write no HTML, no JavaScript, no controller and no template.
 
-> This is a first version, built to try the idea.
+> This is a first version, built to try the idea. Until version 1.0 a new version may change how a function is called. The [changelog](CHANGELOG.md) says what changed.
 
 ```php
 <?php // tools/refund.php
@@ -38,11 +41,40 @@ composer require runio/script-ui
 
 It needs PHP 8.2 or newer with the `mbstring` and `session` extensions, and no other package.
 
-## Try the demo
+## Your first tool
 
-From a copy of this repository:
+Make a folder for your tools and put one file into it:
+
+```php
+<?php // tools/hello.php
+// Hello
+// My first tool.
+
+use function Runio\ScriptUi\{title, text, button, success};
+
+title('Hello');
+$name = text('Your name');
+
+if (button('Greet') && $name !== '') {
+    success('Hello, ' . $name . '.');
+}
+```
+
+Serve the folder, and open <http://localhost:8765>:
 
 ```bash
+php vendor/bin/script-ui serve tools
+```
+
+The first comment of a file is the name of the tool in the list, and the comment lines after it describe it. This server is the one that comes with PHP, and it answers to your own computer only. For a real server see [Use it in your application](#use-it-in-your-application).
+
+## Try the demo
+
+The demo is not part of the Composer package. It runs from a copy of this repository:
+
+```bash
+git clone https://github.com/RunIO-dev/runio-script-ui.git
+cd runio-script-ui
 composer install
 php bin/script-ui serve examples/tools
 ```

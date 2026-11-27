@@ -16,6 +16,7 @@ use function Runio\ScriptUi\checkbox;
 use function Runio\ScriptUi\columns;
 use function Runio\ScriptUi\file_input;
 use function Runio\ScriptUi\rerun;
+use function Runio\ScriptUi\stop;
 use function Runio\ScriptUi\success;
 use function Runio\ScriptUi\table;
 use function Runio\ScriptUi\text;
@@ -614,6 +615,65 @@ final class FileInputTest extends ToolTestCase
         $show = true;
         $this->get($tool);
         self::assertNull($file);
+    }
+
+    public function testARunThatEndsAboveTheFieldGivesItsFileUpToo(): void
+    {
+        // A field that is not drawn loses what it held, as every input does. A run that
+        // ends above the field does not draw it, whichever way it ends.
+        $ways = [
+            'an early return' => function () use (&$file): void {
+                if (text('Customer') === '') {
+                    return;
+                }
+                $file = file_input('Report');
+            },
+            'stop()' => function () use (&$file): void {
+                if (text('Customer') === '') {
+                    stop();
+                }
+                $file = file_input('Report');
+            },
+        ];
+
+        foreach ($ways as $way => $tool) {
+            $this->session = new ArraySession();
+            $open = $this->post($tool, ['customer' => 'ava']);
+            $uploaded = $this->post($tool, $this->form($open), files: ['report' => $this->arrived('orders.csv', self::CSV)]);
+            self::assertSame('orders.csv', $file?->name, $way);
+            self::assertCount(1, $this->stored(), $way);
+
+            // The user empties the field above. The page no longer has a place for the file.
+            $closed = $this->post($tool, ['customer' => ''] + $this->form($uploaded));
+            self::assertSame([], $this->shown($closed), $way);
+            self::assertSame([], $this->stored(), $way);
+
+            // The field comes back empty, and nothing is called gone.
+            $file = 'not asked yet';
+            $again = $this->post($tool, ['customer' => 'ava'] + $this->form($closed));
+            self::assertNull($file, $way);
+            self::assertSame([], $this->errors($again), $way);
+        }
+    }
+
+    public function testAForgottenFileIsGoneAtOnceWhateverHappensLaterInTheRun(): void
+    {
+        // forget() means "done with it". What was done with the file, an import for example,
+        // has happened by then, so the file does not come back when the run fails afterwards.
+        $tool = function (): void {
+            $file = file_input('Report');
+            if ($file !== null && button('Import')) {
+                $file->forget();
+
+                throw new \RuntimeException('something else went wrong');
+            }
+        };
+        $uploaded = $this->post($tool, files: ['report' => $this->arrived('orders.csv', self::CSV)]);
+
+        $failed = $this->post($tool, ['_click' => 'import'] + $this->form($uploaded));
+
+        self::assertSame(500, $failed->status);
+        self::assertSame([], $this->stored());
     }
 
     public function testARunThatFailsDeletesNothing(): void

@@ -33,8 +33,8 @@ final class Uploads
 
     private const HANDLE = '/^[0-9a-f]{32}$/D';
 
-    /** Files that are older than a day are looked for once in every request. */
-    private bool $expired = false;
+    /** Files that are older than a day are looked for once in every request. This says that it was done. */
+    private bool $checked = false;
 
     /**
      * @var array<string,array{file: string, bytes: int, sha256: string}>
@@ -362,11 +362,11 @@ final class Uploads
     {
         $saved = $this->session->get('uploads');
         $saved = is_array($saved) ? $saved : [];
-        if ($this->expired) {
+        if ($this->checked) {
             /** @var array<string,array<string,array{field: string, stored: string, name: string, size: int, at: int, sha256?: string}>> $saved */
             return $saved;
         }
-        $this->expired = true;
+        $this->checked = true;
 
         $all = [];
         $changed = false;

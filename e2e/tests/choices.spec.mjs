@@ -122,6 +122,56 @@ test('the page only waits after a key: a click is sent at once', async ({ page }
     await page.keyboard.up('ArrowDown');
 });
 
+test('a key that never comes up does not leave the page waiting', async ({ page }) => {
+    await page.clock.install();
+    await page.goto('/test-choices');
+    await page.clock.pauseAt(Date.now() + 60_000);
+    const sent = posts(page);
+
+    // The window loses the focus while an arrow key is down. The page never hears the key come up.
+    await radio(page, 'Free').focus();
+    await page.keyboard.down('ArrowDown');
+    await expect(radio(page, 'Team')).toBeChecked();
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+
+    await radio(page, 'Business').evaluate((option) => option.click());
+    await expect.poll(() => sent.length, 'the click is sent without a pause').toBe(1);
+    await expect(note(page)).toContainText('Plan: business.');
+    await page.keyboard.up('ArrowDown');
+});
+
+test('a run that waited behind a dropped answer is not sent on its own', async ({ page }) => {
+    await page.clock.install();
+    await page.goto('/test-choices');
+    await page.clock.pauseAt(Date.now() + 60_000);
+    // Every answer takes a second: long enough for everything below to happen on the way.
+    await page.route('**/test-choices', async (route) => {
+        if ('POST' === route.request().method()) await new Promise((resolve) => { setTimeout(resolve, 1000); });
+        await route.continue();
+    });
+    const sent = posts(page);
+    const search = page.locator('input[type="search"]');
+
+    // A run is on its way, and the search of the table queues up behind it.
+    await radio(page, 'Team').click();
+    await search.fill('Mar');
+    await page.clock.runFor(300);
+
+    // Leaving the search box sends what was typed. The queued run is still wanted after that one.
+    await radio(page, 'Team').focus();
+    await expect.poll(() => sent.length).toBe(2);
+
+    // An arrow key drops the answer that is on its way. Nothing is sent until the user pauses.
+    await page.keyboard.press('ArrowDown');
+    await page.waitForTimeout(300);
+    expect(sent.length, 'the queued run does not go out on its own').toBe(2);
+
+    await page.clock.runFor(250);
+    await expect.poll(() => sent.length).toBe(3);
+    await expect(note(page)).toContainText('Plan: business.');
+    await expect(search, 'and the run that is sent carries everything').toHaveValue('Mar');
+});
+
 test('ticked boxes come back as a list, in the order of the options', async ({ page }) => {
     await page.goto('/test-choices');
     await markDocument(page);

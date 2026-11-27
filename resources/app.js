@@ -412,7 +412,14 @@
   // too. The answer that is on its way belongs to an option the user has left.
   // It is dropped: shown, it would put that option back under their fingers.
   const stepped = () => {
-    if (stop && !acting) stop.abort();
+    // Never the answer to a button or to an upload: the page is locked while one
+    // of those is on its way, and their answers are shown at once and never held.
+    if (stop && !acting) {
+      // The run that waits below sends the whole form. A run that was queued
+      // behind the dropped one has nothing left to bring.
+      queued = false;
+      stop.abort();
+    }
     waiting = null;
     soon(250);
   };
@@ -551,4 +558,6 @@
     stepping = /^(Arrow|Page|Home$|End$)/.test(event.key || '');
   }, true);
   window.addEventListener('keyup', () => { stepping = false; }, true);
+  // A key that is down when the window loses the focus never comes up here.
+  window.addEventListener('blur', () => { stepping = false; });
 })();

@@ -32,6 +32,7 @@ note(sprintf(
 table(
     array_map(static fn (int $n): array => ['id' => $n, 'plan' => $plan, 'month' => $months[$n % 12]], range(1, 30)),
     pageSize: 10,
+    search: true,
 );
 
 if (button('Save')) {

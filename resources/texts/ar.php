@@ -53,6 +53,9 @@ return [
     'number.thousands' => ',',
     'number.decimal' => '.',
 
+    // Choices
+    'choices.none' => 'لا توجد خيارات.',
+
     // الملفات
     'file.remove' => 'إزالة',
     'file.remove_label' => 'إزالة {name}',

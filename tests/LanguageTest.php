@@ -14,7 +14,9 @@ use Runio\ScriptUi\ToolFinder;
 
 use function Runio\ScriptUi\button;
 use function Runio\ScriptUi\chart;
+use function Runio\ScriptUi\multiselect;
 use function Runio\ScriptUi\note;
+use function Runio\ScriptUi\radio;
 use function Runio\ScriptUi\table;
 use function Runio\ScriptUi\title;
 
@@ -338,6 +340,21 @@ final class LanguageTest extends ToolTestCase
         });
 
         self::assertSame(['لا توجد صفوف.', 'لا توجد بيانات للرسم.'], $this->texts($response, '//p[contains(@class,"sui-empty")]'));
+    }
+
+    public function testAGroupWithoutOptionsSaysItInTheLanguage(): void
+    {
+        $arabic = $this->get(function (): void {
+            title('الطلبات');
+            radio('العميل', []);
+        });
+        self::assertSame(['لا توجد خيارات.'], $this->texts($arabic, '//p[contains(@class,"sui-choices-none")]'));
+
+        $this->config = new Config(auth: static fn (): string => 'tester', debug: true, language: 'de');
+        $german = $this->get(function (): void {
+            multiselect('Kunden', []);
+        });
+        self::assertSame(['Nichts zur Auswahl.'], $this->texts($german, '//p[contains(@class,"sui-choices-none")]'));
     }
 
     public function testAChartIsDescribedInTheLanguage(): void

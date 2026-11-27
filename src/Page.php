@@ -29,6 +29,9 @@ final class Page
 
     private const CALLOUTS = ['success', 'info', 'warning', 'error'];
 
+    /** Up to this many options of radio() or multiselect() stand in one column. More are laid out in several. */
+    private const MANY_CHOICES = 8;
+
     /** What this tool saves in the session is filed under this. Usually the tool id. */
     public readonly string $stateKey;
 
@@ -324,17 +327,11 @@ final class Page
     {
         $key = $this->claim($key, $label);
         $isList = $byKey === null ? array_is_list($options) : !$byKey;
-        $choices = self::choices($options, $isList);
+        $choices = self::choices($options, $isList, 'select');
         $id = Text::e('f-' . $key);
 
-        if ($byKey === null && $isList && is_int($default) && array_key_exists($default, $options) && self::choose($choices, (string) $default) === null) {
-            // Quietly returning a text where the script expects 0 or 1 would end up in a database.
-            throw new \LogicException(sprintf(
-                'select(): the default %d is not one of the options of "%s". PHP cannot tell [0 => \'No\', 1 => \'Yes\'] '
-                . 'from the list [\'No\', \'Yes\'], so the texts were taken as the values. If the keys are the values, add byKey: true.',
-                $default,
-                $label,
-            ));
+        if ($byKey === null && $isList) {
+            self::assertNoPosition('select', $label, $options, $choices, $default);
         }
 
         if ($choices === []) {
@@ -344,16 +341,7 @@ final class Page
             return null;
         }
 
-        // The browser sends back the text of a value. It only counts if it is one of the options.
-        $chosen = null;
-        $raw = $this->submitted($key);
-        if ($raw !== null) {
-            $chosen = self::choose($choices, $raw);
-        }
-        if ($chosen === null && (is_string($default) || is_int($default) || is_float($default))) {
-            $chosen = self::choose($choices, (string) $default);
-        }
-        $chosen ??= 0;
+        $chosen = $this->chosen($key, $choices, $default);
 
         $html = '<select class="sui-input" id="' . $id . '" name="' . Text::e($key) . '" dir="auto">';
         foreach ($choices as $index => $choice) {
@@ -366,6 +354,97 @@ final class Page
         $this->add($this->field($key, $label, $help, $html . '</select>'));
 
         return $value;
+    }
+
+    /**
+     * @param array<array-key,mixed> $options a list of values, or value => label
+     * @param bool|null              $byKey   see select()
+     */
+    public function radio(string $label, array $options, mixed $default, bool $horizontal, ?string $help, ?string $key, ?bool $byKey): mixed
+    {
+        $key = $this->claim($key, $label);
+        $isList = $byKey === null ? array_is_list($options) : !$byKey;
+        $choices = self::choices($options, $isList, 'radio');
+
+        if ($byKey === null && $isList) {
+            self::assertNoPosition('radio', $label, $options, $choices, $default);
+        }
+
+        if ($choices === []) {
+            $this->values[$key] = null;
+            $this->add($this->choicesHtml($key, $label, $help, $horizontal, 'radio', [], []));
+
+            return null;
+        }
+
+        $chosen = $this->chosen($key, $choices, $default);
+        $value = $choices[$chosen]['value'];
+        $this->remember($key, $choices[$chosen]['wire'], $value);
+        $this->add($this->choicesHtml($key, $label, $help, $horizontal, 'radio', $choices, [$chosen => true]));
+
+        return $value;
+    }
+
+    /**
+     * @param array<array-key,mixed> $options a list of values, or value => label
+     * @param array<array-key,mixed> $default the options that are ticked until the user says otherwise
+     * @param bool|null              $byKey   see select()
+     *
+     * @return list<mixed> the ticked options, in the order of the options
+     */
+    public function multiselect(string $label, array $options, array $default, bool $horizontal, ?string $help, ?string $key, ?bool $byKey): array
+    {
+        $key = $this->claim($key, $label);
+        $isList = $byKey === null ? array_is_list($options) : !$byKey;
+        $choices = self::choices($options, $isList, 'multiselect');
+
+        $wanted = [];
+        foreach ($default as $item) {
+            if ($byKey === null && $isList) {
+                self::assertNoPosition('multiselect', $label, $options, $choices, $item);
+            }
+            if (is_string($item) || is_int($item) || is_float($item)) {
+                $wanted[] = (string) $item;
+            }
+        }
+
+        if ($choices === []) {
+            // Nobody could tick anything, so nothing is remembered: when options
+            // arrive, the field starts from its default.
+            $this->values[$key] = [];
+            $this->add($this->choicesHtml($key, $label, $help, $horizontal, 'checkbox', [], []));
+
+            return [];
+        }
+
+        // A browser sends nothing for a field in which no box is ticked. The "_seen"
+        // marker tells that apart from a field that was not on the page at all.
+        $sent = $this->submittedList($key) ?? ($this->seen($key) ? [] : $wanted);
+        $sent = array_fill_keys(array_map(self::wire(...), $sent), true);
+
+        // What was sent only counts where it is one of the options.
+        $ticked = $wires = $values = [];
+        foreach ($choices as $index => $choice) {
+            if (isset($sent[$choice['wire']])) {
+                $ticked[$index] = true;
+                $wires[] = $choice['wire'];
+                $values[] = $choice['value'];
+            }
+        }
+
+        $this->values[$key] = $values;
+        // Like a text that is too long to be remembered: the next page view then
+        // starts from the default, and not from "nothing ticked".
+        if (array_sum(array_map(strlen(...), $wires)) <= self::MAX_SAVED_BYTES) {
+            $this->out['_seen'][] = $key;
+            if ($wires !== []) {
+                $this->out[$key] = $wires;
+            }
+        }
+
+        $this->add($this->choicesHtml($key, $label, $help, $horizontal, 'checkbox', $choices, $ticked));
+
+        return $values;
     }
 
     public function checkbox(string $label, bool $default, ?string $help, ?string $key): bool
@@ -1237,11 +1316,96 @@ final class Page
         return is_string($value) ? $value : null;
     }
 
+    /**
+     * What the browser sent for a field that takes several values. A link may name
+     * a single value without brackets: "?status=paid".
+     *
+     * @return list<string>|null null when the bag holds nothing for the field
+     */
+    private function submittedList(string $key): ?array
+    {
+        if (isset($this->linked[$key])) {
+            // A link filled this field in. The address of the page drops the parameter.
+            $this->consumed[$key] = true;
+        }
+
+        $value = $this->in[$key] ?? null;
+        if (is_string($value)) {
+            return [$value];
+        }
+
+        return is_array($value) ? array_values(array_filter($value, is_string(...))) : null;
+    }
+
     private function seen(string $key): bool
     {
         $seen = $this->in['_seen'] ?? null;
 
         return is_array($seen) && in_array($key, $seen, true);
+    }
+
+    /**
+     * Which option select() or radio() shows as chosen: what the browser sent when
+     * that is one of the options, else the default, else the first option.
+     *
+     * @param non-empty-list<array{wire: string, value: mixed, label: string}> $choices
+     */
+    private function chosen(string $key, array $choices, mixed $default): int
+    {
+        $chosen = null;
+        $raw = $this->submitted($key);
+        if ($raw !== null) {
+            $chosen = self::choose($choices, $raw);
+        }
+        if ($chosen === null && (is_string($default) || is_int($default) || is_float($default))) {
+            $chosen = self::choose($choices, (string) $default);
+        }
+
+        return $chosen ?? 0;
+    }
+
+    /**
+     * A group of options under one label: a radio button or a tick box for each.
+     *
+     * @param 'radio'|'checkbox'                                      $type
+     * @param list<array{wire: string, value: mixed, label: string}> $choices
+     * @param array<int,true>                                         $chosen  the places of the options that are chosen
+     */
+    private function choicesHtml(string $key, string $label, ?string $help, bool $horizontal, string $type, array $choices, array $chosen): string
+    {
+        $name = Text::e($type === 'radio' ? $key : $key . '[]');
+        $layout = match (true) {
+            $horizontal => ' sui-choices-row',
+            count($choices) > self::MANY_CHOICES => ' sui-choices-many',
+            default => '',
+        };
+
+        $items = '';
+        $ids = [];
+        foreach ($choices as $index => $choice) {
+            // The id is made from the option and not from its place in the list. The page
+            // script puts the focus back by id: when the list changes between two runs,
+            // the focus stays on the option and does not move to the one that took its place.
+            $id = 'f-' . $key . ':' . hash('crc32b', $choice['wire']);
+            if (isset($ids[$id])) {
+                $id .= '-' . $index;
+            }
+            $ids[$id] = true;
+
+            $items .= '<label class="sui-check"><input type="' . $type . '" id="' . Text::e($id) . '" name="' . $name . '" value="' . Text::e($choice['wire']) . '"'
+                . (isset($chosen[$index]) ? ' checked' : '') . '><span dir="auto">' . Text::e($choice['label']) . '</span></label>';
+        }
+
+        return '<fieldset class="sui-field sui-field-choices' . ($layout === '' ? '' : ' sui-field-wide') . '" id="' . Text::e('f-' . $key) . '"'
+            . ($help === null ? '' : ' aria-describedby="' . Text::e('h-' . $key) . '"') . '>'
+            . '<legend dir="auto">' . Text::e($label) . '</legend>'
+            . ($choices === []
+                ? '<p class="sui-help sui-choices-none" dir="auto">' . Text::e($this->t('choices.none')) . '</p>'
+                : '<div class="sui-choices' . $layout . '">' . $items . '</div>')
+            // See checkbox(). A group without options sends no marker: nobody could tick anything.
+            . ($type === 'checkbox' && $choices !== [] ? '<input type="hidden" name="_seen[]" value="' . Text::e($key) . '">' : '')
+            . ($help === null ? '' : '<p class="sui-help" id="' . Text::e('h-' . $key) . '" dir="auto">' . Text::e($help) . '</p>')
+            . '</fieldset>';
     }
 
     private function remember(string $key, string $wire, mixed $value): void
@@ -1335,24 +1499,32 @@ final class Page
     }
 
     /**
+     * The options of select(), radio() and multiselect(): what the form carries
+     * for each ("wire"), what the script gets back and what the user reads.
+     *
      * @param array<array-key,mixed> $options
+     * @param string                 $function the function that was called, for the message
      *
      * @return list<array{wire: string, value: mixed, label: string}>
      */
-    private static function choices(array $options, bool $isList): array
+    private static function choices(array $options, bool $isList, string $function): array
     {
         $choices = [];
 
         foreach ($options as $optionKey => $option) {
             if (!is_string($option) && !is_int($option) && !is_float($option)) {
-                throw new \InvalidArgumentException('select() options must be text or numbers.');
+                throw new \InvalidArgumentException($function . '() options must be text or numbers.');
             }
 
             $value = $isList ? $option : $optionKey;
-            $choices[] = ['wire' => self::wire((string) $value), 'value' => $value, 'label' => (string) $option];
+            $wire = self::wire((string) $value);
+            // An option that is there twice is offered once. Options often come from
+            // data (the country of every customer), and the form could not tell two
+            // of the same value apart anyway.
+            $choices[$wire] ??= ['wire' => $wire, 'value' => $value, 'label' => (string) $option];
         }
 
-        return $choices;
+        return array_values($choices);
     }
 
     /**
@@ -1380,9 +1552,48 @@ final class Page
     }
 
     /**
-     * The part of a submitted form that may be kept in the session: plain fields,
-     * the list of tick boxes that were on the page, and what the tables keep. All
-     * of it is limited in size.
+     * Refuses a default that is a place in a list of options and not one of them.
+     * Quietly returning a text where the script expects 0 or 1 would end up in a database.
+     *
+     * @param array<array-key,mixed>                                  $options
+     * @param list<array{wire: string, value: mixed, label: string}> $choices
+     */
+    private static function assertNoPosition(string $function, string $label, array $options, array $choices, mixed $default): void
+    {
+        if (is_int($default) && array_key_exists($default, $options) && self::choose($choices, (string) $default) === null) {
+            throw new \LogicException(sprintf(
+                '%s(): the default %d is not one of the options of "%s". PHP cannot tell [0 => \'No\', 1 => \'Yes\'] '
+                . 'from the list [\'No\', \'Yes\'], so the texts were taken as the values. If the keys are the values, add byKey: true.',
+                $function,
+                $default,
+                $label,
+            ));
+        }
+    }
+
+    /** Is this what a field for several values sends: a plain list of texts, limited in size? */
+    private static function isShortList(mixed $value): bool
+    {
+        if (!is_array($value) || $value === [] || !array_is_list($value) || count($value) > self::MAX_SAVED_FIELDS) {
+            return false;
+        }
+
+        $bytes = 0;
+        foreach ($value as $item) {
+            if (!is_string($item)) {
+                return false;
+            }
+            $bytes += strlen($item);
+        }
+
+        return $bytes <= self::MAX_SAVED_BYTES;
+    }
+
+    /**
+     * The part of a submitted form that may be kept in the session: plain fields
+     * (a text, or the list of texts of a field that takes several values), the
+     * list of tick boxes that were on the page, and what the tables keep. All of
+     * it is limited in size.
      *
      * @param array<array-key,mixed> $in
      *
@@ -1402,6 +1613,7 @@ final class Page
         };
 
         $keep = [];
+        $left = [];
         $count = 0;
 
         foreach ($in as $name => $value) {
@@ -1411,12 +1623,20 @@ final class Page
             }
 
             if ($name[0] !== '_') {
-                if (is_string($value) && strlen($value) <= self::MAX_SAVED_BYTES) {
+                if (is_string($value) ? strlen($value) <= self::MAX_SAVED_BYTES : self::isShortList($value)) {
                     $keep[$name] = $value;
+                } elseif ($value !== []) {
+                    $left[$name] = true;
                 }
             } elseif ($name === '_seen') {
                 $keep['_seen'] = $strings($value);
             }
+        }
+
+        if ($left !== [] && isset($keep['_seen'])) {
+            // A field whose value was not kept starts from its default again. With
+            // the marker it would start from "nothing ticked".
+            $keep['_seen'] = array_values(array_filter($keep['_seen'], static fn (string $name): bool => !isset($left[$name])));
         }
 
         return $keep + Table::keepable($in) + Uploads::keepable($in);

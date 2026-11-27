@@ -45,6 +45,9 @@ return [
     'number.thousands' => '.',
     'number.decimal' => ',',
 
+    // Choices
+    'choices.none' => 'Nichts zur Auswahl.',
+
     // Dateien
     'file.remove' => 'Entfernen',
     'file.remove_label' => '{name} entfernen',

@@ -418,6 +418,11 @@ final class Kernel
      */
     private static function sameLineBreaks(mixed $value): mixed
     {
+        if (is_array($value)) {
+            // The ticked options of a field that takes several values.
+            return array_map(self::sameLineBreaks(...), $value);
+        }
+
         return is_string($value) ? str_replace(["\r\n", "\r"], "\n", $value) : $value;
     }
 
@@ -457,7 +462,8 @@ final class Kernel
     }
 
     /**
-     * Lets a link fill in fields: "?customer-email=ava@example.com".
+     * Lets a link fill in fields: "?customer-email=ava@example.com", and for a
+     * field that takes several values "?status[]=paid&status[]=shipped".
      * Only plain fields can be set this way. Names that start with an underscore
      * belong to the library, so a link can never press a button or tick a table row.
      * What a link fills in is used for this page view only; it is not saved.
@@ -473,7 +479,7 @@ final class Kernel
         $count = 0;
         foreach ($query as $name => $value) {
             $name = (string) $name;
-            if ($name === '' || $name[0] === '_' || !is_string($value) || strlen($value) > 2000 || ++$count > 50) {
+            if ($name === '' || $name[0] === '_' || !self::fitsALink($value) || ++$count > 50) {
                 continue;
             }
             $saved[$name] = $value;
@@ -481,6 +487,30 @@ final class Kernel
         }
 
         return [$saved, $linked];
+    }
+
+    /**
+     * What a link may put into one field: a text, or a plain list of texts. Both
+     * are limited to what an address can reasonably carry.
+     */
+    private static function fitsALink(mixed $value): bool
+    {
+        if (is_string($value)) {
+            return strlen($value) <= 2000;
+        }
+        if (!is_array($value) || !array_is_list($value) || count($value) > 100) {
+            return false;
+        }
+
+        $bytes = 0;
+        foreach ($value as $item) {
+            if (!is_string($item)) {
+                return false;
+            }
+            $bytes += strlen($item);
+        }
+
+        return $bytes <= 2000;
     }
 
     /**

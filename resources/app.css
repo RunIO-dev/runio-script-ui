@@ -521,12 +521,72 @@ textarea.sui-input {
   cursor: pointer;
 }
 
-input[type="checkbox"] {
+input[type="checkbox"],
+input[type="radio"] {
   flex: none;
   width: 16px;
   height: 16px;
   margin: 0;
   accent-color: var(--accent);
+}
+
+/* --------------------------------------------------------------- choices */
+
+/* A group of options under one label: radio buttons, or a tick box for each. */
+fieldset.sui-field {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* The label of the group. A legend is laid out apart from the rest, so the gap of the field does not reach it. */
+.sui-field > legend {
+  margin-bottom: 6px;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* A row or several columns of options may be as wide as the page. */
+.sui-field-wide {
+  max-width: none;
+}
+
+.sui-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 2px 20px;
+}
+
+/* Each option is tall enough for a finger. A long text breaks into lines, and its box stays at the first one. */
+.sui-choices .sui-check {
+  align-items: flex-start;
+  max-width: 100%;
+  padding: 3px 0;
+  overflow-wrap: anywhere;
+}
+
+.sui-choices .sui-check input {
+  margin-top: 3px;
+}
+
+.sui-choices-row {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+/* A long list is read down the first column, then down the next. A phone has room for two. */
+.sui-choices-many {
+  display: block;
+  columns: 10em;
+  column-gap: 24px;
+}
+
+.sui-choices-many .sui-check {
+  display: flex;
+  margin-bottom: 2px;
+  break-inside: avoid;
 }
 
 /* --------------------------------------------------------------- buttons */

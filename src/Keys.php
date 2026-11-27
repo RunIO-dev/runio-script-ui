@@ -12,9 +12,11 @@ namespace Runio\ScriptUi;
  * (_token, _click, _seen, _sel, _kept, _rows, _sort, _page, _find, _file, _tool, _reset).
  *
  * A key holds no colon. The element of an input has the id "f-" plus its key and
- * a button "b-" plus its key. The parts inside a table, a question or a file
- * field get an id with a colon (f-orders:0, b-refund:yes, b-report:remove:0),
- * which no key can produce. The notes under a file field are "l-" and "e-" plus its key.
+ * a button "b-" plus its key. The parts inside a table, a question, a file field
+ * or a group of options get an id with a colon (f-orders:0, b-refund:yes,
+ * b-report:remove:0, f-status:1c5b0a93), which no key can produce. The notes under
+ * a file field are "l-" and "e-" plus its key, and the help text of a group of
+ * options is "h-" plus its key.
  *
  * @internal
  */

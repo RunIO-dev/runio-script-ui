@@ -144,6 +144,52 @@ function select(string $label, array $options, mixed $default = null, ?string $h
     return Runtime::page()->select($label, $options, $default, $help, $key, $byKey);
 }
 
+/**
+ * A choice from a short list, with every option in view. Returns one of the
+ * options, never anything else: the first one until the user chooses another.
+ *
+ * It takes the options the way select() does. With more than a handful of
+ * options, select() needs less room.
+ *
+ * @param array<array-key,mixed> $options    see select()
+ * @param bool                   $horizontal the options stand side by side instead of one under the other
+ * @param bool|null              $byKey      see select()
+ */
+function radio(
+    string $label,
+    array $options,
+    mixed $default = null,
+    bool $horizontal = false,
+    ?string $help = null,
+    ?string $key = null,
+    ?bool $byKey = null,
+): mixed {
+    return Runtime::page()->radio($label, $options, $default, $horizontal, $help, $key, $byKey);
+}
+
+/**
+ * Several choices from a list: a tick box for every option. Returns the ticked
+ * options as a list, in the order of the options. Nothing ticked is an empty list.
+ *
+ * @param array<array-key,mixed> $options    see select()
+ * @param array<array-key,mixed> $default    the options that are ticked until the user says otherwise
+ * @param bool                   $horizontal the options stand side by side instead of one under the other
+ * @param bool|null              $byKey      see select()
+ *
+ * @return list<mixed>
+ */
+function multiselect(
+    string $label,
+    array $options,
+    array $default = [],
+    bool $horizontal = false,
+    ?string $help = null,
+    ?string $key = null,
+    ?bool $byKey = null,
+): array {
+    return Runtime::page()->multiselect($label, $options, $default, $horizontal, $help, $key, $byKey);
+}
+
 /** A tick box. */
 function checkbox(string $label, bool $default = false, ?string $help = null, ?string $key = null): bool
 {

@@ -50,6 +50,9 @@ return [
     'number.thousands' => ',',
     'number.decimal' => '.',
 
+    // Choices
+    'choices.none' => 'Nothing to choose from.',
+
     // Files
     'file.remove' => 'Remove',
     'file.remove_label' => 'Remove {name}',

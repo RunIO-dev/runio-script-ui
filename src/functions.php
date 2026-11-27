@@ -397,7 +397,10 @@ function columns(callable ...$columns): void
  * needed every time: advanced options, the details of a row, a long explanation.
  *
  * The content always runs, and the inputs inside keep working and keep their
- * values while the part is closed. Closed only means out of sight.
+ * values while the part is closed. Closed only means out of sight. It does not
+ * mean private: what is inside is in the page, for everybody who can open the tool.
+ *
+ * stop() inside ends this part and not the page.
  *
  * @param callable():mixed $content draws what is inside: fn () => ..., a method, or name(...).
  *                                  The name of a function in quotes is not run
@@ -417,6 +420,9 @@ function expander(string $label, callable $content, bool $open = false, ?string 
  * others keep working and keep their values, and changing the tab needs no
  * run of the tool. Work that takes long belongs behind a button.
  *
+ * A tab that is not open is out of sight, not private: it is in the page, for
+ * everybody who can open the tool. stop() inside a tab ends that tab and not the page.
+ *
  * @param array<array-key,callable():mixed> $tabs the label of each tab and the function that draws it:
  *                                                ['Orders' => fn () => table($orders), 'Settings' => $settings].
  *                                                The name of a function in quotes is not run
@@ -426,7 +432,13 @@ function tabs(array $tabs, ?string $key = null): void
     Runtime::page()->tabs($tabs, $key);
 }
 
-/** Ends the run here. Everything drawn so far is shown. */
+/**
+ * Ends the run here. Everything drawn so far is shown.
+ *
+ * Inside expander() and tabs() it ends that part only, and the rest of the page
+ * still runs. So it is no permission check there. Decide who may see or do
+ * something before the part is drawn, or right where the work is done.
+ */
 function stop(): never
 {
     Runtime::page()->stop();

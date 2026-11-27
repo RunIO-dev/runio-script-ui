@@ -231,8 +231,10 @@ tabs([
 
 **What is out of sight still runs.** The content of a closed expander and of every tab runs on every run, like the rest of the script. The inputs inside keep their values and give them to the script, an uploaded file stays where it is, and the log names all of them. So opening an expander or changing the tab asks nothing of the server, and neither is an action. Work that takes long belongs behind a button, not into a tab.
 
+**Out of sight is not private.** A closed expander and a tab that is not open are in the page all the same, and everybody who can open the tool can read them. What a user must not see must not be drawn: check before you draw it. `stop()` inside a part ends that part only, so it is no permission check there. A check that is meant for the whole page belongs above the first part.
+
 - The page remembers what the user left open, also over a reload. A part that a run does not draw is forgotten, like an input, and starts the way the script says when it comes back.
-- `stop()` inside ends that part and not the page. `rerun()` and `download()` end the run as they do everywhere.
+- `stop()` inside ends that part and not the page, like `return`. `rerun()` and `download()` end the run as they do everywhere.
 - The content is a function: `fn () => ...`, a method, or `name(...)`. The name of a function in quotes is not run, for `columns()` too.
 - A part that fails is drawn open. So is an expander when a button inside it was pressed: its answer must not stay out of sight.
 - The label of a tab may change between runs, as in `'Orders (' . count($orders) . ')'`. The open tab is found again by its label, and by its place when the label changed.

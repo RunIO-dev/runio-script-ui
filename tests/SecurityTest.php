@@ -498,6 +498,69 @@ final class SecurityTest extends ToolTestCase
         self::assertSame('Ava', $name);
     }
 
+    public function testASessionKeepsTheInputsOfAHandfulOfToolsAndNotOfEveryAddress(): void
+    {
+        // A script that the web server runs directly is filed under its path, and a
+        // web server takes any path behind the script (/index.php/1, /index.php/2).
+        // Somebody who is logged in could fill the session with one saved form per path.
+        $name = null;
+        $tool = function () use (&$name): void {
+            $name = text('Name', default: 'nobody');
+        };
+        $kernel = $this->kernel();
+        $token = $this->token();
+        $save = static fn (int $n, string $as) => $kernel->handle(
+            new Request('POST', '/index.php/' . $n, [], ['_token' => $token, 'name' => $as]),
+            'index',
+            $tool,
+            stateKey: 'index~' . $n,
+        );
+        $open = static fn (int $n) => $kernel->handle(new Request('GET', '/index.php/' . $n), 'index', $tool, stateKey: 'index~' . $n);
+
+        for ($n = 1; $n <= 50; $n++) {
+            $save($n, 'user ' . $n);
+        }
+        self::assertCount(50, $this->session->get('state'));
+
+        // The first one is used again, so it is not the one that goes.
+        $save(1, 'user 1 again');
+        $save(51, 'user 51');
+        $save(52, 'user 52');
+
+        $states = $this->session->get('state');
+        self::assertCount(50, $states);
+        self::assertSame(['index~1', 'index~51', 'index~52'], array_slice(array_keys($states), -3));
+
+        $open(1);
+        self::assertSame('user 1 again', $name);
+        $open(2);
+        self::assertSame('nobody', $name, 'the one that was used longest ago was forgotten');
+        $open(4);
+        self::assertSame('user 4', $name);
+    }
+
+    public function testAToolWithANumberForANameKeepsItsInputs(): void
+    {
+        // PHP turns the name "2024" into the number 2024 where it names an entry of a list.
+        $name = null;
+        $tool = function () use (&$name): void {
+            $name = text('Name', default: 'nobody');
+        };
+        $kernel = $this->kernel();
+        $token = $this->token();
+
+        for ($n = 2000; $n <= 2060; $n++) {
+            $kernel->handle(new Request('POST', '/' . $n, [], ['_token' => $token, 'name' => 'year ' . $n]), (string) $n, $tool);
+        }
+
+        $kernel->handle(new Request('GET', '/2060'), '2060', $tool);
+        self::assertSame('year 2060', $name);
+        $kernel->handle(new Request('GET', '/2011'), '2011', $tool);
+        self::assertSame('year 2011', $name);
+        $kernel->handle(new Request('GET', '/2000'), '2000', $tool);
+        self::assertSame('nobody', $name);
+    }
+
     public function testAVeryLongMessageIsCutBeforeItIsCarriedOver(): void
     {
         $tool = function (): void {

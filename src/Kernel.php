@@ -19,6 +19,9 @@ final class Kernel
     /** A saved form larger than this is not kept. */
     private const MAX_STATE_BYTES = 262144;
 
+    /** A session remembers the inputs of this many tools. Beyond that the one that was used longest ago is forgotten. */
+    private const MAX_STATES = 50;
+
     /** A message that waits in the session for the reloaded page is cut to this length. */
     private const MAX_MESSAGE_BYTES = 4096;
 
@@ -550,10 +553,18 @@ final class Kernel
             unset($state['_sel'], $state['_kept']);
         }
 
-        if ($state === [] || strlen(serialize($state)) > self::MAX_STATE_BYTES) {
-            unset($states[$page->stateKey]);
-        } else {
+        // Taken out and put back, the tool that was used last stands at the end.
+        unset($states[$page->stateKey]);
+        if ($state !== [] && strlen(serialize($state)) <= self::MAX_STATE_BYTES) {
             $states[$page->stateKey] = $state;
+        }
+
+        // A script that the web server runs directly is filed under its path, and a
+        // web server takes any path behind a script. Without a limit somebody who is
+        // logged in could fill their session with one saved form for every path.
+        if (count($states) > self::MAX_STATES) {
+            // The names stay as they are: a tool can be called "2024".
+            $states = array_slice($states, -self::MAX_STATES, null, true);
         }
 
         $this->session->set('state', $states);

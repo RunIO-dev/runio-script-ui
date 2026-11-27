@@ -145,6 +145,10 @@ final class TabsTest extends ToolTestCase
         self::assertSame('Orders', $this->open($response));
         $response = $this->post($tool, ['_click' => 'tabs:tab:1x'] + $this->form($response));
         self::assertSame('Orders', $this->open($response));
+
+        // A place is written in one way only.
+        $response = $this->post($tool, ['_click' => 'tabs:tab:01'] + $this->form($response));
+        self::assertSame('Orders', $this->open($response));
     }
 
     public function testATabIsFoundAgainByItsLabelWhenTabsComeAndGo(): void
@@ -227,7 +231,7 @@ final class TabsTest extends ToolTestCase
     {
         $tool = self::three();
 
-        foreach (['9:reports', 'customers', '1', ':customers', '-1:customers', ['1:customers'], '1:' . str_repeat('x', 200)] as $sent) {
+        foreach (['9:reports', 'customers', '1', ':customers', '-1:customers', '01:customers', ['1:customers'], '1:' . str_repeat('x', 200)] as $sent) {
             $response = $this->post($tool, ['_tab' => ['tabs' => $sent]]);
             self::assertSame('Orders', $this->open($response), json_encode($sent) . ' names no tab');
         }

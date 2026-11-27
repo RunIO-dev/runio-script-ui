@@ -974,7 +974,7 @@ final class Page
      */
     private function openTab(string $key, array $slugs): int
     {
-        if (preg_match('/^' . preg_quote($key, '/') . ':tab:(\d{1,3})$/D', $this->click, $pressed) === 1 && isset($slugs[(int) $pressed[1]])) {
+        if (preg_match('/^' . preg_quote($key, '/') . ':tab:(0|[1-9]\d{0,2})$/D', $this->click, $pressed) === 1 && isset($slugs[(int) $pressed[1]])) {
             return (int) $pressed[1];
         }
 
@@ -1004,8 +1004,9 @@ final class Page
      */
     private static function tabNamed(string $sent): ?array
     {
-        // The second part is what Keys::slug() can make, and nothing else.
-        return preg_match('/^(\d{1,3}):([\p{L}\p{M}\p{N}-]{1,' . Keys::MAX_LENGTH . '})$/uD', $sent, $parts) === 1
+        // A place is written in one way only ("1", never "01"). The second part is
+        // what Keys::slug() can make, and nothing else.
+        return preg_match('/^(0|[1-9]\d{0,2}):([\p{L}\p{M}\p{N}-]{1,' . Keys::MAX_LENGTH . '})$/uD', $sent, $parts) === 1
             ? [(int) $parts[1], $parts[2]]
             : null;
     }

@@ -61,6 +61,16 @@ final class Uploads
     }
 
     /**
+     * Makes sure that files can be kept, before one arrives.
+     *
+     * @throws \RuntimeException when the folder cannot be made or is not safe to use
+     */
+    public function ready(): void
+    {
+        $this->folder->ready();
+    }
+
+    /**
      * How many files one field holds: no more than PHP takes in one request,
      * because the files it does not take are dropped without a word.
      */

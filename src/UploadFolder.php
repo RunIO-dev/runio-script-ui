@@ -105,6 +105,16 @@ final class UploadFolder
     }
 
     /**
+     * Makes sure that the folder is there and can be used, before a file arrives.
+     *
+     * @throws \RuntimeException when it cannot
+     */
+    public function ready(): void
+    {
+        $this->directory();
+    }
+
+    /**
      * Moves a file that arrived into the folder.
      *
      * @return string the name it has there

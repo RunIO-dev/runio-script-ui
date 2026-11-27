@@ -461,6 +461,9 @@ final class Page
         if ($maxSize !== null && $maxSize < 1) {
             throw new \InvalidArgumentException('file_input(): maxSize is a number of bytes and has to be at least 1.');
         }
+        // A folder that cannot be used is a mistake in the setup. It shows on the
+        // first page view, to whoever sets the tool up, and not on the first upload.
+        $uploads->ready();
 
         $endings = self::endings($types);
         // PHP has limits of its own, and a file never gets past them.

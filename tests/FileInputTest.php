@@ -998,6 +998,24 @@ final class FileInputTest extends ToolTestCase
         self::assertNull($this->attr($response, '//input[@id="f-report"]', 'data-sui-total'));
     }
 
+    public function testAFolderThatCannotBeUsedShowsOnTheFirstPageView(): void
+    {
+        // The one who sets a tool up sees the mistake, not the first user who uploads something.
+        $blocker = (string) tempnam(sys_get_temp_dir(), 'script-ui-test-');
+        $this->uploadFolder = $blocker . '/uploads';
+
+        try {
+            $response = $this->get($this->tool($file));
+
+            self::assertSame(500, $response->status);
+            self::assertStringContainsString('could not be made', $response->body);
+            self::assertStringContainsString('uploads:', $response->body);
+        } finally {
+            unlink($blocker);
+            $this->uploadFolder = null;
+        }
+    }
+
     public function testAToolSaysSoWhenPhpTakesNoUploads(): void
     {
         $this->uploadsOn = false;

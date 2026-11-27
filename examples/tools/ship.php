@@ -1,6 +1,6 @@
 <?php
 // Ship orders
-// Go through the paid orders page by page, tick the ones that left the warehouse, confirm.
+// Search the paid orders or go through them page by page, tick the ones that left the warehouse, confirm.
 
 require_once __DIR__ . '/_shop.php';
 
@@ -18,12 +18,14 @@ if ($orders === []) {
     return;
 }
 
-// All paid orders go in. The table shows ten at a time, and a tick stays when the page changes.
+// All paid orders go in. The table shows ten at a time and searches all of them.
+// A tick stays when the page changes. A row that the search hides loses its tick.
 $picked = table(
     $orders,
     selectable: true,
     columns: ['id' => 'Order', 'created_at' => 'Placed on', 'customer' => 'Customer', 'items' => 'Items', 'total' => 'Total'],
     pageSize: 10,
+    search: true,
 );
 
 $count = count($picked) === 1 ? '1 order' : count($picked) . ' orders';

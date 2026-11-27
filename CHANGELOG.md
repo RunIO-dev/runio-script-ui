@@ -11,7 +11,7 @@ First version. Requires PHP 8.2+ with the mbstring and session extensions, and n
 - A tool is one PHP script. It runs from top to bottom and runs again on every interaction.
 - Text and messages: `title`, `heading`, `note`, `code`, `json`, `link`, `divider`, `metric`, `success`, `info`, `warning`, `error`.
 - Inputs that return their current value: `text`, `textarea`, `number`, `select`, `checkbox`, `date_input`.
-- `table` with sorting, pages (`pageSize:`) and rows you can tick on any page, and `chart` with bar and line charts drawn as SVG.
+- `table` with sorting, pages (`pageSize:`), a search box (`search: true`) and rows you can tick on any page, and `chart` with bar and line charts drawn as SVG.
 - `button` with an optional question before it acts, plus `columns`, `stop` and `rerun`.
 - `download` hands the user a file: rows as CSV or JSON, or any text. `csv` writes rows as CSV with a choice of columns and separator. Cells that a spreadsheet would run as a formula are defused.
 - `serve()` for a folder of tools with an index page, `configure()` for a script on its own, and the `script-ui serve` command for local use.

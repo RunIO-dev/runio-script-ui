@@ -106,13 +106,17 @@ foreach ($orders as $order) {
 
 Pass all rows to `table($rows)`. A click on a header sorts all of them. A long table is shown one page at a time: 25 rows, or what you set with `pageSize:` (up to 200).
 
-The table starts again at its first page when it is sorted, and when the user changes another input and the rows are different after that, as with a filter. Rows that change on their own, such as a new order, leave the page where it is.
+`table($rows, search: true)` puts a search box over the table. It filters while the user types and looks for every word, in any order, in the columns that are shown. A column you left out with `columns:` is never searched. Upper and lower case are the same, and so are the ways one Arabic word gets typed: `احمد` finds `أَحْمَد`. With PHP's intl extension accents are ignored too, so `jose` finds `José`.
+
+The table starts again at its first page when it is sorted or searched, and when the user changes another input and the rows are different after that, as with a filter. Rows that change on their own, such as a new order, leave the page where it is.
 
 ### Rows you can tick
 
 `table($rows, selectable: true)` returns the ticked rows. A row is found again by its `id` column (name another one with `rowKey:`). Rows without an id are recognised by what is in them. A tick never moves to a different row: when its row is gone or has changed, the tick is dropped.
 
 A tick stays when the user turns the page or sorts, so the rows you get back can come from any page. The line under the table says how many rows are ticked and how many of them are on other pages. One table takes up to 1,000 ticks.
+
+The search only hides rows. A ticked row that it hides is not returned, so a button never acts on a row that is not in the list on screen. The line under the table says how many ticked rows are hidden, and each is ticked again as soon as the search shows it.
 
 ### Downloads
 
@@ -195,7 +199,7 @@ Pages that are not a tool have no title to follow: the list of tools and pages s
 - **Everything is escaped.** Labels, table cells and messages are text, never HTML. Output printed with `echo` is shown as text too.
 - **A strict Content-Security-Policy** on every page: no inline styles, no inline handlers, nothing from other sites, no framing.
 - **A download is a file, never a page.** It is sent with the order to save it, never as HTML or a script, and it may do nothing if it is opened in the browser after all. Its name is made safe, also when it contains something a user typed. In CSV that the library writes, formula cells are defused. Every download goes to the log with the name and the size of the file. When the log cannot be written (the `log` callback throws or returns false), the file is not sent.
-- **Selections come from your data.** `table()` returns rows from the array you passed in. The browser only says which rows are ticked, and a tick never moves to another row or another table.
+- **Selections come from your data.** `table()` returns rows from the array you passed in. The browser only says which rows are ticked, and a tick never moves to another row or another table. A row that the search of a table hides is not returned, and the search reads only the columns that are shown.
 - **Files are found by listing the folder.** An address can never point outside it.
 - **Error details stay private.** They are shown only while no login check is set, because then nobody but your own computer gets in. With a login check they go to the error log unless you pass `debug: true`. PHP warnings and notices are kept out of the page in the same way.
 
@@ -204,7 +208,7 @@ What stays your job: decide who may do what (`user()` tells you who is asking), 
 ## Limits of this first version
 
 - No file uploads yet.
-- A table gets all its rows from the script and cuts them into pages itself. That is fast for tens of thousands of rows. For more, filter in the database first.
+- A table gets all its rows from the script and searches, sorts and pages them itself, on every run. That is quick up to about twenty thousand rows: on a laptop a search took 0.1 seconds and sorting by a text column 0.2. For more, filter in the database first.
 - Charts are bar and line charts with one axis and at most 8 series.
 - State lives in the PHP session. Two tabs of the same tool share saved inputs.
 - A script that runs on its own (without `serve()`) is told apart by its file and its path. Tools that share both and differ only in the query string (`index.php?page=refund`) work, but they do not remember their inputs separately.

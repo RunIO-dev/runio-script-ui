@@ -8,9 +8,9 @@ namespace Runio\ScriptUi;
  * One table of a page: which rows it shows, in which order, on which page,
  * which of them are ticked, and the HTML for all of it.
  *
- * The browser only says how the table is sorted, which page it shows and which
- * rows are ticked. The rows themselves always come from the script, so a
- * forged form can never add one.
+ * The browser only says how the table is sorted and searched, which page it
+ * shows and which rows are ticked. The rows themselves always come from the
+ * script, so a forged form can never add one.
  *
  * @internal Tools call table().
  */
@@ -27,6 +27,12 @@ final class Table
 
     /** A longer value of the id column travels through the form as a fingerprint. */
     private const MAX_ID_BYTES = 40;
+
+    /** How many characters of a search are read. */
+    private const MAX_QUERY_LENGTH = 200;
+
+    /** How many words of a search are looked for. */
+    private const MAX_WORDS = 8;
 
     /**
      * @param list<mixed>                       $picked the ticked rows, exactly as they were passed in
@@ -55,6 +61,7 @@ final class Table
         ?array $columns,
         string $rowKey,
         int $pageSize,
+        bool $search,
         ?string $empty,
         array $in,
         string $click,
@@ -72,34 +79,70 @@ final class Table
             $records[] = Rows::record($row);
         }
 
-        if ($records === []) {
-            // A filter of the tool may leave nothing for a moment. The table still
-            // remembers how it was sorted for when the rows are back.
-            $sorted = self::savedSort($key, $in);
-
-            return new self(
-                '<p class="sui-empty" dir="auto">' . Text::e($empty ?? $texts->get('table.empty')) . '</p>'
-                    . ($sorted === null ? '' : self::hidden('_sort', $key, $sorted)),
-                keep: $sorted === null ? [] : ['_sort' => $sorted],
-            );
-        }
-
         $keep = [];
         $hidden = '';
+        $query = $search ? self::query($key, $in) : '';
+        if ($query !== '') {
+            $keep['_find'] = $query;
+        }
+
+        if ($records === []) {
+            // A filter of the tool may leave nothing for a moment. The table still
+            // remembers how it was sorted and searched for when the rows are back.
+            $sorted = self::savedSort($key, $in);
+            if ($sorted !== null) {
+                $keep['_sort'] = $sorted;
+            }
+            foreach ($keep as $name => $value) {
+                $hidden .= self::hidden($name, $key, $value);
+            }
+
+            return new self('<p class="sui-empty" dir="auto">' . Text::e($empty ?? $texts->get('table.empty')) . '</p>' . $hidden, keep: $keep);
+        }
+
         $fields = Rows::columns($records, $columns, 'table()');
+        $box = $search ? self::searchBox($key, $query, $texts) : '';
 
         $sort = self::sort($key, count($fields), $in, $click);
         if ($sort !== null) {
             $keep['_sort'] = $sort[0] . ':' . $sort[1];
             $hidden .= self::hidden('_sort', $key, $keep['_sort']);
         }
-        $order = self::order($records, $fields, $sort);
 
-        // A page number belongs to one list: these rows, in this order, cut into pages of this size.
+        // The list: the rows that the search leaves, in the order the table shows them.
+        $words = self::words($query);
+        $order = self::order(self::matching($records, $fields, $words, $texts), $records, $fields, $sort);
+        $given = count($records);
         $total = count($order);
+
+        $ids = [];
+        $chosen = [];
+        $parked = [];
+        $tooMany = false;
+        if ($selectable) {
+            $ids = self::rowIds($records, $rowKey, $fields);
+            [$chosen, $parked, $tooMany] = self::ticked($key, $in, $ids, $order);
+        }
+
+        if ($total === 0) {
+            if ($parked !== []) {
+                $keep['_sel'] = $parked;
+                $hidden .= self::hidden('_kept', $key, Text::json($parked, false));
+            }
+
+            return new self(
+                '<div class="sui-table-block">' . $box
+                    . '<p class="sui-empty" data-sui-status dir="auto">' . Text::e($texts->get('table.no_match')) . '</p>'
+                    . $hidden . '</div>',
+                named: $selectable ? [] : null,
+                keep: $keep,
+            );
+        }
+
+        // A page number belongs to one list: these rows, searched and sorted like this, cut into pages of this size.
         $pages = (int) ceil($total / $pageSize);
-        $view = hash('crc32b', ($keep['_sort'] ?? '') . "\0" . $pageSize);
-        $list = hash('crc32b', $total . "\0" . Text::json($records[0], false) . "\0" . Text::json($records[$total - 1], false));
+        $view = hash('crc32b', ($keep['_sort'] ?? '') . "\0" . $pageSize . "\0" . implode(' ', $words));
+        $list = hash('crc32b', $given . "\0" . Text::json($records[0], false) . "\0" . Text::json($records[$given - 1], false));
         $page = $pages > 1 ? self::page($key, $in, $click, $view, $list, $inputsChanged, $pages) : 1;
         if ($pages > 1) {
             $keep['_page'] = $page . '.' . $view . '.' . $list;
@@ -107,15 +150,9 @@ final class Table
         }
         $visible = array_slice($order, ($page - 1) * $pageSize, $pageSize);
 
-        $ids = [];
-        $chosen = [];
         $named = null;
         $elsewhere = 0;
-        $tooMany = false;
         if ($selectable) {
-            $ids = self::rowIds($records, $rowKey, $fields);
-            [$chosen, $tooMany] = self::ticked($key, $in, $ids);
-
             // The page draws a box for each of its rows. The ticks of all other rows
             // travel in one field, so they come back with whatever the user does next.
             $onPage = array_fill_keys($visible, true);
@@ -130,11 +167,11 @@ final class Table
                 }
             }
             $elsewhere = count($kept);
-            if ($all !== []) {
-                $keep['_sel'] = $all;
+            if ($all !== [] || $parked !== []) {
+                $keep['_sel'] = [...$all, ...$parked];
             }
-            if ($kept !== []) {
-                $hidden .= self::hidden('_kept', $key, Text::json($kept, false));
+            if ($kept !== [] || $parked !== []) {
+                $hidden .= self::hidden('_kept', $key, Text::json([...$kept, ...$parked], false));
             }
         }
 
@@ -150,13 +187,20 @@ final class Table
                 'count' => $texts->number($total),
             ])
             : ($total === 1 ? $texts->get('table.rows_one') : $texts->get('table.rows', ['count' => $texts->number($total)]));
+        if ($total < $given) {
+            $status = $texts->get('table.filtered', ['rows' => $status, 'count' => $texts->number($given)]);
+        }
         if ($selectable) {
             $status .= ' · ' . ($elsewhere === 0
                 ? $texts->get('table.selected', ['count' => $texts->number(count($chosen))])
                 : $texts->get('table.selected_elsewhere', ['count' => $texts->number(count($chosen)), 'hidden' => $texts->number($elsewhere)]));
+            if ($parked !== []) {
+                $status .= ' · ' . $texts->get('table.selected_hidden', ['count' => $texts->number(count($parked))]);
+            }
         }
 
         $html = '<div class="sui-table-block">'
+            . $box
             . self::grid($key, $fields, $records, $visible, $ids, $chosen, $sort, $selectable, $texts)
             . '<div class="sui-table-bar">'
             // The page script reads this line to people who use a screen reader.
@@ -172,8 +216,8 @@ final class Table
 
     /**
      * The part of a submitted form that belongs to tables and may be kept in the
-     * session: how each is sorted, its page, and its ticks. All of it is checked
-     * again when the next run reads it.
+     * session: how each is sorted and searched, its page, and its ticks. All of it
+     * is checked again when the next run reads it.
      *
      * @param array<array-key,mixed> $in
      *
@@ -183,7 +227,7 @@ final class Table
     {
         $keep = [];
 
-        foreach (['_sort' => 16, '_page' => 32, '_kept' => self::MAX_KEPT_BYTES] as $name => $longest) {
+        foreach (['_sort' => 16, '_page' => 32, '_find' => 4 * self::MAX_QUERY_LENGTH, '_kept' => self::MAX_KEPT_BYTES] as $name => $longest) {
             foreach (is_array($in[$name] ?? null) ? $in[$name] : [] as $table => $state) {
                 if (is_string($state) && strlen($state) <= $longest) {
                     $keep[$name][$table] = $state;
@@ -207,6 +251,90 @@ final class Table
     private static function hidden(string $name, string $key, string $value): string
     {
         return '<input type="hidden" name="' . Text::e($name . '[' . $key . ']') . '" value="' . Text::e($value) . '">';
+    }
+
+    /**
+     * What the search box of the table holds: one line of text of a sensible length.
+     *
+     * @param array<array-key,mixed> $in
+     */
+    private static function query(string $key, array $in): string
+    {
+        $typed = is_array($in['_find'] ?? null) ? ($in['_find'][$key] ?? null) : null;
+        if (!is_string($typed)) {
+            return '';
+        }
+
+        $line = trim((string) preg_replace('/[\p{Cc}\p{Z}]+/u', ' ', mb_scrub($typed, 'UTF-8')));
+
+        return trim(mb_substr($line, 0, self::MAX_QUERY_LENGTH, 'UTF-8'));
+    }
+
+    /**
+     * The words a search looks for, the way a search compares text.
+     *
+     * @return list<string>
+     */
+    private static function words(string $query): array
+    {
+        $words = preg_split('/\s+/u', Text::fold($query), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        return array_slice(array_values(array_unique($words)), 0, self::MAX_WORDS);
+    }
+
+    /**
+     * The rows in which every word of the search occurs, as positions in the data.
+     *
+     * The search reads what the table shows: the columns that are drawn, with
+     * yes and no in the language of the page. It never reads a column that was
+     * left out, so nobody finds out by typing what such a column holds.
+     *
+     * @param list<array<array-key,mixed>>                 $records
+     * @param list<array{field: array-key, label: string}> $fields
+     * @param list<string>                                 $words
+     *
+     * @return list<int>
+     */
+    private static function matching(array $records, array $fields, array $words, Texts $texts): array
+    {
+        if ($words === []) {
+            return array_keys($records);
+        }
+
+        $yes = $texts->get('cell.yes');
+        $no = $texts->get('cell.no');
+        $found = [];
+
+        foreach ($records as $index => $record) {
+            // One line per cell: a word never reaches from one cell into the next.
+            $shown = '';
+            foreach ($fields as $field) {
+                $value = $record[$field['field']] ?? null;
+                if ($value !== null) {
+                    $shown .= (is_bool($value) ? ($value ? $yes : $no) : self::cell($value)) . "\n";
+                }
+            }
+            $shown = Text::fold($shown);
+
+            foreach ($words as $word) {
+                if (!str_contains($shown, $word)) {
+                    continue 2;
+                }
+            }
+            $found[] = $index;
+        }
+
+        return $found;
+    }
+
+    private static function searchBox(string $key, string $query, Texts $texts): string
+    {
+        // "data-sui-live": the page script reruns the page while the user types
+        // here. Other text fields wait until the user leaves them.
+        return '<div class="sui-table-tools"><input class="sui-input sui-find" type="search" id="' . Text::e('f-' . $key . ':find') . '"'
+            . ' name="' . Text::e('_find[' . $key . ']') . '" value="' . Text::e($query) . '"'
+            . ' placeholder="' . Text::e($texts->get('table.search')) . '" aria-label="' . Text::e($texts->get('table.search_label')) . '"'
+            . ' maxlength="' . self::MAX_QUERY_LENGTH . '" enterkeyhint="search" data-sui-live dir="auto"></div>';
     }
 
     /**
@@ -255,17 +383,17 @@ final class Table
     }
 
     /**
-     * The rows in the order they are shown, as positions in the data.
+     * Puts rows into the order they are shown in. Rows are positions in the data.
      *
+     * @param list<int>                                    $order
      * @param list<array<array-key,mixed>>                 $records
      * @param list<array{field: array-key, label: string}> $fields
      * @param array{int, string}|null                      $sort
      *
      * @return list<int>
      */
-    private static function order(array $records, array $fields, ?array $sort): array
+    private static function order(array $order, array $records, array $fields, ?array $sort): array
     {
-        $order = array_keys($records);
         if ($sort === null) {
             return $order;
         }
@@ -325,15 +453,26 @@ final class Table
 
     /**
      * Which rows are ticked. The form names them twice: the boxes of the page
-     * the user looked at, and one field with the ticks of all other pages. Only
-     * a row of the data can be ticked, whatever the form says.
+     * the user looked at, and one field with the ticks of all other pages.
+     *
+     * Only a row of the data can be ticked, whatever the form says. And only a
+     * row of the list counts: one that the search leaves. So every row the script
+     * gets is on some page of what the table shows, and a button never acts on a
+     * row the user cannot get to see.
+     *
+     * A ticked row that the search hides is set aside. Its tick travels on in the
+     * form and is back when the row is. A typing mistake in the search box does
+     * not throw away what the user ticked.
      *
      * @param array<array-key,mixed>                       $in
      * @param array<int,array{wire: string, name: string}> $ids
+     * @param list<int>                                    $listed
      *
-     * @return array{array<int,true>, bool} the ticked rows by their position in the data, and whether some ticks were dropped
+     * @return array{array<int,true>, list<string>, bool} the ticked rows of the list by their position in the data,
+     *                                                    what the boxes of the ticked rows outside the list send,
+     *                                                    and whether some ticks were dropped
      */
-    private static function ticked(string $key, array $in, array $ids): array
+    private static function ticked(string $key, array $in, array $ids, array $listed): array
     {
         $wanted = [];
 
@@ -356,32 +495,43 @@ final class Table
         }
 
         if ($wanted === []) {
-            return [[], false];
+            return [[], [], false];
         }
 
         $positions = [];
         foreach ($ids as $index => $id) {
             $positions[$id['wire']] = $index;
         }
+        $inList = array_fill_keys($listed, true);
 
         // The ticks of the other pages are counted first. When there are too many,
         // the boxes that come back unticked are on the page the user is looking at.
-        $chosen = [];
+        $ticked = [];
         $tooMany = false;
         foreach ($wanted as $wire) {
             $index = $positions[$wire] ?? null;
-            if ($index === null || isset($chosen[$index])) {
+            if ($index === null || isset($ticked[$index])) {
                 continue;
             }
-            if (count($chosen) >= self::MAX_SELECTED) {
+            if (count($ticked) >= self::MAX_SELECTED) {
                 $tooMany = true;
                 break;
             }
-            $chosen[$index] = true;
+            $ticked[$index] = true;
         }
-        ksort($chosen);
+        ksort($ticked);
 
-        return [$chosen, $tooMany];
+        $chosen = [];
+        $parked = [];
+        foreach (array_keys($ticked) as $index) {
+            if (isset($inList[$index])) {
+                $chosen[$index] = true;
+            } else {
+                $parked[] = $ids[$index]['wire'];
+            }
+        }
+
+        return [$chosen, $parked, $tooMany];
     }
 
     private static function pager(string $key, int $page, int $pages, Texts $texts): string

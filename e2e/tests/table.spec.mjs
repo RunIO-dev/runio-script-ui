@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { PHONE, column, markDocument, noHorizontalOverflow, rows, sameDocument, watch } from './support.mjs';
+import { PHONE, column, markDocument, noHorizontalOverflow, rows, sameDocument, settled, watch } from './support.mjs';
 
 // The tool "Ship orders" lists the paid orders, ten on a page. The tests that ship
 // orders change the demo data, so the numbers are read from the page, not written here.
@@ -8,6 +8,7 @@ const pageNow = (page) => page.locator('.sui-page-now').first();
 const next = (page) => page.locator('[id="p-table:next"]');
 const previous = (page) => page.locator('[id="p-table:prev"]');
 const box = (page, position) => page.locator(`[id="f-table:${position}"]`);
+const search = (page) => page.locator('[id="f-table:find"]');
 /** What the page script hands to a screen reader. */
 const said = (page) => page.locator('#sui-status');
 
@@ -118,6 +119,109 @@ test('a reload shows the page the user was on', async ({ page }) => {
     await expect(pageNow(page)).toHaveText(/^Page 2 of/);
 });
 
+// ------------------------------------------------------------------ search
+
+test('the search box filters while the user types, and the text is never lost', async ({ page }) => {
+    await page.goto('/ship');
+    await markDocument(page);
+    const all = await outOf(foot(page));
+
+    await search(page).click();
+    await page.keyboard.type('noah', { delay: 60 });
+
+    await expect(foot(page)).toHaveText(new RegExp(`\\(filtered from ${all}\\)`));
+    await settled(page);
+    const customers = await column(page, 3);
+    expect(customers.length).toBeGreaterThan(0);
+    expect(customers.every((name) => /noah/i.test(name)), 'only orders of Noah').toBe(true);
+
+    await expect(search(page), 'the user can go on typing').toBeFocused();
+    await expect(search(page)).toHaveValue('noah');
+    expect(await search(page).evaluate((input) => input.selectionStart), 'the caret is at the end').toBe(4);
+    expect(await sameDocument(page), 'updated in place').toBe(true);
+    await expect(said(page), 'a screen reader hears how many rows are left').toHaveText(new RegExp(`\\(filtered from ${all}\\)`));
+
+    // A second word narrows it down, whatever column it is in.
+    await page.keyboard.type(' keyboard', { delay: 60 });
+    await expect.poll(async () => (await column(page, 4)).every((items) => /keyboard/i.test(items))).toBe(true);
+    await expect(search(page)).toHaveValue('noah keyboard');
+});
+
+test('fast typing does not send a request for every key', async ({ page }) => {
+    await page.goto('/ship');
+    let posts = 0;
+    page.on('request', (request) => {
+        if ('POST' === request.method()) posts++;
+    });
+    // A slow server: more keys arrive while the first answer is on its way.
+    await page.route('**/ship', async (route) => {
+        if ('POST' === route.request().method()) await new Promise((resolve) => setTimeout(resolve, 500));
+        await route.continue();
+    });
+
+    await search(page).click();
+    await page.keyboard.type('k');
+    await page.waitForTimeout(400);
+    await page.keyboard.type('eyboard', { delay: 30 });
+
+    await expect.poll(async () => (await column(page, 4)).every((items) => /keyboard/i.test(items)), { timeout: 10_000 }).toBe(true);
+    await settled(page);
+    await expect(search(page)).toHaveValue('keyboard');
+    expect(posts, 'one request for "k", one for the rest').toBe(2);
+});
+
+test('a row that the search hides does not count, and its tick comes back with it', async ({ page }) => {
+    await page.goto('/ship');
+    const [, order] = await rows(page).first().locator('td').allTextContents();
+
+    await box(page, 0).click();
+    await expect(foot(page)).toContainText('1 selected');
+    await expect(page.locator('#b-mark-as-shipped')).toBeVisible();
+
+    // A typing mistake: nothing matches.
+    await search(page).fill('zzz-no-such-order');
+    await expect(page.locator('#sui-body .sui-empty')).toHaveText('No rows match the search.');
+    await expect(page.locator('#b-mark-as-shipped'), 'no row in the list is ticked, so there is nothing to ship').toHaveCount(0);
+
+    await search(page).fill('');
+    await expect(foot(page)).toContainText('1 selected');
+    await expect(rows(page).first()).toContainText(order);
+    await expect(box(page, 0), 'the tick is back').toBeChecked();
+    await expect(page.locator('#b-mark-as-shipped')).toBeVisible();
+});
+
+test('Enter in the search box filters at once and presses no button', async ({ page }) => {
+    await page.goto('/ship');
+    await box(page, 0).click();
+    await expect(page.locator('#b-mark-as-shipped')).toBeVisible();
+
+    await search(page).fill('lina');
+    await page.keyboard.press('Enter');
+
+    await expect(foot(page)).toContainText('filtered from');
+    await expect(page.locator('[data-confirm]'), 'the button was not pressed').toHaveCount(0);
+    await expect(page.locator('#sui-body .sui-success')).toHaveCount(0);
+});
+
+test('while a character is being composed the page is left alone', async ({ page }) => {
+    await page.goto('/ship');
+    const before = await column(page, 1);
+
+    // What a Chinese, Japanese or Korean keyboard does: the text in the field
+    // changes several times before the character is final.
+    await search(page).click();
+    await search(page).dispatchEvent('compositionstart');
+    await page.keyboard.type('mia');
+    await page.waitForTimeout(700);
+    expect(await column(page, 1), 'nothing was swapped under the keyboard').toEqual(before);
+
+    await search(page).dispatchEvent('compositionend');
+
+    await expect(foot(page)).toContainText('filtered from');
+    await expect(search(page)).toHaveValue('mia');
+    await expect(search(page)).toBeFocused();
+});
+
 test.describe('in a phone-sized window', () => {
     test.use({ viewport: PHONE });
 
@@ -150,5 +254,16 @@ test.describe('without JavaScript', () => {
 
         await expect(pageNow(page)).toHaveText(/^Page 1 of/);
         await expect(box(page, 0)).toBeChecked();
+    });
+
+    test('the search works with the Enter key', async ({ page }) => {
+        await page.goto('/ship');
+
+        await search(page).fill('noah');
+        await search(page).press('Enter');
+
+        await expect(foot(page)).toContainText('filtered from');
+        await expect(search(page)).toHaveValue('noah');
+        expect((await column(page, 3)).every((name) => /noah/i.test(name))).toBe(true);
     });
 });

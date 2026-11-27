@@ -435,10 +435,10 @@ final class Page
      *
      * @return list<mixed> the selected rows, exactly as they were passed in
      */
-    public function table(iterable $rows, bool $selectable, ?array $columns, ?string $key, string $rowKey, int $pageSize, ?string $empty): array
+    public function table(iterable $rows, bool $selectable, ?array $columns, ?string $key, string $rowKey, int $pageSize, bool $search, ?string $empty): array
     {
         $key = $this->claimTable($key);
-        $table = Table::draw($key, $rows, $selectable, $columns, $rowKey, $pageSize, $empty, $this->in, $this->click, $this->inputsChanged, $this->texts());
+        $table = Table::draw($key, $rows, $selectable, $columns, $rowKey, $pageSize, $search, $empty, $this->in, $this->click, $this->inputsChanged, $this->texts());
 
         foreach ($table->keep as $name => $value) {
             $this->out[$name][$key] = $value;

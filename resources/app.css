@@ -413,6 +413,15 @@ textarea.sui-input {
   opacity: 1;
 }
 
+/*
+ * A field takes its direction from what is typed into it (dir="auto"), and an
+ * empty field counts as left to right. On a page that runs right to left the
+ * hint inside an empty field would then sit at the wrong end, away from its label.
+ */
+[dir="rtl"] .sui-input:placeholder-shown {
+  direction: rtl;
+}
+
 .sui-help {
   margin: 0;
   color: var(--ink-2);
@@ -618,6 +627,15 @@ th[aria-sort="ascending"] .sui-sort::after {
 
 th[aria-sort="descending"] .sui-sort::after {
   content: " \2193";
+}
+
+/* Over the table: its search box. */
+.sui-table-tools {
+  display: flex;
+}
+
+.sui-find {
+  max-width: 320px;
 }
 
 /* Under the table: how many rows, and on the far side the pager. */

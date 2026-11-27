@@ -175,9 +175,11 @@ function date_input(
  * @param string                      $rowKey     the column that identifies a row. A row without it is known by what is in it:
  *                                                its tick is dropped when the row changes
  * @param int                         $pageSize   how many rows one page shows, from 1 to 200
+ * @param bool                        $search     adds a search box. It filters the rows while the user types and reads
+ *                                                the columns that are shown. A ticked row that it hides is not returned
  * @param string|null                 $empty      what to say when there are no rows. By default "No rows." in the language of the page
  *
- * @return list<mixed> the rows the user ticked on all pages, exactly as they were passed in (always empty unless $selectable)
+ * @return list<mixed> the rows the user ticked on all pages of the list, exactly as they were passed in (always empty unless $selectable)
  */
 function table(
     iterable $rows,
@@ -186,9 +188,10 @@ function table(
     ?string $key = null,
     string $rowKey = 'id',
     int $pageSize = 25,
+    bool $search = false,
     ?string $empty = null,
 ): array {
-    return Runtime::page()->table($rows, $selectable, $columns, $key, $rowKey, $pageSize, $empty);
+    return Runtime::page()->table($rows, $selectable, $columns, $key, $rowKey, $pageSize, $search, $empty);
 }
 
 /**

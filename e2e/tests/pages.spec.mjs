@@ -67,6 +67,16 @@ test('the Arabic page runs right to left', async ({ page }) => {
     await expect(page.locator('a.sui-reset')).toHaveText('إعادة تعيين');
     await expect(page.locator('.sui-table-foot')).toHaveText('الصفوف 1 إلى 20 من 80');
     await expect(page.locator('.sui-pager')).toHaveText('السابق' + 'الصفحة 1 من 4' + 'التالي');
+    await expect(page.locator('input[type="search"]')).toHaveAttribute('placeholder', 'بحث');
+
+    // The hint of an empty field starts at the right, like its label. Once the user
+    // types, the field follows what is typed: Latin letters run left to right.
+    const search = page.locator('input[type="search"]');
+    await expect(search).toHaveCSS('direction', 'rtl');
+    await search.fill('lina');
+    await expect(search).toHaveCSS('direction', 'ltr');
+    await search.fill('لينا');
+    await expect(search).toHaveCSS('direction', 'rtl');
     await expect(page.locator('html')).toHaveAttribute('lang', 'ar');
 });
 

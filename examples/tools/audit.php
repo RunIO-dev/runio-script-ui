@@ -27,7 +27,7 @@ foreach (is_file($file) ? array_reverse(file($file, FILE_IGNORE_NEW_LINES | FILE
     }
 }
 
-table($entries, empty: 'Nothing logged yet. Refund an order, then come back.');
+table($entries, search: true, empty: 'Nothing logged yet. Refund an order, then come back.');
 
 if (button('Reset the demo data', confirm: 'Bring back the sample orders and empty this log?')) {
     Shop::open()->reset();

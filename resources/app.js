@@ -24,8 +24,10 @@
   let queued = false;      // an input changed while a button request was on its way
   let dirty = false;       // the user typed since the last request
   let pointerDown = false;
-  let waiting = null;      // a response that arrived while the mouse button was held
+  let composing = false;   // a keyboard is putting a character together (Chinese, Japanese, Korean, some phones)
+  let waiting = null;      // a response that arrived while the mouse button was held or a character was composed
   let busyTimer = 0;
+  let typingTimer = 0;     // the user is typing into a search box that filters while they type
 
   const isText = (el) => el instanceof HTMLTextAreaElement
     || (el instanceof HTMLInputElement && /^(text|search|email|url|tel|password)$/.test(el.type));
@@ -155,6 +157,7 @@
     if (stop) stop.abort();
     stop = new AbortController();
     const id = ++serial;
+    clearTimeout(typingTimer);
 
     const data = new URLSearchParams(new FormData(form));
     if (action) data.append(submitter.name, submitter.value);
@@ -230,11 +233,14 @@
           }
         } catch (error) { /* keep the address as it is */ }
 
-        if (pointerDown) {
+        if (pointerDown || composing) {
           // Swapping the page under a pressed mouse button would lose the click.
+          // Under a character that is being composed it would lose the character.
           waiting = { id, page };
           setTimeout(() => {
-            if (waiting && waiting.id === id) {
+            // A mouse button that never comes up must not hold the page for ever.
+            // A character that is being composed may take its time.
+            if (waiting && waiting.id === id && !composing) {
               waiting = null;
               if (id === serial) show(page);
             }
@@ -265,8 +271,33 @@
     run(event.submitter || null);
   });
 
+  // A search box of a table filters while the user types: a moment after the
+  // last key, and with one request at a time. A request for every key would
+  // queue up on the server, and their answers would be out of date on arrival.
+  const typed = () => {
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => {
+      if (composing) return;
+      if (stop) {
+        queued = true;
+      } else {
+        run(null);
+      }
+    }, 300);
+  };
+
+  const isLive = (el) => isText(el) && el.hasAttribute('data-sui-live');
+
   body.addEventListener('input', (event) => {
     if (isTyped(event.target)) dirty = true;
+    if (isLive(event.target)) typed();
+  });
+
+  body.addEventListener('compositionstart', () => { composing = true; });
+  body.addEventListener('compositionend', (event) => {
+    composing = false;
+    settle();
+    if (isLive(event.target)) typed();
   });
 
   // Choices, tick boxes, dates and numbers rerun the page as soon as they change.
@@ -279,15 +310,21 @@
     if (dirty && isText(event.target)) run(null);
   });
 
-  const release = () => {
-    pointerDown = false;
-    // The click that belongs to this release is handled first. If it started a
+  // Shows the answer that was held back, once nothing is in its way any more.
+  const settle = () => {
+    // The click that belongs to a release is handled first. If it started a
     // new request, the waiting answer is out of date and dropped.
     setTimeout(() => {
+      if (pointerDown || composing) return;
       const held = waiting;
       waiting = null;
       if (held && held.id === serial) show(held.page);
     }, 0);
+  };
+
+  const release = () => {
+    pointerDown = false;
+    settle();
   };
 
   window.addEventListener('pointerdown', () => { pointerDown = true; }, true);

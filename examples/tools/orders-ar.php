@@ -32,6 +32,7 @@ table(
     $orders,
     columns: ['id' => 'رقم الطلب', 'created_at' => 'التاريخ', 'customer' => 'العميل', 'items' => 'المنتجات', 'total' => 'المبلغ'],
     pageSize: 20,
+    search: true,
     empty: 'لا توجد طلبات مطابقة.',
 );
 

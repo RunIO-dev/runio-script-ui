@@ -2,7 +2,7 @@
 // Test: refresh
 // A page that runs again by itself, for the browser tests.
 
-use function Runio\ScriptUi\{title, select, text, date_input, note, button, success, file_input, refresh};
+use function Runio\ScriptUi\{title, select, text, date_input, note, button, success, file_input, refresh, field_error};
 
 title('Test: refresh');
 
@@ -27,6 +27,10 @@ note('Run ' . $run . '. Owner: ' . ($owner === '' ? 'nobody' : $owner) . '.');
 
 if (button('Retry')) {
     success('Retried in run ' . $run . '.');
+}
+
+if (button('Check') && $owner === '') {
+    field_error('Owner', 'Enter an owner.');
 }
 
 if (button('Delete', confirm: 'Delete everything?')) {

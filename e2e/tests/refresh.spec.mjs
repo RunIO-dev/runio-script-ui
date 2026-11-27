@@ -599,6 +599,30 @@ test('what a button said stays until the user is back and had the time to read i
     await says(page, first + 3);
 });
 
+test('what a button found wrong with a field stays as well, until the user had the time to read it', async ({ page }) => {
+    const sent = await open(page);
+    const first = await runOf(page);
+
+    await page.getByRole('button', { name: 'Check', exact: true }).click();
+    const news = page.locator('#e-owner');
+    await expect(news).toHaveText('Error: Enter an owner.');
+    await expect(owner(page), 'the field that is wrong has the focus').toBeFocused();
+
+    await page.clock.runFor(40_000);
+    await still(page, sent, 0, 'nobody is there to read it');
+    await expect(news).toBeVisible();
+
+    // The user is back. A run of the page's own checks nothing, so it takes the note away.
+    await page.mouse.move(...ASIDE);
+    await page.clock.runFor(9_900);
+    await still(page, sent, 0);
+    await expect(news).toBeVisible();
+    await page.clock.runFor(100);
+    await says(page, first + 2);
+    await expect(news).toBeHidden();
+    await expect(owner(page), 'and the focus stays where it was').toBeFocused();
+});
+
 test('news that the user has seen does not hold the page back a second time', async ({ page }) => {
     const sent = await open(page);
     const first = await runOf(page);

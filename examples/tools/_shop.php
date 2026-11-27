@@ -221,7 +221,12 @@ final class Shop
         return array_reverse($coupons);
     }
 
-    /** Gives a customer a coupon and returns its code, such as "AVA10-3". */
+    /**
+     * Gives a customer a coupon and returns its code, such as "AVA10-3".
+     *
+     * The number at the end counts the coupons of the demo, where none is ever
+     * deleted. A real shop takes a code that cannot come twice, from its database.
+     */
     public function addCoupon(string $email, int $percent, string $until): string
     {
         $code = strtoupper(substr($email, 0, 3)) . $percent . '-' . (count($this->data['coupons'] ?? []) + 1);

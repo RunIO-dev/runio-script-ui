@@ -20,7 +20,8 @@ $coupons = $customer === null ? [] : $shop->coupons($customer['email']);
 
 // Checked on every run: the note comes when the user leaves the field, and it
 // stays until the field is right. An empty field is left alone here, or a new
-// page would start full of red.
+// page would start full of red. The answer tells whoever may open this tool
+// who is a customer. That is fine in a back office, and nowhere else.
 if ($email !== '' && $customer === null) {
     field_error('Customer email', 'No customer has this email.');
 }

@@ -23,6 +23,8 @@ foreach (is_file($file) ? array_reverse(file($file, FILE_IGNORE_NEW_LINES | FILE
             'confirmed' => $entry['confirmed'],
             'file' => $entry['download']['file'] ?? null,
             'inputs' => $entry['inputs'],
+            // What the page said is wrong with its inputs in that run. A press that found something wrong did not do its work.
+            'found_wrong' => implode(' ', array_merge([], ...array_values(array_filter((array) ($entry['field_errors'] ?? []), is_array(...))))),
         ];
     }
 }

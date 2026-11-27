@@ -26,7 +26,7 @@ final class Shop
 
     private const ITEMS = ['Notebook', 'Desk lamp', 'Backpack', 'Headphones', 'Water bottle', 'Keyboard', 'Monitor arm', 'Pen set'];
 
-    /** @param array{customers: list<array<string,mixed>>, orders: list<array<string,mixed>>} $data */
+    /** @param array{customers: list<array<string,mixed>>, orders: list<array<string,mixed>>, coupons?: list<array<string,mixed>>} $data */
     private function __construct(private array $data)
     {
     }
@@ -193,6 +193,42 @@ final class Shop
         }
 
         return $customers;
+    }
+
+    /** @return array<string,mixed>|null the customer with this email, however it is written */
+    public function customer(string $email): ?array
+    {
+        foreach ($this->data['customers'] as $customer) {
+            if (strcasecmp($customer['email'], trim($email)) === 0) {
+                return $customer;
+            }
+        }
+
+        return null;
+    }
+
+    /** @return list<array{code: string, percent: int, until: string, given: string}> the coupons of a customer, newest first */
+    public function coupons(string $email): array
+    {
+        $coupons = [];
+        foreach ($this->data['coupons'] ?? [] as $coupon) {
+            if ($coupon['email'] === $email) {
+                unset($coupon['email']);
+                $coupons[] = $coupon;
+            }
+        }
+
+        return array_reverse($coupons);
+    }
+
+    /** Gives a customer a coupon and returns its code, such as "AVA10-3". */
+    public function addCoupon(string $email, int $percent, string $until): string
+    {
+        $code = strtoupper(substr($email, 0, 3)) . $percent . '-' . (count($this->data['coupons'] ?? []) + 1);
+        $this->data['coupons'][] = ['email' => $email, 'code' => $code, 'percent' => $percent, 'until' => $until, 'given' => date('Y-m-d')];
+        $this->save();
+
+        return $code;
     }
 
     /** @return list<array{day: string, revenue: float, orders: int, refunds: int}> one row per day, oldest first */

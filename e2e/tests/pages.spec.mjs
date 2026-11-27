@@ -20,6 +20,7 @@ test('the index page lists the tools', async ({ page }) => {
     expect(names.filter((name) => !name.startsWith('Test:'))).toEqual([
         'Audit log',
         'Customers',
+        'Give a coupon',
         'Import orders',
         'Refund orders',
         'Sales dashboard',
@@ -75,6 +76,48 @@ test('the dashboard keeps itself up to date, with the period that was chosen', a
     await expect(page.getByRole('radio', { name: 'Last 30 days' })).toBeChecked();
     await expect(bars).toHaveCount(month);
     expect(await sameDocument(page)).toBe(true);
+});
+
+test('the coupon form says under each field what is wrong, and gives the coupon when all is right', async ({ page }) => {
+    await page.goto('/coupon');
+    const email = page.getByLabel('Customer email', { exact: true });
+    const give = page.getByRole('button', { name: 'Give coupon', exact: true });
+    const wrong = page.locator('#sui-body .sui-field-error');
+
+    // Checked on every run: an email that no customer has is turned down as soon as the field is left.
+    await email.fill('nobody@example.com');
+    await page.keyboard.press('Tab');
+    await expect(page.locator('#e-customer-email')).toHaveText('Error: No customer has this email.');
+    await expect(page.getByLabel('Discount in percent'), 'the user is in the next field already').toBeFocused();
+
+    // Checked behind the button: more than 20 percent needs a reason. The first wrong field gets the focus.
+    await page.getByLabel('Discount in percent').fill('30');
+    await give.click();
+    await expect(wrong).toHaveCount(2);
+    await expect(page.locator('#e-reason')).toHaveText('Error: More than 20 percent needs a reason. Write a sentence.');
+    await expect(email).toBeFocused();
+    await expect(page.locator('#sui-body .sui-success')).toHaveCount(0);
+
+    await email.fill('AVA@example.com');
+    await page.getByLabel('Reason').fill('She waited three weeks for her order.');
+    await give.click();
+
+    await expect(page.locator('#sui-body .sui-success')).toHaveText(/^Ava Morgan got 30 % off with the code AVA30-\d+, until \d{4}-\d\d-\d\d\.$/);
+    await expect(wrong).toHaveCount(0);
+    await expect(rows(page), 'the coupon is in the list under the form').toHaveCount(1);
+    await expect(rows(page).first()).toContainText('AVA30-');
+
+    // The form still holds what was typed. A second press does not give a second coupon.
+    await give.click();
+    await expect(page.locator('#e-customer-email')).toHaveText(/^Error: Ava Morgan has a coupon already: AVA30-\d+, valid until /);
+    await expect(page.locator('#sui-body .sui-success')).toHaveCount(0);
+    await expect(rows(page)).toHaveCount(1);
+
+    // The log shows the press that was turned down, with what was found wrong.
+    await page.goto('/audit');
+    const turnedDown = rows(page).filter({ hasText: 'Give coupon' }).last();
+    await expect(turnedDown).toContainText('No customer has this email.');
+    await expect(turnedDown).toContainText('More than 20 percent needs a reason.');
 });
 
 test('customers: the country filter takes several countries', async ({ page }) => {

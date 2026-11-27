@@ -47,7 +47,7 @@ composer install
 php bin/script-ui serve examples/tools
 ```
 
-Open <http://localhost:8765>. The demo has seven tools: refunds, orders to ship page by page, an import of orders from a CSV file, a sales dashboard with charts, a customer list with filters, an Arabic page (right to left, with the library's own texts in Arabic), and the audit log. The demo data lives in `examples/var/` and can be deleted at any time.
+Open <http://localhost:8765>. The demo has eight tools: refunds, orders to ship page by page, an import of orders from a CSV file, a form for coupons that says under each field what is wrong with it, a sales dashboard with charts, a customer list with filters, an Arabic page (right to left, with the library's own texts in Arabic), and the audit log. The demo data lives in `examples/var/` and can be deleted at any time.
 
 ## How it works
 
@@ -72,6 +72,7 @@ The page works without JavaScript as a plain form. With JavaScript it updates in
 | Text | `title` `heading` `note` `code` `json` `link` `divider` |
 | Messages | `success` `info` `warning` `error` |
 | Inputs | `text` `textarea` `number` `select` `radio` `multiselect` `checkbox` `date_input` `file_input` |
+| Checks | `field_error` `valid` |
 | Data | `table` `chart` `metric` |
 | Actions | `button` `download` `csv` |
 | Layout and flow | `columns` `expander` `tabs` `refresh` `stop` `rerun` |
@@ -123,6 +124,40 @@ A common filter is "none ticked means all":
 $countries = multiselect('Country', $all, help: 'Tick none to see every country.');
 $found = array_filter($customers, fn ($c) => $countries === [] || in_array($c['country'], $countries, true));
 ```
+
+### What is wrong with an input
+
+`field_error()` says under an input what is wrong with what it holds. `valid()` tells whether anything was found wrong in this run.
+
+```php
+$amount = number('Amount');
+$email = text('Customer email');
+
+if (button('Refund')) {
+    if ($amount === null || $amount <= 0) {
+        field_error('Amount', 'Enter an amount above 0.');
+    }
+    if (!str_contains($email, '@')) {
+        field_error('Customer email', 'Enter an email address.');
+    }
+
+    if (valid()) {
+        $refunds->create($email, $amount);
+        success('Refunded.');
+    }
+}
+```
+
+The input is named by its label, exactly as it was written, or by its key. It has to be on the page already, so the call stands below the input. Every kind of input can be marked. A button or a table cannot: for those there is `error()`.
+
+**The user gets to see it.** The note is red with a sign in front, and the frame of the input turns red. After a pressed button the first input that is wrong gets the keyboard focus, an expander that hides it opens, and a group of tabs shows the tab it is in. Software that reads the page out says that the input is invalid and reads the note with it. Of the answers to a press, the note of the input with the focus is read out by itself, and so is the note about a file that was turned down.
+
+**A message lasts for one run.** Nothing is kept of it, so there are two ways to check, and they can be mixed:
+
+- *Behind the button*, as above. The notes are the answer to the press. When the user corrects one field and goes on to the next, the page runs again without a press, and all notes are gone until the button is pressed again.
+- *On every run*, outside `if (button(...))`. The note comes as soon as the user leaves the field, and it stays until the field is right. Leave an empty field alone there, or a new page starts full of red: `if ($email !== '' && !str_contains($email, '@')) { field_error(...); }`. What is missing is asked for behind the button.
+
+`field_error()` does not stop the script: ask `valid()` before the work is done. A file that `file_input()` turned down in that run counts as well. Its field is marked in the same way, and `valid()` is false, so no work is done without a file the user believes to be attached. A pressed button goes to the log either way. The entry says what was found wrong, so nobody takes a press that was turned down for work that was done. The example [`examples/tools/coupon.php`](examples/tools/coupon.php) uses both ways.
 
 ### Tables
 
@@ -290,7 +325,7 @@ Runio\ScriptUi\serve(
 );
 ```
 
-An entry is an array with `time`, `user`, `tool`, `action` (the label of the button), `key`, `confirmed`, `inputs`, `error` and `download`. `inputs` holds what every input of the page returned in that run, by key. Not every value is a text: a tick box gives `true` or `false`, `multiselect()` a list of options, a table the ids of its ticked rows, and a file field the name, the size and the SHA-256 of the file. Turn the entry into JSON if your log takes one line of text.
+An entry is an array with `time`, `user`, `tool`, `action` (the label of the button), `key`, `confirmed`, `inputs`, `error`, `field_errors` and `download`. `field_errors` holds what the page said is wrong in that run, by the key of the input: the messages of `field_error()`, and those of a file field that turned a file down. When it is not empty, the button most likely did not do its work. `inputs` holds what every input of the page returned in that run, by key. Not every value is a text: a tick box gives `true` or `false`, `multiselect()` a list of options, a table the ids of its ticked rows, and a file field the name, the size and the SHA-256 of the file. Turn the entry into JSON if your log takes one line of text.
 
 Every PHP file in the folder becomes a tool, listed on an index page. The first comment in a file is its title, more comment lines are its description. Files that start with `_` are helpers and are never served.
 
@@ -348,6 +383,7 @@ What stays your job: decide who may do what (`user()` tells you who is asking), 
 - While a tool works on a request, PHP holds the session, and other requests of the same user wait. That shows with a large upload that a tool reads for a long time.
 - A table gets all its rows from the script and searches, sorts and pages them itself, on every run. That is quick up to about twenty thousand rows: on a laptop a search took 0.1 seconds, and so did sorting by a text column. For more, filter in the database first.
 - `multiselect()` is a group of tick boxes. It has no search and no "select all", so it suits lists of up to a few dozen options. The ticks of one field are remembered between page views up to 8 KB of option values. Beyond that the next page view starts from the default again.
+- A message of `field_error()` is gone with the next run, unless the script says it again. Nothing keeps a note under its field until that field is corrected: check on every run for that. Only inputs can be marked, not a table and not a button.
 - Every tab of `tabs()` runs on every run. There is no way yet to run only the open one, and a link cannot open a tab or an expander.
 - `refresh()` runs the whole script and swaps the whole content. There is no way yet to refresh one part of a page, and the server pushes nothing: the page asks. When something above the place you look at grows or shrinks, the page moves under your eyes.
 - Charts are bar and line charts with one axis and at most 8 series.

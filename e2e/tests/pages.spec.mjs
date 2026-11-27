@@ -32,6 +32,13 @@ test('the dashboard draws two charts and reacts to the period', async ({ page })
     await page.goto('/dashboard');
     await expect(page.locator('figure.sui-chart svg')).toHaveCount(2);
 
+    // The explanation of the numbers is one click away.
+    const counted = page.getByText('Revenue and orders leave out the orders that were refunded.');
+    await expect(counted).toBeHidden();
+    await page.locator('summary', { hasText: 'How these numbers are counted' }).click();
+    await expect(counted).toBeVisible();
+    await expect(page.getByText('compares the last 14 days with the 14 days before them')).toBeVisible();
+
     const bars = page.locator('.sui-bar');
     const twoWeeks = await bars.count();
     expect(twoWeeks).toBeGreaterThan(0);
@@ -72,8 +79,15 @@ test('customers: a filter and a detail view', async ({ page }) => {
 
     await page.locator('[id="f-table:0"]').click();
 
-    await expect(page.locator('#sui-body .sui-json')).toBeVisible();
+    // Two views of the customer behind two headers: the orders first.
+    await expect(page.getByRole('tab', { name: /^Orders \(\d+\)$/ })).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('#sui-body table.sui-table'), 'the list and the orders of the customer').toHaveCount(2);
+    await expect(page.locator('#sui-body table.sui-table').nth(1)).toBeVisible();
+    await expect(page.locator('#sui-body .sui-json')).toBeHidden();
+
+    await page.getByRole('tab', { name: 'Record' }).click();
+    await expect(page.locator('#sui-body .sui-json')).toBeVisible();
+    await expect(page.locator('#sui-body table.sui-table').nth(1)).toBeHidden();
 });
 
 test('text typed while an answer is on its way is sent when the user leaves the field, not before', async ({ page }) => {

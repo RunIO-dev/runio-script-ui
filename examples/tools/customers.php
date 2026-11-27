@@ -4,7 +4,7 @@
 
 require_once __DIR__ . '/_shop.php';
 
-use function Runio\ScriptUi\{title, heading, columns, text, multiselect, number, checkbox, date_input, table, download, json, link, note};
+use function Runio\ScriptUi\{title, heading, columns, tabs, text, multiselect, number, checkbox, date_input, table, download, json, link, note};
 
 $shop = Shop::open();
 $customers = $shop->customers();
@@ -53,15 +53,22 @@ if ($found !== []) {
 if (count($picked) === 1) {
     $customer = $picked[0];
 
+    $orders = $shop->orders(email: $customer['email']);
+
     heading($customer['name']);
     link('Refund an order of this customer', '/refund?customer-email=' . rawurlencode($customer['email']));
-    json($customer);
-    table(
-        $shop->orders(email: $customer['email']),
-        columns: ['id' => 'Order', 'created_at' => 'Placed on', 'items' => 'Items', 'status' => 'Status', 'total' => 'Total'],
-        key: 'orders',
-        pageSize: 10,
-    );
+
+    // Two views of one customer, one of them in sight. Both run on every run:
+    // changing the tab asks nothing of the server.
+    tabs([
+        'Orders (' . count($orders) . ')' => fn () => table(
+            $orders,
+            columns: ['id' => 'Order', 'created_at' => 'Placed on', 'items' => 'Items', 'status' => 'Status', 'total' => 'Total'],
+            key: 'orders',
+            pageSize: 10,
+        ),
+        'Record' => fn () => json($customer),
+    ]);
 } elseif (count($picked) > 1) {
     note('Tick a single customer to see the details.');
 }

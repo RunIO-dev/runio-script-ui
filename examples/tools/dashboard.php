@@ -4,7 +4,7 @@
 
 require_once __DIR__ . '/_shop.php';
 
-use function Runio\ScriptUi\{title, heading, radio, columns, metric, chart, table};
+use function Runio\ScriptUi\{title, heading, note, radio, columns, expander, metric, chart, table};
 
 $shop = Shop::open();
 
@@ -35,6 +35,12 @@ columns(
     fn () => metric('Average order', '$' . number_format($orders > 0 ? $revenue / $orders : 0, 2)),
     fn () => metric('Refunds', number_format($refunds), $change($refunds, $sum($before, 'refunds')), inverse: true),
 );
+
+// What is not needed every time stays one click away.
+expander('How these numbers are counted', function () use ($days): void {
+    note('Revenue and orders leave out the orders that were refunded. A refund counts on the day its order was placed.');
+    note('The change under a number compares the last ' . $days . ' days with the ' . $days . ' days before them.');
+});
 
 chart($now, x: 'day', y: 'revenue', title: 'Revenue per day (USD)');
 chart($now, x: 'day', y: ['orders' => 'Orders', 'refunds' => 'Refunds'], type: 'line', title: 'Orders and refunds per day');

@@ -20,9 +20,12 @@ final class ToolFinderTest extends TestCase
 
     protected function tearDown(): void
     {
-        foreach (array_merge(glob($this->dir . '/sub/{,.}*', GLOB_BRACE) ?: [], glob($this->dir . '/{,.}*', GLOB_BRACE) ?: []) as $path) {
-            if (is_file($path)) {
-                unlink($path);
+        // scandir() and not glob() with GLOB_BRACE: that flag does not exist on every system (Alpine Linux).
+        foreach ([$this->dir . '/sub', $this->dir] as $folder) {
+            foreach (scandir($folder) ?: [] as $name) {
+                if (is_file($folder . '/' . $name)) {
+                    unlink($folder . '/' . $name);
+                }
             }
         }
         rmdir($this->dir . '/sub');

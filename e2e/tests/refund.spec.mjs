@@ -43,10 +43,10 @@ test('typing an email and pressing Enter shows the orders without a page load', 
 test('ticking a row brings up the refund button', async () => {
     await expect(refund()).toHaveCount(0);
 
-    await page.locator('#f-table-0').click();
+    await page.locator('[id="f-table:0"]').click();
 
     await expect(refund()).toBeVisible();
-    await expect(page.locator('#f-table-0')).toBeChecked();
+    await expect(page.locator('[id="f-table:0"]')).toBeChecked();
     [tickedOrder] = await column(page, 1);
 });
 
@@ -54,14 +54,14 @@ test('a click on a column header sorts, and the tick survives', async () => {
     const ticked = page.locator('#sui-body tbody input:checked');
     const order = await ticked.inputValue();
 
-    await page.locator('#s-table-3').click();
+    await page.locator('[id="s-table:3"]').click();
 
     await expect(page.locator('#sui-body th[aria-sort="ascending"]')).toHaveCount(1);
     const totals = (await column(page, -1)).map(Number);
     expect(totals, 'sorted by total').toEqual([...totals].sort((a, b) => a - b));
     await expect(ticked, 'still one tick').toHaveCount(1);
     await expect(ticked, 'on the same order').toHaveValue(order);
-    await expect(page.locator('#s-table-3'), 'focus stays on the header').toBeFocused();
+    await expect(page.locator('[id="s-table:3"]'), 'focus stays on the header').toBeFocused();
 });
 
 test('the refund button asks first', async () => {
@@ -72,7 +72,7 @@ test('the refund button asks first', async () => {
 });
 
 test('cancel closes the question and refunds nothing', async () => {
-    await page.locator('#b-refund-selected-no').click();
+    await page.locator('[id="b-refund-selected:no"]').click();
 
     await expect(question()).toHaveCount(0);
     await expect(rows(page)).toHaveCount(ordersBefore);
@@ -97,13 +97,13 @@ test('the page is locked while a button is being handled', async () => {
     await page.unroute('**/refund');
 
     // Close the question again, so the next step starts where it expects to.
-    await page.locator('#b-refund-selected-no').click();
+    await page.locator('[id="b-refund-selected:no"]').click();
     await expect(question()).toHaveCount(0);
 });
 
 test('answering yes refunds, reloads the table and says so', async () => {
     await refund().click();
-    await page.locator('#b-refund-selected-yes').click();
+    await page.locator('[id="b-refund-selected:yes"]').click();
 
     await expect(message()).toHaveText('Refunded 1 order.');
     await expect(rows(page)).toHaveCount(ordersBefore - 1);
@@ -130,7 +130,7 @@ test('typing and then clicking right away loses neither', async () => {
     await page.keyboard.type('ava@example.com');
 
     // The field loses the focus on mouse down, which starts a rerun.
-    await page.locator('#s-table-0').hover();
+    await page.locator('[id="s-table:0"]').hover();
     await page.mouse.down();
     // Its answer arrives while the button is still held. Swapping the page now would lose the click.
     await settled(page);

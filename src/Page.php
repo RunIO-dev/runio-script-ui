@@ -512,8 +512,8 @@ final class Page
                     . '<div class="sui-answers">'
                     // When an answer is given the question goes away. The page script then
                     // puts the keyboard focus back on the button the question belongs to.
-                    . '<button type="submit" class="sui-btn sui-btn-' . ($style === 'danger' ? 'danger' : 'primary') . '" id="' . Text::e('b-' . $key . '-yes') . '" data-sui-return="' . Text::e('b-' . $key) . '" name="_click" value="' . Text::e($yesValue) . '" dir="auto">' . Text::e($yes ?? $this->t('confirm.yes')) . '</button>'
-                    . '<button type="submit" class="sui-btn sui-btn-default" id="' . Text::e('b-' . $key . '-no') . '" data-sui-return="' . Text::e('b-' . $key) . '" name="_click" value="' . Text::e($key . ':no') . '" dir="auto">' . Text::e($no ?? $this->t('confirm.no')) . '</button>'
+                    . '<button type="submit" class="sui-btn sui-btn-' . ($style === 'danger' ? 'danger' : 'primary') . '" id="' . Text::e('b-' . $key . ':yes') . '" data-sui-return="' . Text::e('b-' . $key) . '" name="_click" value="' . Text::e($yesValue) . '" dir="auto">' . Text::e($yes ?? $this->t('confirm.yes')) . '</button>'
+                    . '<button type="submit" class="sui-btn sui-btn-default" id="' . Text::e('b-' . $key . ':no') . '" data-sui-return="' . Text::e('b-' . $key) . '" name="_click" value="' . Text::e($key . ':no') . '" dir="auto">' . Text::e($no ?? $this->t('confirm.no')) . '</button>'
                     . '</div></div>';
             }
         }

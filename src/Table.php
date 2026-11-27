@@ -198,7 +198,7 @@ final class Table
             $direction = $sort !== null && $sort[0] === $column ? $sort[1] : null;
             $html .= '<th scope="col"' . ($numeric[$column] ? ' class="sui-num"' : '')
                 . ($direction === null ? '' : ' aria-sort="' . ($direction === 'asc' ? 'ascending' : 'descending') . '"') . '>'
-                . '<button type="submit" class="sui-sort" id="' . Text::e('s-' . $key . '-' . $column) . '" name="_click" value="' . Text::e($key . ':sort:' . $column) . '" dir="auto">'
+                . '<button type="submit" class="sui-sort" id="' . Text::e('s-' . $key . ':' . $column) . '" name="_click" value="' . Text::e($key . ':sort:' . $column) . '" dir="auto">'
                 . Text::e($field['label']) . '</button></th>';
         }
         $html .= '</tr></thead><tbody>';
@@ -206,7 +206,7 @@ final class Table
         foreach ($visible as $position => $index) {
             $html .= '<tr' . (isset($chosen[$index]) ? ' class="sui-picked"' : '') . '>';
             if ($selectable) {
-                $html .= '<td class="sui-pick"><input type="checkbox" id="' . Text::e('f-' . $key . '-' . $position) . '" name="' . Text::e('_sel[' . $key . '][]') . '" value="' . Text::e($ids[$index]['wire']) . '"'
+                $html .= '<td class="sui-pick"><input type="checkbox" id="' . Text::e('f-' . $key . ':' . $position) . '" name="' . Text::e('_sel[' . $key . '][]') . '" value="' . Text::e($ids[$index]['wire']) . '"'
                     . ' aria-label="' . Text::e($texts->get('table.select_row', ['row' => $ids[$index]['name']])) . '"' . (isset($chosen[$index]) ? ' checked' : '') . '></td>';
             }
             foreach ($fields as $column => $field) {

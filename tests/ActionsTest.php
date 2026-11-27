@@ -82,11 +82,37 @@ final class ActionsTest extends ToolTestCase
 
         $response = $this->post($tool, ['_click' => 'delete']);
 
-        self::assertSame(1, $this->hits($response, '//button[@id="s-table-0" and @value="table:sort:0"]'));
-        self::assertSame(1, $this->hits($response, '//button[@id="s-table-1"]'));
+        self::assertSame(1, $this->hits($response, '//button[@id="s-table:0" and @value="table:sort:0"]'));
+        self::assertSame(1, $this->hits($response, '//button[@id="s-table:1"]'));
         self::assertSame(1, $this->hits($response, '//button[@id="b-delete"]'));
-        self::assertSame('b-delete', $this->attr($response, '//button[@id="b-delete-yes"]', 'data-sui-return'));
-        self::assertSame('b-delete', $this->attr($response, '//button[@id="b-delete-no"]', 'data-sui-return'));
+        self::assertSame('b-delete', $this->attr($response, '//button[@id="b-delete:yes"]', 'data-sui-return'));
+        self::assertSame('b-delete', $this->attr($response, '//button[@id="b-delete:no"]', 'data-sui-return'));
+    }
+
+    public function testNoKeyGivesAnInputTheIdOfAPartOfATableOrOfAQuestion(): void
+    {
+        // "table-0" and "delete-yes" are ordinary keys. The first tick box of a table
+        // and the yes of a question must not end up with the ids these keys get: a
+        // label would then point at the wrong element and the focus would go there.
+        $tool = function (): void {
+            \Runio\ScriptUi\table([['id' => 1, 'name' => 'Ava']], selectable: true);
+            \Runio\ScriptUi\checkbox('Table 0');
+            button('Delete', confirm: 'Really?');
+            button('Delete yes');
+            button('Delete no');
+        };
+
+        $response = $this->post($tool, ['_click' => 'delete']);
+
+        $ids = [];
+        foreach ($this->xpath($response)->query('//*[@id]') ?: [] as $element) {
+            self::assertInstanceOf(\DOMElement::class, $element);
+            $ids[] = $element->getAttribute('id');
+        }
+
+        self::assertContains('f-table-0', $ids);
+        self::assertContains('b-delete-yes', $ids);
+        self::assertSame(array_values(array_unique($ids)), $ids, 'no id is used twice');
     }
 
     public function testAPageViewNeverPressesAButton(): void

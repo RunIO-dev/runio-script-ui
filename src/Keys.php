@@ -11,6 +11,10 @@ namespace Runio\ScriptUi;
  * Keys never start with an underscore: those names belong to the library
  * (_token, _click, _seen, _sel, _sort, _tool, _reset).
  *
+ * A key holds no colon. The element of an input has the id "f-" plus its key and
+ * a button "b-" plus its key. The parts inside a table or a question get an id
+ * with a colon (f-orders:0, b-refund:yes), which no key can produce.
+ *
  * @internal
  */
 final class Keys

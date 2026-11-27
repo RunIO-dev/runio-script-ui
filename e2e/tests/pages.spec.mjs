@@ -48,7 +48,7 @@ test('customers: a filter and a detail view', async ({ page }) => {
     expect(withRefund).toBeGreaterThan(0);
     expect(withRefund).toBeLessThan(all);
 
-    await page.locator('#f-table-0').click();
+    await page.locator('[id="f-table:0"]').click();
 
     await expect(page.locator('#sui-body .sui-json')).toBeVisible();
     await expect(page.locator('#sui-body table.sui-table'), 'the list and the orders of the customer').toHaveCount(2);

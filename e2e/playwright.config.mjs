@@ -1,5 +1,10 @@
+import { delimiter } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
-import { DIRECT_PORT, DIRECT_URL, TOOLS_PORT, TOOLS_URL } from './tests/support.mjs';
+import { DIRECT_PORT, DIRECT_URL, PHP_SETTINGS_DIR, TOOLS_PORT, TOOLS_URL } from './tests/support.mjs';
+
+// PHP reads the settings in php/ after its own. The empty entry in front stands for the
+// folder it scans anyway, so nothing that is set up on the machine gets lost.
+const PHP_INI_SCAN_DIR = `${process.env.PHP_INI_SCAN_DIR ?? ''}${delimiter}${PHP_SETTINGS_DIR}`;
 
 // The specs share one set of demo data and change it, so they run one at a time. They count on
 // a fresh server for every run: the refund flow changes the data that the other tests read.
@@ -27,6 +32,7 @@ export default defineConfig({
             // A folder of tools, served the way the README shows. prepare-demo.mjs makes
             // a fresh copy of the example tools first, so every run starts with the same data.
             command: `node tests/prepare-demo.mjs && php ../bin/script-ui serve .demo/tools --port=${TOOLS_PORT}`,
+            env: { PHP_INI_SCAN_DIR },
             url: TOOLS_URL,
             reuseExistingServer: false,
             timeout: 30_000,

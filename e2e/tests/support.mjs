@@ -8,6 +8,10 @@ export const DIRECT_URL = `http://127.0.0.1:${DIRECT_PORT}`;
 export const EXAMPLES_DIR = fileURLToPath(new URL('../../examples/', import.meta.url));
 /** The copy of the example tools that the tests run against. See prepare-demo.mjs. */
 export const DEMO_DIR = fileURLToPath(new URL('../.demo/', import.meta.url));
+/** Tools that only the tests need. They are served next to the example tools. */
+export const TEST_TOOLS_DIR = fileURLToPath(new URL('../tools/', import.meta.url));
+/** PHP settings for the server of the tests: the same upload limits on every machine. */
+export const PHP_SETTINGS_DIR = fileURLToPath(new URL('../php', import.meta.url));
 
 export const PHONE = { width: 390, height: 800 };
 

@@ -71,6 +71,8 @@ final class TabsTest extends ToolTestCase
             'every panel is in the page',
         );
         self::assertSame(2, $this->hits($response, '//div[@id="t-tabs"]/div[@role="tabpanel" and @hidden]'));
+        // The keyboard reaches a part also when nothing in it takes the focus: a table, a text.
+        self::assertSame(3, $this->hits($response, '//div[@id="t-tabs"]/div[@role="tabpanel" and @tabindex="0"]'));
         self::assertSame('0:orders', $this->attr($response, '//input[@type="hidden" and @name="_tab[tabs]"]', 'value'));
     }
 

@@ -1034,7 +1034,9 @@ final class Page
                 . ' data-sui-tab="' . Text::e($position . ':' . $slugs[$position]) . '" dir="auto">'
                 . Text::e($label) . '</button>';
 
-            $bodies .= '<div class="sui-tab-panel sui-flow" role="tabpanel" id="' . $panel . '" aria-labelledby="' . $header . '"'
+            // A part takes the focus itself, so that the keyboard reaches it also when
+            // nothing inside does: a table, a text.
+            $bodies .= '<div class="sui-tab-panel sui-flow" role="tabpanel" id="' . $panel . '" aria-labelledby="' . $header . '" tabindex="0"'
                 . ($isOpen ? '' : ' hidden') . '>' . ($panels[$position] ?? '') . '</div>';
         }
 

@@ -180,9 +180,12 @@ test('the arrow keys go from header to header, and the tab follows them', async 
 
     expect(sent.runs.length, 'no tool ran for any of that').toBe(0);
 
-    // From the header on into its part.
+    // From the headers on into the part. It takes the focus itself first, so that the
+    // keyboard also reaches a part with nothing in it to stop at.
     await page.keyboard.press('Tab');
     await expect(header(page, 'About')).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('tabpanel', { name: 'Settings' })).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(limit(page)).toBeFocused();
 });

@@ -199,6 +199,30 @@ final class TabsTest extends ToolTestCase
         self::assertSame('Paid!', $this->open($response));
     }
 
+    public function testTabsThatLeaveThePageStartFromTheFirstWhenTheyComeBack(): void
+    {
+        // Like an input: what a run does not draw, it does not keep.
+        $drawn = true;
+        $tabs = self::three();
+        $tool = function () use (&$drawn, $tabs): void {
+            note('always there');
+            if ($drawn) {
+                $tabs();
+            }
+        };
+
+        $first = $this->post($tool, ['_tab' => ['tabs' => '2:settings']]);
+        self::assertSame('Settings', $this->open($first));
+
+        $drawn = false;
+        $second = $this->post($tool, $this->form($first));
+        self::assertSame(0, $this->hits($second, '//*[@role="tablist"]'));
+
+        $drawn = true;
+        self::assertSame('Orders', $this->open($this->post($tool, $this->form($second))));
+        self::assertSame('Orders', $this->open($this->get($tool)));
+    }
+
     public function testATabThatIsGoneGivesWayToTheFirst(): void
     {
         $tool = self::three();

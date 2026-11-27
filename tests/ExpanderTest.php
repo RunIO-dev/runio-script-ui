@@ -117,6 +117,29 @@ final class ExpanderTest extends ToolTestCase
         self::assertFalse($this->isOpen($this->get($tool), 'details'));
     }
 
+    public function testABoxThatLeavesThePageStartsTheWayTheScriptSaysWhenItComesBack(): void
+    {
+        // Like an input: what a run does not draw, it does not keep.
+        $drawn = true;
+        $tool = function () use (&$drawn): void {
+            note('always there');
+            if ($drawn) {
+                expander('Details', static fn () => note('inside'));
+            }
+        };
+
+        $first = $this->post($tool, ['_open' => ['details' => '1']]);
+        self::assertTrue($this->isOpen($first, 'details'));
+
+        $drawn = false;
+        $second = $this->post($tool, $this->form($first));
+        self::assertSame(0, $this->hits($second, '//details'));
+
+        $drawn = true;
+        self::assertFalse($this->isOpen($this->post($tool, $this->form($second)), 'details'));
+        self::assertFalse($this->isOpen($this->get($tool), 'details'));
+    }
+
     public function testOnlyOpenAndClosedCountAsState(): void
     {
         $tool = function (): void {

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Runio\ScriptUi\Tests;
 
 use Runio\ScriptUi\Config;
+use Runio\ScriptUi\Http\Request;
+use Runio\ScriptUi\Kernel;
 use Runio\ScriptUi\Runtime;
 use Runio\ScriptUi\Tests\Support\ToolTestCase;
 
@@ -22,6 +24,12 @@ final class RuntimeTest extends ToolTestCase
         parent::tearDown();
     }
 
+    /** A kernel with the settings configure() made, plus a login check that lets the test in. */
+    private function kernelOf(Config $config): Kernel
+    {
+        return new Kernel($config->with(auth: static fn (): string => 'tester', debug: true), $this->session);
+    }
+
     public function testUiFunctionsNeedAWebRequest(): void
     {
         // On the command line there is no page to draw on.
@@ -34,7 +42,8 @@ final class RuntimeTest extends ToolTestCase
     public function testConfigureSetsTheDefaults(): void
     {
         self::assertNull(Runtime::config()->auth);
-        self::assertSame('Tools', Runtime::config()->name);
+        self::assertNull(Runtime::config()->name);
+        self::assertNull(Runtime::config()->language);
 
         configure(auth: static fn (): string => 'ava', name: 'Back office');
         configure(debug: false);
@@ -44,6 +53,26 @@ final class RuntimeTest extends ToolTestCase
         self::assertSame('ava', ($config->auth)());
         self::assertSame('Back office', $config->name);
         self::assertFalse($config->debug);
+    }
+
+    public function testConfigureSetsTheLanguageAndOwnTexts(): void
+    {
+        configure(language: 'de');
+        configure(texts: ['de' => ['page.reset' => 'Leeren']]);
+
+        $response = $this->kernelOf(Runtime::config())->handle(new Request('GET', '/tool'), 'tool', static function (): void {
+            title('Bestellungen');
+        });
+
+        self::assertSame('de', $this->attr($response, '/html', 'lang'));
+        self::assertSame(['Leeren'], $this->texts($response, '//a[contains(@class,"sui-reset")]'));
+    }
+
+    public function testConfigureRefusesALanguageItHasNoTextsFor(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+
+        configure(language: 'fr');
     }
 
     public function testConfigureIsRefusedOnceThePageHasStarted(): void

@@ -69,7 +69,7 @@ final class Kernel
 
         $route = self::route($request, $base);
         if ($route === null) {
-            return $this->message(404, 'Not found', 'There is nothing at this address.');
+            return $this->message(404, 'error.not_found', 'error.no_address');
         }
 
         if ($route['id'] === null) {
@@ -87,7 +87,7 @@ final class Kernel
 
         $tool = $finder->find($route['id']);
         if ($tool === null) {
-            return $this->message(404, 'Not found', 'There is no tool at this address.', [$route['home'], 'All tools']);
+            return $this->message(404, 'error.not_found', 'error.no_tool', [$route['home'], 'page.all_tools']);
         }
 
         $page = $this->open($request, $tool->id, $route['url']($tool->id), $route['home'], $user['name'], $tool->id);
@@ -236,14 +236,7 @@ final class Kernel
                 return ['name' => null];
             }
 
-            return $this->message(
-                403,
-                'Only available on this computer',
-                "No login check is set up, so these tools only answer to a browser on the computer they run on (http://localhost), "
-                . "and not through a proxy or a tunnel.\n\n"
-                . 'To use them from anywhere else, add a login check: pass auth: to Runio\ScriptUi\serve() or to Runio\ScriptUi\configure(). '
-                . 'It receives the request and returns the name of the user, or null to refuse.',
-            );
+            return $this->message(403, 'error.local_only', 'error.local_only_text');
         }
 
         try {
@@ -252,11 +245,11 @@ final class Kernel
             // Never show why to someone who is not logged in.
             error_log('Script UI: the login check failed: ' . $error);
 
-            return $this->message(500, 'The login check failed', 'Nobody is let in until it works again. The details are in the error log of the server.');
+            return $this->message(500, 'error.login_failed', 'error.login_failed_text');
         }
 
         if ($result === null || $result === false || $result === '' || $result === []) {
-            return $this->message(403, 'Not allowed', 'You do not have access to this page.');
+            return $this->message(403, 'error.denied', 'error.denied_text');
         }
 
         $name = match (true) {
@@ -272,11 +265,7 @@ final class Kernel
     private function open(Request $request, string $toolId, string $selfUrl, ?string $homeUrl, ?string $user, string $stateKey): Page|Response
     {
         if (!in_array($request->method, ['GET', 'HEAD', 'POST'], true)) {
-            return new Response(
-                405,
-                Renderer::message('Method not allowed', 'This page answers GET and POST requests.', $this->config->name, $nonce = self::nonce()),
-                self::headers($nonce) + ['Allow' => 'GET, HEAD, POST'],
-            );
+            return $this->message(405, 'error.method', 'error.method_text', null, ['Allow' => 'GET, HEAD, POST']);
         }
 
         $token = $this->token();
@@ -287,12 +276,7 @@ final class Kernel
             $crossSite = strtolower((string) $request->header('sec-fetch-site')) === 'cross-site';
 
             if (!is_string($sent) || !hash_equals($token, $sent) || $crossSite) {
-                return $this->message(
-                    419,
-                    'This page has expired',
-                    'Your session ended, or the form was not sent from this page. Open the page again and repeat what you did.',
-                    [$selfUrl, 'Open the page again'],
-                );
+                return $this->message(419, 'error.expired', 'error.expired_text', [$selfUrl, 'error.expired_link']);
             }
         }
 
@@ -339,6 +323,8 @@ final class Kernel
             $request->header('x-script-ui') === 'fragment',
             $stateKey,
             $linked,
+            $this->config->language,
+            $this->config->texts,
         );
     }
 
@@ -546,16 +532,26 @@ final class Kernel
     }
 
     /**
-     * @param array{string, string}|null $link
+     * A page that only says something. Heading, text and the text of the link are ids of built-in texts.
+     *
+     * @param array{string, string}|null $link    address and text id of a link to offer
+     * @param array<string,string>       $headers more headers for this response
      */
-    private function message(int $status, string $heading, string $text, ?array $link = null): Response
+    private function message(int $status, string $heading, string $text, ?array $link = null, array $headers = []): Response
     {
         $nonce = self::nonce();
+        $texts = $this->config->builtInTexts();
 
         return new Response(
             $status,
-            Renderer::message($heading, $text, $this->config->name, $nonce, $link),
-            self::headers($nonce),
+            Renderer::message(
+                $texts->get($heading),
+                $texts->get($text),
+                $this->config,
+                $nonce,
+                $link === null ? null : [$link[0], $texts->get($link[1])],
+            ),
+            self::headers($nonce) + $headers,
         );
     }
 

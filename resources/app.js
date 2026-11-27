@@ -55,7 +55,8 @@
       note.setAttribute('role', 'alert');
       body.prepend(note);
     }
-    note.textContent = 'The server did not answer. Check that it is running, then try again. If you were logged out, reload the page.';
+    // The page brought this text along, in its own language.
+    note.textContent = body.getAttribute('data-sui-offline') || 'The server did not answer.';
   };
 
   // Where the user is: the element with the focus, what they typed into it while

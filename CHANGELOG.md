@@ -16,3 +16,4 @@ First version. Requires PHP 8.2+ with the mbstring and session extensions, and n
 - `serve()` for a folder of tools with an index page, `configure()` for a script on its own, and the `script-ui serve` command for local use.
 - A login check and an audit log (`auth`, `log`), protection against forged requests, a strict Content-Security-Policy, and local-only access while no login check is set.
 - Pages update in place with JavaScript and work as plain forms without it. A title in Arabic or Hebrew turns the page right to left.
+- The library's own texts ("Yes", "Reset", "No rows.") in English, Arabic and German. A page follows the language of its title, `language:` sets one language for every page, and `texts:` replaces single texts or adds a language.

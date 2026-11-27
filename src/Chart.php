@@ -44,16 +44,18 @@ final class Chart
         ?string $title,
         int $height,
         bool $withTable,
+        Texts $texts,
     ): string {
         $caption = $title === null ? '' : '<figcaption dir="auto">' . Text::e($title) . '</figcaption>';
 
         if ($rows === []) {
-            return '<figure class="sui-chart">' . $caption . '<p class="sui-empty">No data to draw.</p></figure>';
+            return '<figure class="sui-chart">' . $caption . '<p class="sui-empty" dir="auto">' . Text::e($texts->get('chart.empty')) . '</p></figure>';
         }
 
         $labels = [];
         foreach ($rows as $row) {
-            $labels[] = self::text($row[$x] ?? '');
+            $label = $row[$x] ?? '';
+            $labels[] = is_bool($label) ? $texts->get($label ? 'cell.yes' : 'cell.no') : self::text($label);
         }
 
         /** @var list<list<?float>> $values one list of values per series */
@@ -79,18 +81,16 @@ final class Chart
 
         $scale = self::scale($values, $type);
 
-        $description = $title ?? sprintf(
-            '%s chart of %s by %s',
-            $type === 'line' ? 'Line' : 'Bar',
-            implode(', ', $names),
-            Text::humanise($x),
-        );
+        $description = $title ?? $texts->get($type === 'line' ? 'chart.line' : 'chart.bar', [
+            'series' => implode(', ', $names),
+            'axis' => Text::humanise($x),
+        ]);
 
         return '<figure class="sui-chart">'
             . $caption
             . $legend
             . '<div class="sui-chart-scroll">' . self::svg($labels, $values, $names, $type, max(120, min(600, $height)), $description, $scale) . '</div>'
-            . ($withTable ? self::table(Text::humanise($x), $labels, $values, $names, $scale['precision']) : '')
+            . ($withTable ? self::table(Text::humanise($x), $labels, $values, $names, $scale['precision'], $texts->get('chart.data')) : '')
             . '</figure>';
     }
 
@@ -412,9 +412,9 @@ final class Chart
      * @param list<list<?float>> $values
      * @param list<string>       $names
      */
-    private static function table(string $axis, array $labels, array $values, array $names, int $precision): string
+    private static function table(string $axis, array $labels, array $values, array $names, int $precision, string $summary): string
     {
-        $html = '<details class="sui-data"><summary>Data</summary><div class="sui-table-wrap"><table class="sui-table"><thead><tr>'
+        $html = '<details class="sui-data"><summary dir="auto">' . Text::e($summary) . '</summary><div class="sui-table-wrap"><table class="sui-table"><thead><tr>'
             . '<th scope="col" dir="auto">' . Text::e($axis) . '</th>';
         foreach ($names as $name) {
             $html .= '<th scope="col" class="sui-num" dir="auto">' . Text::e($name) . '</th>';
@@ -459,7 +459,6 @@ final class Chart
         return match (true) {
             is_string($value) => mb_scrub($value, 'UTF-8'),
             is_int($value), is_float($value) => (string) $value,
-            is_bool($value) => $value ? 'Yes' : 'No',
             $value instanceof \DateTimeInterface => $value->format('Y-m-d'),
             $value instanceof \Stringable => mb_scrub((string) $value, 'UTF-8'),
             default => '',

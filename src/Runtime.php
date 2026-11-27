@@ -35,7 +35,10 @@ final class Runtime
         return self::$config ??= new Config();
     }
 
-    public static function configure(?callable $auth, ?callable $log, ?bool $debug, ?string $name): void
+    /**
+     * @param array<array-key,mixed>|null $texts
+     */
+    public static function configure(?callable $auth, ?callable $log, ?bool $debug, ?string $name, ?string $language = null, ?array $texts = null): void
     {
         if (self::$page !== null) {
             // Accepting this quietly would be dangerous: a login check added here
@@ -47,7 +50,7 @@ final class Runtime
             );
         }
 
-        self::$config = self::config()->with($auth, $log, $debug, $name);
+        self::$config = self::config()->with($auth, $log, $debug, $name, $language, $texts);
     }
 
     /** The page being drawn. On a web request without one, the page is started here. */
@@ -56,8 +59,19 @@ final class Runtime
         return self::$page ?? self::boot();
     }
 
-    public static function serve(string $directory, ?callable $auth, ?callable $log, ?string $name, ?bool $debug, ?string $base): void
-    {
+    /**
+     * @param array<array-key,mixed>|null $texts
+     */
+    public static function serve(
+        string $directory,
+        ?callable $auth,
+        ?callable $log,
+        ?string $name,
+        ?bool $debug,
+        ?string $base,
+        ?string $language = null,
+        ?array $texts = null,
+    ): void {
         if (self::$page !== null) {
             throw new \LogicException('serve() cannot be called from inside a tool.');
         }
@@ -65,7 +79,7 @@ final class Runtime
 
         $request = Request::fromGlobals();
         $kernel = new Kernel(
-            self::config()->with($auth, $log, $debug, $name),
+            self::config()->with($auth, $log, $debug, $name, $language, $texts),
             new NativeSession($request->secure),
         );
 

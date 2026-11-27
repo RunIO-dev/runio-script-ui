@@ -22,7 +22,7 @@ final class Renderer
     /** What the browser tab says. */
     public static function title(Page $page, Config $config): string
     {
-        return $page->documentTitle() . ' · ' . $config->name;
+        return $page->documentTitle() . ' · ' . $config->name($page->texts());
     }
 
     /** The page of one tool: everything the script drew, inside the one form. */
@@ -30,6 +30,7 @@ final class Renderer
     {
         // The address without what a link filled in. See Page::address().
         $address = $page->address();
+        $texts = $page->texts();
 
         $form = '<form id="sui-form" method="post" action="' . Text::e($address) . '" autocomplete="off" novalidate>'
             . '<input type="hidden" name="_token" value="' . Text::e($token) . '">'
@@ -39,8 +40,9 @@ final class Renderer
             // The script replaces the inside of this element after every run. It works on
             // this element and not on the form, because a field named "action" or
             // "contains" would hide the form's own property of that name.
-            . '<div id="sui-body" class="sui-flow">' . $page->html() . '</div>'
-            . '<noscript><p class="sui-noscript"><button type="submit" class="sui-btn sui-btn-default">Update</button></p></noscript>'
+            // The script cannot ask for a text while the server is away, so it gets this one now.
+            . '<div id="sui-body" class="sui-flow" data-sui-offline="' . Text::e($texts->get('page.offline')) . '">' . $page->html() . '</div>'
+            . '<noscript><p class="sui-noscript"><button type="submit" class="sui-btn sui-btn-default">' . Text::e($texts->get('page.update')) . '</button></p></noscript>'
             . '</form>';
 
         $reset = $address . (str_contains($address, '?') ? '&' : '?')
@@ -48,10 +50,11 @@ final class Renderer
 
         return self::document(
             title: self::title($page, $config),
-            name: $config->name,
+            name: $config->name($texts),
             body: $form,
             nonce: $nonce,
-            language: $page->language(),
+            texts: $texts,
+            rightToLeft: $page->rightToLeft(),
             homeUrl: $page->homeUrl,
             user: $page->user,
             resetUrl: $reset,
@@ -67,11 +70,17 @@ final class Renderer
      */
     public static function index(array $tools, \Closure $urlFor, Config $config, ?string $user, string $directory, string $nonce): string
     {
-        $body = '<div class="sui-flow"><h1 class="sui-title" dir="auto">' . Text::e($config->name) . '</h1>';
+        $texts = $config->builtInTexts();
+        $name = $config->name($texts);
+        $body = '<div class="sui-flow"><h1 class="sui-title" dir="auto">' . Text::e($name) . '</h1>';
 
         if ($tools === []) {
-            $body .= '<div class="sui-callout sui-info" role="status">No tools yet. Put a PHP file into <code>'
-                . Text::e($directory) . '</code> and it shows up here.</div>';
+            // The text is escaped first. Only then the folder goes in, marked as code.
+            $body .= '<div class="sui-callout sui-info" role="status" dir="auto">' . str_replace(
+                '{folder}',
+                '<code dir="ltr">' . Text::e($directory) . '</code>',
+                Text::e($texts->get('index.empty')),
+            ) . '</div>';
         } else {
             $body .= '<div class="sui-tools">';
             foreach ($tools as $tool) {
@@ -83,11 +92,11 @@ final class Renderer
         }
 
         return self::document(
-            title: $config->name,
-            name: $config->name,
+            title: $name,
+            name: $name,
             body: $body . '</div>',
             nonce: $nonce,
-            language: Text::language($config->name),
+            texts: $texts,
             user: $user,
         );
     }
@@ -97,14 +106,16 @@ final class Renderer
      *
      * @param array{string, string}|null $link address and text of a link to offer
      */
-    public static function message(string $heading, string $text, string $name, string $nonce, ?array $link = null): string
+    public static function message(string $heading, string $text, Config $config, string $nonce, ?array $link = null): string
     {
-        $body = '<div class="sui-flow sui-message"><h1 class="sui-title">' . Text::e($heading) . '</h1>'
-            . '<p class="sui-note">' . Text::lines($text) . '</p>'
-            . ($link === null ? '' : '<p class="sui-link-row"><a class="sui-link" href="' . Text::e($link[0]) . '">' . Text::e($link[1]) . '</a></p>')
+        $texts = $config->builtInTexts();
+        $name = $config->name($texts);
+        $body = '<div class="sui-flow sui-message"><h1 class="sui-title" dir="auto">' . Text::e($heading) . '</h1>'
+            . '<p class="sui-note" dir="auto">' . Text::lines($text) . '</p>'
+            . ($link === null ? '' : '<p class="sui-link-row"><a class="sui-link" href="' . Text::e($link[0]) . '" dir="auto">' . Text::e($link[1]) . '</a></p>')
             . '</div>';
 
-        return self::document(title: $heading . ' · ' . $name, name: $name, body: $body, nonce: $nonce);
+        return self::document(title: $heading . ' · ' . $name, name: $name, body: $body, nonce: $nonce, texts: $texts);
     }
 
     private static function document(
@@ -112,7 +123,8 @@ final class Renderer
         string $name,
         string $body,
         string $nonce,
-        string $language = 'en',
+        Texts $texts,
+        ?bool $rightToLeft = null,
         ?string $homeUrl = null,
         ?string $user = null,
         ?string $resetUrl = null,
@@ -124,14 +136,14 @@ final class Renderer
                 . ($homeUrl === null ? '' : '<a class="sui-home" href="' . Text::e($homeUrl) . '" dir="auto">' . Text::e($name) . '</a>')
                 . '<span class="sui-gap"></span>'
                 . ($user === null ? '' : '<span class="sui-user" dir="auto">' . Text::e($user) . '</span>')
-                . ($resetUrl === null ? '' : '<a class="sui-reset" href="' . Text::e($resetUrl) . '" title="Forget the saved inputs of this tool">Reset</a>')
+                . ($resetUrl === null ? '' : '<a class="sui-reset" href="' . Text::e($resetUrl) . '" title="' . Text::e($texts->get('page.reset_hint')) . '">' . Text::e($texts->get('page.reset')) . '</a>')
                 . '</nav></header>';
         }
 
         $safeNonce = Text::e($nonce);
 
         return '<!doctype html>' . "\n"
-            . '<html lang="' . $language . '" dir="' . (in_array($language, ['ar', 'he'], true) ? 'rtl' : 'ltr') . '">' . "\n"
+            . '<html lang="' . Text::e($texts->language) . '" dir="' . (($rightToLeft ?? $texts->rightToLeft()) ? 'rtl' : 'ltr') . '">' . "\n"
             . '<head>' . "\n"
             . '<meta charset="utf-8">' . "\n"
             . '<meta name="viewport" content="width=device-width, initial-scale=1">' . "\n"

@@ -61,7 +61,8 @@ final class FragmentTest extends ToolTestCase
 
         $header = (string) $response->header('X-Script-Ui-Title');
         self::assertMatchesRegularExpression('/^[A-Za-z0-9%._~-]+$/', $header, 'only characters that are safe in a header');
-        self::assertSame('استرجاع طلب · Tools', rawurldecode($header));
+        // The name of the collection was not set, so it is "Tools" in the language of the page.
+        self::assertSame('استرجاع طلب · الأدوات', rawurldecode($header));
     }
 
     public function testAnErrorIsSentAsContentToo(): void

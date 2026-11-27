@@ -47,7 +47,7 @@ composer install
 php bin/script-ui serve examples/tools
 ```
 
-Open <http://localhost:8765>. The demo has five tools: refunds, a sales dashboard with charts, a customer list with filters, an Arabic page (right to left), and the audit log. The demo data lives in `examples/var/` and can be deleted at any time.
+Open <http://localhost:8765>. The demo has five tools: refunds, a sales dashboard with charts, a customer list with filters, an Arabic page (right to left, with the library's own texts in Arabic), and the audit log. The demo data lives in `examples/var/` and can be deleted at any time.
 
 ## How it works
 
@@ -133,6 +133,30 @@ By default tools are chosen with `?_tool=refund`. With `base: '/admin/tools'` th
 
 **One script on its own.** A script that the web server runs directly works too. Call `Runio\ScriptUi\configure(auth: ...)` in a file every tool includes, before anything is drawn. See [`examples/direct/hello.php`](examples/direct/hello.php).
 
+### Languages
+
+The texts the library writes itself ("Yes", "Cancel", "Reset", "No rows.") come in English, Arabic and German. Each page follows the language its title is written in, so a tool with an Arabic title is Arabic throughout and runs right to left. Call `title()` first: what is drawn before it does not know the language yet.
+
+To use one language on every page, set it:
+
+```php
+Runio\ScriptUi\serve(__DIR__ . '/tools', language: 'de');
+```
+
+Your own words for built-in texts, or a language that is not built in, go into `texts:`. All texts and their ids are in [`resources/texts/en.php`](resources/texts/en.php). What you leave out stays English.
+
+```php
+Runio\ScriptUi\serve(
+    __DIR__ . '/tools',
+    language: 'fr',
+    texts: ['fr' => ['confirm.yes' => 'Oui', 'confirm.no' => 'Annuler', 'page.reset' => 'Réinitialiser']],
+);
+```
+
+`configure()` takes the same two settings. `button(yes:, no:)` and `table(empty:)` still set a text for one place. A Hebrew title turns the page right to left as well; its built-in texts stay English until you pass Hebrew ones.
+
+Pages that are not a tool have no title to follow: the list of tools and pages such as "Not allowed" use `language:`, or else the language `name:` is written in.
+
 ## What the library does for safety
 
 - **No login check, no outside access.** Without `auth`, tools only answer to a browser on the computer they run on. The request must come from a loopback address, with a local host name, and must not look passed on (proxy headers, HTTP/1.0, `Connection: close`). No check of this kind can see through every proxy or tunnel, so anything that can be reached from outside needs `auth`.
@@ -148,7 +172,6 @@ What stays your job: decide who may do what (`user()` tells you who is asking), 
 ## Limits of this first version
 
 - No file uploads and no download button (CSV export) yet. Until then a tool can send a file itself on a plain page view: when a parameter such as `?export=1` is set, close the output buffers, send the headers, print the file and `exit`. Offer it with `link('Download CSV', '/orders?export=1')`.
-- Built-in texts such as "Yes", "Cancel" and "No rows." are English. The labels you pass can be in any language, and a title in Arabic or Hebrew turns the whole page right to left.
 - Tables show the first 200 rows by default (`limit:`). There is no paging yet.
 - Charts are bar and line charts with one axis and at most 8 series.
 - State lives in the PHP session. Two tabs of the same tool share saved inputs.

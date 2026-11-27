@@ -61,6 +61,25 @@ test('the Arabic page runs right to left', async ({ page }) => {
     const label = await page.locator('.sui-field label').first().boundingBox();
     const input = await page.locator('.sui-field .sui-input').first().boundingBox();
     expect(Math.abs(label.x + label.width - (input.x + input.width)), 'the label ends at the right edge of its field').toBeLessThan(2);
+
+    // The title is Arabic, so the texts the library writes itself are Arabic too.
+    await expect(page.locator('a.sui-reset')).toHaveText('إعادة تعيين');
+    await expect(page.locator('.sui-table-foot')).toHaveText('الصفوف: 20 من 80');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'ar');
+});
+
+test('when the server does not answer, the page says so in its own language', async ({ page }) => {
+    await page.goto('/orders-ar');
+    await page.route('**/orders-ar', (route) => route.abort());
+
+    await page.locator('select.sui-input').selectOption('paid');
+
+    await expect(page.locator('#sui-offline')).toHaveText(/^لم يستجب الخادم\./);
+
+    // The browser reports the request that was cut off. That one is expected here.
+    expect(page.problems).toHaveLength(1);
+    expect(page.problems[0]).toContain('Failed to load resource');
+    page.problems.length = 0;
 });
 
 test('a script that is opened directly works the same way', async ({ page }) => {

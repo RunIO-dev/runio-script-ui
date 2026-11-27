@@ -173,6 +173,7 @@ function date_input(
  * @param string                      $rowKey     the column that identifies a row. A row without it is known by what is in it:
  *                                                its tick is dropped when the row changes
  * @param int                         $limit      how many rows to show at most
+ * @param string|null                 $empty      what to say when there are no rows. By default "No rows." in the language of the page
  *
  * @return list<mixed> the rows the user ticked, exactly as they were passed in (always empty unless $selectable)
  */
@@ -183,7 +184,7 @@ function table(
     ?string $key = null,
     string $rowKey = 'id',
     int $limit = 200,
-    string $empty = 'No rows.',
+    ?string $empty = null,
 ): array {
     return Runtime::page()->table($rows, $selectable, $columns, $key, $rowKey, $limit, $empty);
 }
@@ -223,13 +224,15 @@ function chart(
  * @param string|null $confirm a question to ask first. The button then returns true only after the user answered yes
  *                             to exactly this text. Keep it the same from run to run: with the time of day in it,
  *                             the answer would never fit the question
+ * @param string|null $yes     the text of the answer that goes ahead. By default "Yes" in the language of the page
+ * @param string|null $no      the text of the answer that does nothing. By default "Cancel" in the language of the page
  */
 function button(
     string $label,
     string $style = 'default',
     ?string $confirm = null,
-    string $yes = 'Yes',
-    string $no = 'Cancel',
+    ?string $yes = null,
+    ?string $no = null,
     ?string $key = null,
 ): bool {
     return Runtime::page()->button($label, $style, $confirm, $yes, $no, $key);
@@ -276,10 +279,21 @@ function user(): ?string
  * @param bool|null     $debug show error details in the page. By default they are shown only without a login check,
  *                             where nobody but this computer gets in. With a login check, pass true where you develop
  * @param string|null   $name  the name of the tool collection
+ * @param string|null                 $language the language of the built-in texts ("Yes", "Reset", "No rows.") on every page:
+ *                                              "en", "ar" or "de", or a language you pass the texts for.
+ *                                              By default each page follows the language its title is written in
+ * @param array<array-key,mixed>|null $texts    your own built-in texts, per language: ['de' => ['page.reset' => 'Leeren']].
+ *                                              All texts and their ids are in resources/texts/en.php
  */
-function configure(?callable $auth = null, ?callable $log = null, ?bool $debug = null, ?string $name = null): void
-{
-    Runtime::configure($auth, $log, $debug, $name);
+function configure(
+    ?callable $auth = null,
+    ?callable $log = null,
+    ?bool $debug = null,
+    ?string $name = null,
+    ?string $language = null,
+    ?array $texts = null,
+): void {
+    Runtime::configure($auth, $log, $debug, $name, $language, $texts);
 }
 
 /**
@@ -295,6 +309,11 @@ function configure(?callable $auth = null, ?callable $log = null, ?bool $debug =
  * @param string|null   $base  null: one address, tools are chosen with "?_tool=id".
  *                          A path such as "/admin/tools": tools get the addresses "/admin/tools/{id}"
  *                          (the web server must send those addresses to the script that calls serve()).
+ * @param string|null                 $language the language of the built-in texts ("Yes", "Reset", "No rows.") on every page:
+ *                                              "en", "ar" or "de", or a language you pass the texts for.
+ *                                              By default each page follows the language its title is written in
+ * @param array<array-key,mixed>|null $texts    your own built-in texts, per language: ['de' => ['page.reset' => 'Leeren']].
+ *                                              All texts and their ids are in resources/texts/en.php
  */
 function serve(
     string $directory,
@@ -303,6 +322,8 @@ function serve(
     ?string $name = null,
     ?bool $debug = null,
     ?string $base = null,
+    ?string $language = null,
+    ?array $texts = null,
 ): void {
-    Runtime::serve($directory, $auth, $log, $name, $debug, $base);
+    Runtime::serve($directory, $auth, $log, $name, $debug, $base, $language, $texts);
 }

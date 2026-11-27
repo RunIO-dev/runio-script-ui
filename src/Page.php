@@ -66,11 +66,15 @@ final class Page
 
     private ?int $bufferLevel = null;
 
+    private ?Texts $texts = null;
+
     /**
      * @param array<array-key,mixed> $in      the bag this run reads from
      * @param array<array-key,mixed> $carried  messages kept from the run that called rerun()
      * @param bool                   $fragment the page's own script asked: answer with the content only
      * @param array<array-key,true>  $linked   names in the bag that came from the address ("?customer-email=...")
+     * @param string|null            $setLanguage the language of the built-in texts, when one is set for all pages
+     * @param array<array-key,mixed> $ownTexts built-in texts the application replaced: language => (id => text)
      */
     public function __construct(
         public readonly string $toolId,
@@ -84,6 +88,8 @@ final class Page
         public readonly bool $fragment = false,
         ?string $stateKey = null,
         private readonly array $linked = [],
+        private readonly ?string $setLanguage = null,
+        private readonly array $ownTexts = [],
     ) {
         $this->stateKey = $stateKey ?? $toolId;
 
@@ -420,7 +426,7 @@ final class Page
      *
      * @return list<mixed> the selected rows, exactly as they were passed in
      */
-    public function table(iterable $rows, bool $selectable, ?array $columns, ?string $key, string $rowKey, int $limit, string $empty): array
+    public function table(iterable $rows, bool $selectable, ?array $columns, ?string $key, string $rowKey, int $limit, ?string $empty): array
     {
         $key = $this->claimTable($key);
 
@@ -432,7 +438,7 @@ final class Page
         }
 
         if ($records === []) {
-            $this->add('<p class="sui-empty" dir="auto">' . Text::e($empty) . '</p>');
+            $this->add('<p class="sui-empty" dir="auto">' . Text::e($empty ?? $this->t('table.empty')) . '</p>');
 
             return [];
         }
@@ -535,12 +541,12 @@ final class Page
             ));
         }
 
-        $this->add(Chart::figure($records, $x, $series, $type, $title, $height, $data));
+        $this->add(Chart::figure($records, $x, $series, $type, $title, $height, $data, $this->texts()));
     }
 
     // ---------------------------------------------------------------- actions
 
-    public function button(string $label, string $style, ?string $confirm, string $yes, string $no, ?string $key): bool
+    public function button(string $label, string $style, ?string $confirm, ?string $yes, ?string $no, ?string $key): bool
     {
         if (!in_array($style, self::BUTTON_STYLES, true)) {
             throw new \InvalidArgumentException(sprintf(
@@ -563,13 +569,13 @@ final class Page
             $pressed = $this->click === $yesValue;
 
             if (!$pressed && ($this->click === $key || str_starts_with($this->click, $key . ':yes:'))) {
-                $html .= '<div class="sui-confirm" data-confirm="' . Text::e($key) . '" role="group" aria-label="Please confirm" tabindex="-1" data-sui-focus>'
+                $html .= '<div class="sui-confirm" data-confirm="' . Text::e($key) . '" role="group" aria-label="' . Text::e($this->t('confirm.title')) . '" tabindex="-1" data-sui-focus>'
                     . '<p class="sui-question" dir="auto">' . Text::lines($confirm) . '</p>'
                     . '<div class="sui-answers">'
                     // When an answer is given the question goes away. The page script then
                     // puts the keyboard focus back on the button the question belongs to.
-                    . '<button type="submit" class="sui-btn sui-btn-' . ($style === 'danger' ? 'danger' : 'primary') . '" id="' . Text::e('b-' . $key . '-yes') . '" data-sui-return="' . Text::e('b-' . $key) . '" name="_click" value="' . Text::e($yesValue) . '" dir="auto">' . Text::e($yes) . '</button>'
-                    . '<button type="submit" class="sui-btn sui-btn-default" id="' . Text::e('b-' . $key . '-no') . '" data-sui-return="' . Text::e('b-' . $key) . '" name="_click" value="' . Text::e($key . ':no') . '" dir="auto">' . Text::e($no) . '</button>'
+                    . '<button type="submit" class="sui-btn sui-btn-' . ($style === 'danger' ? 'danger' : 'primary') . '" id="' . Text::e('b-' . $key . '-yes') . '" data-sui-return="' . Text::e('b-' . $key) . '" name="_click" value="' . Text::e($yesValue) . '" dir="auto">' . Text::e($yes ?? $this->t('confirm.yes')) . '</button>'
+                    . '<button type="submit" class="sui-btn sui-btn-default" id="' . Text::e('b-' . $key . '-no') . '" data-sui-return="' . Text::e('b-' . $key) . '" name="_click" value="' . Text::e($key . ':no') . '" dir="auto">' . Text::e($no ?? $this->t('confirm.no')) . '</button>'
                     . '</div></div>';
             }
         }
@@ -745,10 +751,33 @@ final class Page
         return $this->title ?? Text::humanise($this->toolId);
     }
 
-    /** The language of the page, guessed from its title. It decides the direction of the page. */
+    /**
+     * The language of the built-in texts: the one that is set for all pages, or
+     * else the one the title is written in.
+     */
     public function language(): string
     {
-        return $this->title === null ? 'en' : Text::language($this->title);
+        return $this->setLanguage ?? ($this->title === null ? 'en' : Text::language($this->title));
+    }
+
+    /**
+     * The direction of the page. The words of a page come from its script, so an
+     * Arabic title turns the page whatever language is set.
+     */
+    public function rightToLeft(): bool
+    {
+        return $this->texts()->rightToLeft() || ($this->title !== null && Text::language($this->title) !== 'en');
+    }
+
+    /** The built-in texts in the language of the page. They change when title() changes that language. */
+    public function texts(): Texts
+    {
+        $language = $this->language();
+        if ($this->texts === null || $this->texts->language !== $language) {
+            $this->texts = Texts::load($language, $this->ownTexts);
+        }
+
+        return $this->texts;
     }
 
     /** Everything the script drew, as the inside of the form. */
@@ -773,6 +802,16 @@ final class Page
     }
 
     // --------------------------------------------------------------- internals
+
+    /**
+     * A built-in text in the language of the page, as plain text.
+     *
+     * @param array<string,string|int> $values
+     */
+    private function t(string $id, array $values = []): string
+    {
+        return $this->texts()->get($id, $values);
+    }
 
     private function add(string $html): void
     {
@@ -891,17 +930,14 @@ final class Page
     private function failureHtml(\Throwable $error): string
     {
         if (!$this->debug) {
-            return self::calloutHtml(
-                'error',
-                'Something went wrong while running this tool. The details are in the error log of the server.',
-            );
+            return self::calloutHtml('error', Text::e($this->t('failure.text')));
         }
 
         return self::calloutHtml(
             'error',
             '<strong>' . Text::e($error::class) . '</strong><br>' . Text::lines(mb_scrub($error->getMessage(), 'UTF-8'))
             . '<br><span class="sui-where" dir="ltr">' . Text::e($error->getFile() . ':' . $error->getLine()) . '</span>'
-            . '<details class="sui-trace"><summary>Stack trace</summary><pre dir="ltr">' . Text::e($error->getTraceAsString()) . '</pre></details>',
+            . '<details class="sui-trace"><summary>' . Text::e($this->t('failure.trace')) . '</summary><pre dir="ltr">' . Text::e($error->getTraceAsString()) . '</pre></details>',
         );
     }
 
@@ -1169,7 +1205,7 @@ final class Page
 
         $html = '<div class="sui-table-wrap"><table class="sui-table"><thead><tr>';
         if ($selectable) {
-            $html .= '<th scope="col" class="sui-pick"><span class="sui-sr">Select</span></th>';
+            $html .= '<th scope="col" class="sui-pick"><span class="sui-sr">' . Text::e($this->t('table.select')) . '</span></th>';
         }
         foreach ($fields as $column => $field) {
             $direction = $sort !== null && $sort[0] === $column ? $sort[1] : null;
@@ -1184,10 +1220,11 @@ final class Page
             $html .= '<tr' . (isset($chosen[$index]) ? ' class="sui-picked"' : '') . '>';
             if ($selectable) {
                 $html .= '<td class="sui-pick"><input type="checkbox" id="' . Text::e('f-' . $key . '-' . $position) . '" name="' . Text::e('_sel[' . $key . '][]') . '" value="' . Text::e($ids[$index]['wire']) . '"'
-                    . ' aria-label="' . Text::e('Select row ' . $ids[$index]['name']) . '"' . (isset($chosen[$index]) ? ' checked' : '') . '></td>';
+                    . ' aria-label="' . Text::e($this->t('table.select_row', ['row' => $ids[$index]['name']])) . '"' . (isset($chosen[$index]) ? ' checked' : '') . '></td>';
             }
             foreach ($fields as $column => $field) {
-                $text = self::cell($records[$index][$field['field']] ?? null);
+                $value = $records[$index][$field['field']] ?? null;
+                $text = is_bool($value) ? $this->t($value ? 'cell.yes' : 'cell.no') : self::cell($value);
                 $html .= '<td' . match (true) {
                     // A number reads left to right on every page, so "-5" never turns into "5-".
                     $numeric[$column] => ' class="sui-num" dir="ltr"',
@@ -1200,15 +1237,18 @@ final class Page
         }
         $html .= '</tbody></table></div>';
 
+        $texts = $this->texts();
         $total = count($records);
         $shown = count($visible);
-        $foot = $shown < $total
-            ? sprintf('Showing %s of %s rows', number_format($shown), number_format($total))
-            : sprintf('%s %s', number_format($total), $total === 1 ? 'row' : 'rows');
+        $foot = match (true) {
+            $shown < $total => $texts->get('table.rows_of', ['shown' => $texts->number($shown), 'count' => $texts->number($total)]),
+            $total === 1 => $texts->get('table.rows_one'),
+            default => $texts->get('table.rows', ['count' => $texts->number($total)]),
+        };
         if ($selectable) {
-            $foot .= sprintf(' · %s selected', number_format(count($chosen)));
+            $foot .= ' · ' . $texts->get('table.selected', ['count' => $texts->number(count($chosen))]);
         }
-        $html .= '<p class="sui-table-foot">' . $foot . '</p>';
+        $html .= '<p class="sui-table-foot">' . Text::e($foot) . '</p>';
 
         if ($sort !== null) {
             $html .= '<input type="hidden" name="' . Text::e('_sort[' . $key . ']') . '" value="' . $sort[0] . ':' . $sort[1] . '">';
@@ -1276,6 +1316,10 @@ final class Page
         return $ids;
     }
 
+    /**
+     * A value as text. Sorting compares these texts, so they are the same in
+     * every language: the table writes yes and no in the language of the page itself.
+     */
     private static function cell(mixed $value): string
     {
         return match (true) {

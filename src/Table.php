@@ -32,6 +32,11 @@ final class Table
     /** The rows of the page travel as one field too, for the box in the header. */
     private const MAX_ROWS_BYTES = 5000;
 
+    /** What a row is sorted by: numbers come first, then words, and rows without a value last. */
+    private const SORT_NUMBER = 0;
+    private const SORT_WORD = 1;
+    private const SORT_EMPTY = 2;
+
     /** What the tick box of a row sends: a fingerprint of the row. See rowIds(). */
     private const WIRE = '/^[0-9a-f]{20}$/D';
 
@@ -460,6 +465,10 @@ final class Table
     /**
      * Puts rows into the order they are shown in. Rows are positions in the data.
      *
+     * Numbers come before words. Comparing a number with a word by another rule
+     * than two numbers or two words would leave a mixed column in no order at all.
+     * Empty values go last, whichever way the column is sorted.
+     *
      * @param list<int>                                    $order
      * @param list<array<array-key,mixed>>                 $records
      * @param list<array{field: array-key, label: string}> $fields
@@ -473,17 +482,39 @@ final class Table
             return $order;
         }
 
+        // What a row is sorted by is worked out once for each row. Sorting compares
+        // every row many times, and making the text of a cell is the slow part.
         $field = $fields[$sort[0]]['field'];
-        $descending = $sort[1] === 'desc';
-        usort($order, static function (int $a, int $b) use ($records, $field, $descending): int {
-            $left = $records[$a][$field] ?? null;
-            $right = $records[$b][$field] ?? null;
-            if ($left === null || $right === null) {
-                // Empty values go last, whichever way the column is sorted.
-                return ($left === null) <=> ($right === null);
+        $kinds = [];
+        $numbers = [];
+        $texts = [];
+        foreach ($order as $index) {
+            $value = $records[$index][$field] ?? null;
+            if ($value === null) {
+                $kinds[$index] = self::SORT_EMPTY;
+                continue;
             }
 
-            $result = self::compare($left, $right);
+            $isNumber = is_int($value) || is_float($value) || (is_string($value) && is_numeric($value));
+            $kinds[$index] = $isNumber ? self::SORT_NUMBER : self::SORT_WORD;
+            $numbers[$index] = $isNumber ? (float) $value : 0.0;
+            $texts[$index] = self::cell($value);
+        }
+
+        $descending = $sort[1] === 'desc';
+        usort($order, static function (int $a, int $b) use ($kinds, $numbers, $texts, $descending): int {
+            $left = $kinds[$a];
+            $right = $kinds[$b];
+            if ($left === self::SORT_EMPTY || $right === self::SORT_EMPTY) {
+                return ($left === self::SORT_EMPTY) <=> ($right === self::SORT_EMPTY);
+            }
+
+            $result = match (true) {
+                $left !== $right => $left <=> $right,
+                // Two long numbers can be the same float and still differ: compare their digits then.
+                $left === self::SORT_NUMBER => ($numbers[$a] <=> $numbers[$b]) ?: strnatcmp($texts[$a], $texts[$b]),
+                default => strnatcasecmp($texts[$a], $texts[$b]) ?: strcmp($texts[$a], $texts[$b]),
+            };
 
             return $descending ? -$result : $result;
         });
@@ -888,24 +919,5 @@ final class Table
             $value instanceof \Stringable => mb_scrub((string) $value, 'UTF-8'),
             default => Text::json($value, false),
         };
-    }
-
-    private static function compare(mixed $left, mixed $right): int
-    {
-        $isNumber = static fn (mixed $value): bool => is_int($value) || is_float($value) || (is_string($value) && is_numeric($value));
-        $leftIsNumber = $isNumber($left);
-
-        // Numbers come before words. Comparing a number with a word by another rule
-        // than two numbers or two words would leave a mixed column in no order at all.
-        if ($leftIsNumber !== $isNumber($right)) {
-            return $leftIsNumber ? -1 : 1;
-        }
-
-        if ($leftIsNumber) {
-            // Two long numbers can be the same float and still differ: compare their digits then.
-            return ((float) $left <=> (float) $right) ?: strnatcmp((string) $left, (string) $right);
-        }
-
-        return strnatcasecmp(self::cell($left), self::cell($right)) ?: strcmp(self::cell($left), self::cell($right));
     }
 }

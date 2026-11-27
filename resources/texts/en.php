@@ -27,7 +27,8 @@ return [
 
     // Tables
     'table.empty' => 'No rows.',
-    'table.select' => 'Select',
+    'table.select_page' => 'Select all rows on this page',
+    'table.clear' => 'Clear selection',
     'table.select_row' => 'Select row {row}',
     'table.search' => 'Search',
     'table.search_label' => 'Search this table',

@@ -121,7 +121,10 @@ final class Table
         $tooMany = false;
         if ($selectable) {
             $ids = self::rowIds($records, $rowKey, $fields);
-            [$chosen, $parked, $tooMany] = self::ticked($key, $in, $ids, $order);
+            [$chosen, $parked, $tooMany] = $click === $key . ':none'
+                // "Clear selection": every tick goes, also the ones the search hides.
+                ? [[], [], false]
+                : self::ticked($key, $in, $ids, $order);
         }
 
         if ($total === 0) {
@@ -143,12 +146,21 @@ final class Table
         $pages = (int) ceil($total / $pageSize);
         $view = hash('crc32b', ($keep['_sort'] ?? '') . "\0" . $pageSize . "\0" . implode(' ', $words));
         $list = hash('crc32b', $given . "\0" . Text::json($records[0], false) . "\0" . Text::json($records[$given - 1], false));
-        $page = $pages > 1 ? self::page($key, $in, $click, $view, $list, $inputsChanged, $pages) : 1;
-        if ($pages > 1) {
-            $keep['_page'] = $page . '.' . $view . '.' . $list;
-            $hidden .= self::hidden('_page', $key, $keep['_page']);
+        $seen = self::seenPage($key, $in, $view, $list, $inputsChanged);
+        $page = 1;
+        if ($seen !== null) {
+            // A click on "Next" is a click on a page of the list the user saw.
+            $asked = preg_match('/^' . preg_quote($key, '/') . ':page:([1-9]\d{0,6})$/D', $click, $match) === 1 ? (int) $match[1] : $seen;
+            // Rows were deleted and the page is gone: show the last one that is left.
+            $page = min($asked, $pages);
         }
+        $keep['_page'] = $page . '.' . $view . '.' . $list;
+        $hidden .= self::hidden('_page', $key, $keep['_page']);
         $visible = array_slice($order, ($page - 1) * $pageSize, $pageSize);
+
+        if ($selectable && $seen !== null && $click === $key . ':all') {
+            [$chosen, $tooMany] = self::tickPage($chosen, $visible, count($parked));
+        }
 
         $named = null;
         $elsewhere = 0;
@@ -205,6 +217,11 @@ final class Table
             . '<div class="sui-table-bar">'
             // The page script reads this line to people who use a screen reader.
             . '<p class="sui-table-foot" data-sui-status>' . Text::e($status) . '</p>'
+            // Ticks on other pages and behind the search cannot be unticked one by one.
+            // When it is pressed the button goes away, and the focus moves to the box in the header.
+            . ($chosen === [] && $parked === [] ? '' : '<button type="submit" class="sui-link-btn" id="' . Text::e('b-' . $key . ':none') . '"'
+                . ' data-sui-return="' . Text::e('b-' . $key . ':all') . '" name="_click" value="' . Text::e($key . ':none') . '">'
+                . Text::e($texts->get('table.clear')) . '</button>')
             . ($tooMany ? '<p class="sui-table-limit" data-sui-status>' . Text::e($texts->get('table.selected_max', ['count' => $texts->number(self::MAX_SELECTED)])) . '</p>' : '')
             . ($pages > 1 ? self::pager($key, $page, $pages, $texts) : '')
             . '</div>'
@@ -417,21 +434,23 @@ final class Table
     }
 
     /**
-     * The page to show. The form says which page the user was on and for which
-     * list ("3.5d0f1a2b.9c8e7f60"): how it was sorted and cut into pages, and
-     * which rows it held.
+     * The page the user was looking at, or null when the table no longer shows
+     * the list they saw.
      *
+     * The form says which page that was and of which list ("3.5d0f1a2b.9c8e7f60"):
+     * how it was searched, sorted and cut into pages, and which rows it held.
      * A page number means nothing in another list. So the table starts again at
-     * its first page when it is sorted or cut differently, and when the user
-     * changed an input of the tool and the rows are different ones now: a filter.
-     * Rows that change on their own (a new order arrives) leave the page alone.
+     * its first page when it is searched, sorted or cut differently, and when the
+     * user changed an input of the tool and the rows are different ones now: a
+     * filter. Rows that change on their own (a new order arrives) leave the page alone.
      *
-     * A click on "Next" is a click on a page of the list the user saw. It only
-     * counts while the table still shows that list.
+     * A click in the table is a click on the list the user saw: "Next", or the
+     * box that ticks all rows of the page. It only counts while this says that
+     * the table still shows that list.
      *
      * @param array<array-key,mixed> $in
      */
-    private static function page(string $key, array $in, string $click, string $view, string $list, bool $inputsChanged, int $pages): int
+    private static function seenPage(string $key, array $in, string $view, string $list, bool $inputsChanged): ?int
     {
         $saved = is_array($in['_page'] ?? null) ? ($in['_page'][$key] ?? null) : null;
 
@@ -439,16 +458,41 @@ final class Table
             || preg_match('/^([1-9]\d{0,6})\.([0-9a-f]{8})\.([0-9a-f]{8})$/D', $saved, $match) !== 1
             || $match[2] !== $view
             || ($inputsChanged && $match[3] !== $list)) {
-            return 1;
+            return null;
         }
 
-        $page = (int) $match[1];
-        if (preg_match('/^' . preg_quote($key, '/') . ':page:([1-9]\d{0,6})$/D', $click, $asked) === 1) {
-            $page = (int) $asked[1];
+        return (int) $match[1];
+    }
+
+    /**
+     * A click on the box in the header. When every row of the page is ticked, it
+     * unticks them. Otherwise it ticks the ones that are not, as far as the limit allows.
+     *
+     * @param array<int,true> $chosen  the ticked rows of the list
+     * @param list<int>       $visible the rows of the page
+     * @param int             $parked  how many more rows are ticked behind the search
+     *
+     * @return array{array<int,true>, bool} the ticked rows now, and whether the limit stopped it
+     */
+    private static function tickPage(array $chosen, array $visible, int $parked): array
+    {
+        $missing = array_values(array_filter($visible, static fn (int $index): bool => !isset($chosen[$index])));
+
+        if ($missing === []) {
+            foreach ($visible as $index) {
+                unset($chosen[$index]);
+            }
+
+            return [$chosen, false];
         }
 
-        // Rows were deleted and the page is gone: show the last one that is left.
-        return min($page, $pages);
+        $room = self::MAX_SELECTED - count($chosen) - $parked;
+        foreach (array_slice($missing, 0, max(0, $room)) as $index) {
+            $chosen[$index] = true;
+        }
+        ksort($chosen);
+
+        return [$chosen, count($missing) > $room];
     }
 
     /**
@@ -585,7 +629,14 @@ final class Table
 
         $html = '<div class="sui-table-wrap"><table class="sui-table"><thead><tr>';
         if ($selectable) {
-            $html .= '<th scope="col" class="sui-pick"><span class="sui-sr">' . Text::e($texts->get('table.select')) . '</span></th>';
+            // A button that looks and reads like a tick box. A real tick box sends
+            // nothing when it is unticked, so the server could not tell a click from none.
+            $ticked = count(array_intersect_key($chosen, array_fill_keys($visible, true)));
+            $label = Text::e($texts->get('table.select_page'));
+            $html .= '<th scope="col" class="sui-pick"><button type="submit" class="sui-all" id="' . Text::e('b-' . $key . ':all') . '"'
+                . ' name="_click" value="' . Text::e($key . ':all') . '" role="checkbox"'
+                . ' aria-checked="' . ($ticked === 0 ? 'false' : ($ticked === count($visible) ? 'true' : 'mixed')) . '"'
+                . ' aria-label="' . $label . '" title="' . $label . '"></button></th>';
         }
         foreach ($fields as $column => $field) {
             $direction = $sort !== null && $sort[0] === $column ? $sort[1] : null;

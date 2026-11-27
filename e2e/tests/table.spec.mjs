@@ -9,6 +9,9 @@ const next = (page) => page.locator('[id="p-table:next"]');
 const previous = (page) => page.locator('[id="p-table:prev"]');
 const box = (page, position) => page.locator(`[id="f-table:${position}"]`);
 const search = (page) => page.locator('[id="f-table:find"]');
+const all = (page) => page.locator('[id="b-table:all"]');
+const clear = (page) => page.locator('[id="b-table:none"]');
+const ticked = (page) => page.locator('#sui-body tbody input:checked');
 /** What the page script hands to a screen reader. */
 const said = (page) => page.locator('#sui-status');
 
@@ -222,6 +225,89 @@ test('while a character is being composed the page is left alone', async ({ page
     await expect(search(page)).toBeFocused();
 });
 
+// -------------------------------------------------------------- select all
+
+test('the box in the header ticks the page, and "Clear selection" unticks every page', async ({ page }) => {
+    await page.goto('/ship');
+    await expect(all(page)).toHaveAttribute('aria-checked', 'false');
+    await expect(clear(page)).toHaveCount(0);
+
+    await all(page).click();
+
+    await expect(ticked(page)).toHaveCount(10);
+    await expect(foot(page)).toContainText('10 selected');
+    await expect(all(page)).toHaveAttribute('aria-checked', 'true');
+    await expect(all(page), 'the focus stays on the box').toBeFocused();
+
+    // One row less: the box shows that only some rows of the page are ticked.
+    await box(page, 2).click();
+    await expect(all(page)).toHaveAttribute('aria-checked', 'mixed');
+    await expect(foot(page)).toContainText('9 selected');
+
+    // The next page has no tick yet. Its box ticks its rows and leaves page 1 alone.
+    await next(page).click();
+    await expect(all(page)).toHaveAttribute('aria-checked', 'false');
+    await all(page).click();
+    await expect(foot(page)).toContainText('19 selected (9 on other pages)');
+
+    await clear(page).click();
+
+    await expect(foot(page)).toContainText('0 selected');
+    await expect(ticked(page)).toHaveCount(0);
+    await expect(clear(page), 'nothing left to clear').toHaveCount(0);
+    await expect(all(page), 'the focus moved to the box in the header').toBeFocused();
+    await previous(page).click();
+    await expect(ticked(page), 'page 1 is unticked too').toHaveCount(0);
+});
+
+test('the box in the header works with the space bar and unticks a page that is fully ticked', async ({ page }) => {
+    await page.goto('/ship');
+
+    await all(page).focus();
+    await page.keyboard.press('Space');
+    await expect(ticked(page)).toHaveCount(10);
+
+    await page.keyboard.press('Space');
+    await expect(ticked(page)).toHaveCount(0);
+    await expect(all(page)).toHaveAttribute('aria-checked', 'false');
+    await expect(all(page)).toBeFocused();
+});
+
+test('the box in the header looks like the tick boxes under it', async ({ page }) => {
+    await page.goto('/ship');
+
+    const size = async (locator) => {
+        const frame = await locator.boundingBox();
+
+        return [Math.round(frame.width), Math.round(frame.height)];
+    };
+    expect(await size(all(page))).toEqual(await size(box(page, 0)));
+
+    // Ticked, it takes the colour that the browser gives a ticked box.
+    await all(page).click();
+    await expect(all(page)).toHaveAttribute('aria-checked', 'true');
+    const accent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());
+    const colour = await all(page).evaluate((button) => {
+        const probe = document.createElement('i');
+        probe.style.color = getComputedStyle(button).backgroundColor;
+        document.body.append(probe);
+        const value = getComputedStyle(probe).color;
+        probe.remove();
+
+        return value;
+    });
+    const wanted = await page.evaluate((value) => {
+        const probe = document.createElement('i');
+        probe.style.color = value;
+        document.body.append(probe);
+        const computed = getComputedStyle(probe).color;
+        probe.remove();
+
+        return computed;
+    }, accent);
+    expect(colour).toBe(wanted);
+});
+
 test.describe('in a phone-sized window', () => {
     test.use({ viewport: PHONE });
 
@@ -254,6 +340,17 @@ test.describe('without JavaScript', () => {
 
         await expect(pageNow(page)).toHaveText(/^Page 1 of/);
         await expect(box(page, 0)).toBeChecked();
+    });
+
+    test('the box in the header and "Clear selection" work as plain form posts', async ({ page }) => {
+        await page.goto('/ship');
+
+        await all(page).click();
+        await expect(ticked(page)).toHaveCount(10);
+        await expect(all(page)).toHaveAttribute('aria-checked', 'true');
+
+        await clear(page).click();
+        await expect(ticked(page)).toHaveCount(0);
     });
 
     test('the search works with the Enter key', async ({ page }) => {

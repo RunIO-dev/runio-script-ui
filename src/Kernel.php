@@ -476,6 +476,12 @@ final class Kernel
             $state['_route'] = $route;
         }
 
+        if (strlen(serialize($state)) > self::MAX_STATE_BYTES) {
+            // Ticked rows are the one thing that grows by the thousand without
+            // anybody typing. They go first, so that the inputs can stay.
+            unset($state['_sel'], $state['_kept']);
+        }
+
         if ($state === [] || strlen(serialize($state)) > self::MAX_STATE_BYTES) {
             unset($states[$page->stateKey]);
         } else {

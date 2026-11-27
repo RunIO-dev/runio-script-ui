@@ -22,7 +22,8 @@ return [
 
     // Tables
     'table.empty' => 'Keine Zeilen.',
-    'table.select' => 'Auswählen',
+    'table.select_page' => 'Alle Zeilen dieser Seite auswählen',
+    'table.clear' => 'Auswahl aufheben',
     'table.select_row' => 'Zeile {row} auswählen',
     'table.search' => 'Suchen',
     'table.search_label' => 'Diese Tabelle durchsuchen',

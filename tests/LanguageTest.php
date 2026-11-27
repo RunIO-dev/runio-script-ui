@@ -7,6 +7,7 @@ namespace Runio\ScriptUi\Tests;
 use Runio\ScriptUi\Config;
 use Runio\ScriptUi\Http\Request;
 use Runio\ScriptUi\Http\Response;
+use Runio\ScriptUi\Session\ArraySession;
 use Runio\ScriptUi\Tests\Support\ToolTestCase;
 use Runio\ScriptUi\Texts;
 use Runio\ScriptUi\ToolFinder;
@@ -127,6 +128,7 @@ final class LanguageTest extends ToolTestCase
         self::assertSame('ltr', $this->attr($response, '/html', 'dir'));
         self::assertSame(['Reset'], $this->texts($response, '//a[contains(@class,"sui-reset")]'));
         self::assertSame('Rows 1 to 2 of 3 · 0 selected', $this->foot($response));
+        self::assertSame('Select all rows on this page', $this->attr($response, '//button[@id="b-table:all"]', 'aria-label'));
         self::assertSame(['Previous', 'Page 1 of 2', 'Next'], $this->texts($response, '//*[contains(@class,"sui-pager")]/*'));
         self::assertSame('Pages', $this->attr($response, '//*[contains(@class,"sui-pager")]', 'aria-label'));
         self::assertSame(['Yes', 'No'], $this->texts($response, '//table//tbody/tr/td[3]'));
@@ -146,6 +148,7 @@ final class LanguageTest extends ToolTestCase
         self::assertSame('rtl', $this->attr($response, '/html', 'dir'));
         self::assertSame(['إعادة تعيين'], $this->texts($response, '//a[contains(@class,"sui-reset")]'));
         self::assertSame('الصفوف 1 إلى 2 من 3 · المحدد: 0', $this->foot($response));
+        self::assertSame('تحديد كل صفوف هذه الصفحة', $this->attr($response, '//button[@id="b-table:all"]', 'aria-label'));
         self::assertSame(['السابق', 'الصفحة 1 من 2', 'التالي'], $this->texts($response, '//*[contains(@class,"sui-pager")]/*'));
         self::assertSame('الصفحات', $this->attr($response, '//*[contains(@class,"sui-pager")]', 'aria-label'));
         self::assertSame(['نعم', 'لا'], $this->texts($response, '//table//tbody/tr/td[3]'));
@@ -166,6 +169,7 @@ final class LanguageTest extends ToolTestCase
         self::assertSame('ltr', $this->attr($response, '/html', 'dir'));
         self::assertSame(['Zurücksetzen'], $this->texts($response, '//a[contains(@class,"sui-reset")]'));
         self::assertSame('Zeilen 1 bis 2 von 3 · 0 ausgewählt', $this->foot($response));
+        self::assertSame('Alle Zeilen dieser Seite auswählen', $this->attr($response, '//button[@id="b-table:all"]', 'aria-label'));
         self::assertSame(['Zurück', 'Seite 1 von 2', 'Weiter'], $this->texts($response, '//*[contains(@class,"sui-pager")]/*'));
         self::assertSame(['Ja', 'Nein'], $this->texts($response, '//table//tbody/tr/td[3]'));
 
@@ -265,6 +269,36 @@ final class LanguageTest extends ToolTestCase
 
         $response = $this->post($tool, ['_find' => ['table' => 'xyz']]);
         self::assertSame(['Keine Zeile passt zur Suche.'], $this->texts($response, '//p[contains(@class,"sui-empty")]'));
+    }
+
+    public function testTheSelectionOfATableSpeaksTheLanguageOfThePage(): void
+    {
+        // All rows of the first page are ticked, then a search hides one of them.
+        $pressed = function (\Closure $tool): Response {
+            // Every language starts with nothing saved.
+            $this->session = new ArraySession();
+            $form = $this->form($this->post($tool, ['_click' => 'table:all'] + $this->form($this->get($tool))));
+            $form['_find']['table'] = '2';
+
+            return $this->post($tool, $form);
+        };
+        $tool = static fn (string $title): \Closure => static function () use ($title): void {
+            title($title);
+            table(self::ORDERS, selectable: true, pageSize: 2, search: true);
+        };
+
+        $response = $pressed($tool('Orders'));
+        self::assertSame('1 row (filtered from 3) · 1 selected · 1 more hidden by the search', $this->foot($response));
+        self::assertSame(['Clear selection'], $this->texts($response, '//button[@id="b-table:none"]'));
+
+        $response = $pressed($tool('الطلبات'));
+        self::assertSame('صف واحد (من أصل 3) · المحدد: 1 · أخرى مخفية بسبب البحث: 1', $this->foot($response));
+        self::assertSame(['إلغاء التحديد'], $this->texts($response, '//button[@id="b-table:none"]'));
+
+        $this->configure('de');
+        $response = $pressed($tool('Bestellungen'));
+        self::assertSame('1 Zeile (gefiltert aus 3) · 1 ausgewählt · 1 weitere von der Suche ausgeblendet', $this->foot($response));
+        self::assertSame(['Auswahl aufheben'], $this->texts($response, '//button[@id="b-table:none"]'));
     }
 
     public function testTheNoteUnderALongChartTableIsTranslated(): void
@@ -504,7 +538,9 @@ final class LanguageTest extends ToolTestCase
             'table.page' => $evil . ' {page} {pages}',
             'table.previous' => $evil,
             'table.next' => $evil,
-            'table.select' => $evil,
+            'table.select_page' => $quote,
+            'table.clear' => $evil,
+            'table.selected_hidden' => $evil . ' {count}',
             'table.select_row' => $quote . ' {row}',
             'cell.yes' => $evil,
             'confirm.title' => $quote,
@@ -517,9 +553,9 @@ final class LanguageTest extends ToolTestCase
             'error.no_address' => $evil,
         ]]);
 
-        $response = $this->post(function (): void {
+        $tool = function (): void {
             title('Orders');
-            table(self::ORDERS, selectable: true);
+            table(self::ORDERS, selectable: true, search: true);
             table(array_map(static fn (int $id): array => ['id' => $id], range(1, 30)), key: 'long');
             table(self::ORDERS, key: 'found', search: true);
             table(self::ORDERS, key: 'none', search: true);
@@ -527,7 +563,16 @@ final class LanguageTest extends ToolTestCase
             button('Delete', confirm: 'Delete?', key: 'delete');
 
             throw new \RuntimeException('kaboom');
-        }, ['_click' => 'delete', '_find' => ['found' => '2', 'none' => 'nothing like it']]);
+        };
+
+        // The first two rows are ticked. A search then hides the second one: it
+        // looks for a word of the text that stands for "yes" here.
+        $boxes = $this->texts($this->get($tool), '//input[@name="_sel[table][]"]/@value');
+        $response = $this->post($tool, [
+            '_click' => 'delete',
+            '_sel' => ['table' => [$boxes[0], $boxes[1]]],
+            '_find' => ['table' => 'img', 'found' => '2', 'none' => 'nothing like it'],
+        ]);
 
         // Nothing of it became markup ...
         self::assertSame(0, $this->hits($response, '//img'));
@@ -539,7 +584,10 @@ final class LanguageTest extends ToolTestCase
         self::assertSame($quote, $this->attr($response, '//a[contains(@class,"sui-reset")]', 'title'));
         self::assertSame([$evil], $this->texts($response, '//noscript//button'));
         self::assertSame($quote, $this->attr($response, '//*[@id="sui-body"]', 'data-sui-offline'));
-        self::assertSame($evil . ' 3 · ' . $evil . ' 0', $this->foot($response));
+        self::assertSame($evil . ' 2 ' . $evil . ' 3 · ' . $evil . ' 1 · ' . $evil . ' 1', $this->foot($response));
+        self::assertSame($quote, $this->attr($response, '//button[@id="b-table:all"]', 'aria-label'));
+        self::assertSame($quote, $this->attr($response, '//button[@id="b-table:all"]', 'title'));
+        self::assertSame([$evil], $this->texts($response, '//button[@id="b-table:none"]'));
         self::assertSame($evil . ' 1 25 30', $this->texts($response, '//p[contains(@class,"sui-table-foot")]')[1]);
         self::assertSame([$evil, $evil . ' 1 2', $evil], $this->texts($response, '//*[contains(@class,"sui-pager")]/*'));
         self::assertSame($quote, $this->attr($response, '//*[contains(@class,"sui-pager")]', 'aria-label'));
@@ -547,9 +595,8 @@ final class LanguageTest extends ToolTestCase
         self::assertSame($quote, $this->attr($response, '//input[@name="_find[found]"]', 'aria-label'));
         self::assertSame('1 row ' . $evil . ' 3', $this->texts($response, '//p[contains(@class,"sui-table-foot")]')[2]);
         self::assertSame([$evil], $this->texts($response, '//p[contains(@class,"sui-empty")]'));
-        self::assertSame([$evil], $this->texts($response, '//table[1]//th[contains(@class,"sui-pick")]'));
         self::assertSame($quote . ' 1', $this->attr($response, '//table//tbody//input[@type="checkbox"]', 'aria-label'));
-        self::assertSame([$evil, 'No', $evil], $this->texts($response, '//table[1]//tbody/tr/td[3]'));
+        self::assertSame([$evil, $evil], $this->texts($response, '//table[1]//tbody/tr/td[3]'));
         self::assertSame($quote, $this->attr($response, '//*[@data-confirm]', 'aria-label'));
         self::assertSame([$evil, 'Cancel'], $this->texts($response, '//*[@data-confirm]//button'));
         self::assertSame([$evil], $this->texts($response, '//figure//details/summary'));

@@ -30,7 +30,8 @@ return [
 
     // Tables
     'table.empty' => 'لا توجد صفوف.',
-    'table.select' => 'تحديد',
+    'table.select_page' => 'تحديد كل صفوف هذه الصفحة',
+    'table.clear' => 'إلغاء التحديد',
     'table.select_row' => 'تحديد الصف {row}',
     'table.search' => 'بحث',
     'table.search_label' => 'البحث في هذا الجدول',

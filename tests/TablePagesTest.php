@@ -88,7 +88,6 @@ final class TablePagesTest extends ToolTestCase
         self::assertCount(25, $this->shown($response));
         self::assertSame('25 rows', $this->foot($response));
         self::assertSame(0, $this->hits($response, '//*[contains(@class,"sui-pager")]'));
-        self::assertSame(0, $this->hits($response, '//input[@name="_page[table]"]'));
     }
 
     public function testNextAndPreviousMoveThroughThePages(): void

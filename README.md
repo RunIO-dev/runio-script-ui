@@ -154,13 +154,30 @@ What stays your job: decide who may do what (`user()` tells you who is asking), 
 - State lives in the PHP session. Two tabs of the same tool share saved inputs.
 - A script that runs on its own (without `serve()`) is told apart by its file and its path. Tools that share both and differ only in the query string (`index.php?page=refund`) work, but they do not remember their inputs separately.
 
-## Tests
+## Development and tests
+
+This repository holds the library at its root, plus example tools in `examples/` and browser tests in `e2e/`. Neither of those ships with the Composer package.
+
+Unit tests:
 
 ```bash
+composer install
 php vendor/bin/phpunit
 ```
 
 The suite runs every function through the same kernel a real request uses. It needs no web server.
+
+Browser tests, written with [Playwright](https://playwright.dev). They need PHP 8.2 or newer and Node.js 20 or newer:
+
+```bash
+composer install    # once, for the autoloader
+cd e2e
+npm install
+npx playwright install chromium
+npx playwright test
+```
+
+They drive the example tools in a real browser: the refund flow from the first key press to the audit log, the charts, the Arabic page, a dark theme, a phone-sized window and the page without JavaScript. They start their own two servers on ports 8775 and 8776 and work on a copy of the example tools, so a demo that is running keeps its data.
 
 ## License
 

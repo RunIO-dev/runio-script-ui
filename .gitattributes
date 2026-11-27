@@ -1,4 +1,5 @@
 # Exclude from dist archives (composer install --prefer-dist)
+/e2e                export-ignore
 /examples           export-ignore
 /tests              export-ignore
 /.gitattributes     export-ignore

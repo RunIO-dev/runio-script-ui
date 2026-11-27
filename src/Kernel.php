@@ -341,7 +341,13 @@ final class Kernel
 
         $saved = $states[$stateKey] ?? [];
         $saved = is_array($saved) && self::savedAt($saved, $selfUrl) ? $saved : [];
-        unset($saved['_route']);
+        // No run of the tool saved this, only a report of the page script. See noteLayout().
+        $noRun = $saved === [] || isset($saved['_no_run']);
+        unset($saved['_route'], $saved['_no_run']);
+
+        if ($isPost && $request->header('x-script-ui') === 'layout') {
+            return $this->noteLayout($states, $stateKey, $saved, $noRun, $request->post, $selfUrl);
+        }
 
         $uploads = new Uploads($this->folder, $this->session, $stateKey, $isPost ? $request->files : []);
 
@@ -351,7 +357,8 @@ final class Kernel
             $carried = [];
             // A file that arrives or is taken away is a changed input too: a table
             // that shows what is in the file starts again at its first page.
-            $inputsChanged = self::inputsChanged($saved, $in)
+            // Without a run that kept its inputs there is nothing to compare the form with.
+            $inputsChanged = (!$noRun && self::inputsChanged($saved, $in))
                 || $uploads->brought()
                 || (is_string($in['_click'] ?? null) && preg_match('/:remove:[0-9a-f]{32}$/D', $in['_click']) === 1);
         } else {
@@ -535,14 +542,57 @@ final class Kernel
         return is_array($messages) ? $messages : [];
     }
 
+    /**
+     * The page script reports how the user left the parts of a page that open and
+     * close. The browser opens and closes them without a request, so no run of the
+     * tool would tell the server. This keeps what the report says with the saved
+     * inputs of the tool, and runs nothing.
+     *
+     * @param array<array-key,mixed> $states what every tool of the session saved
+     * @param array<array-key,mixed> $saved  what this tool saved, at this address
+     * @param bool                   $noRun  nothing was saved by a run of the tool yet
+     * @param array<array-key,mixed> $form   what the page script sent
+     */
+    private function noteLayout(array $states, string $stateKey, array $saved, bool $noRun, array $form, string $selfUrl): Response
+    {
+        $reported = Page::layout($form);
+
+        if ($reported !== []) {
+            foreach ($reported as $name => $parts) {
+                // What the report names is as it says. What it does not name stays as it was.
+                $saved[$name] = $parts + (is_array($saved[$name] ?? null) ? $saved[$name] : []);
+            }
+            // Many reports with made-up names add up to no more than one form could hold.
+            $saved = Page::layout($saved) + $saved;
+
+            if ($noRun) {
+                $saved['_no_run'] = '1';
+            }
+
+            // The page script posts to the address of the form, like the form itself.
+            $this->store($states, $stateKey, $saved, (string) parse_url($selfUrl, PHP_URL_QUERY));
+        }
+
+        return new Response(204, '', self::headers());
+    }
+
     private function saveState(Page $page): void
     {
         $states = $this->session->get('state');
-        $states = is_array($states) ? $states : [];
-        $state = $page->state();
 
+        $this->store(is_array($states) ? $states : [], $page->stateKey, $page->state(), (string) parse_url($page->address(), PHP_URL_QUERY));
+    }
+
+    /**
+     * Files what a tool keeps for its next page view.
+     *
+     * @param array<array-key,mixed> $states what every tool of the session saved
+     * @param array<array-key,mixed> $state  what this tool keeps
+     * @param string                 $route  the query string of the address that saves it
+     */
+    private function store(array $states, string $stateKey, array $state, string $route): void
+    {
         // Remember which address saved this. See savedAt().
-        $route = (string) parse_url($page->address(), PHP_URL_QUERY);
         if ($state !== [] && $route !== '') {
             $state['_route'] = $route;
         }
@@ -554,9 +604,9 @@ final class Kernel
         }
 
         // Taken out and put back, the tool that was used last stands at the end.
-        unset($states[$page->stateKey]);
+        unset($states[$stateKey]);
         if ($state !== [] && strlen(serialize($state)) <= self::MAX_STATE_BYTES) {
-            $states[$page->stateKey] = $state;
+            $states[$stateKey] = $state;
         }
 
         // A script that the web server runs directly is filed under its path, and a

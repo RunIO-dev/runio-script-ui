@@ -29,6 +29,7 @@
   let swapping = false;    // the content of the page is being replaced
   let busyTimer = 0;
   let pauseTimer = 0;      // a run that waits until the user pauses: see soon()
+  let reportTimer = 0;     // a report of how the parts of the page stand waits to be sent: see report()
   const turned = new Map(); // parts the user opened or closed since the last request left: name of the field => what it says now
   let stepping = false;    // an arrow key is down: the change that follows comes from it, not from a click
 
@@ -273,7 +274,8 @@
     stop = new AbortController();
     const id = ++serial;
     clearTimeout(pauseTimer);
-    // This request carries how every part stands now.
+    // This request carries how every part stands now, so nothing is left to report.
+    clearTimeout(reportTimer);
     turned.clear();
 
     // Files travel as they are. Without them the form goes the short way, as text.
@@ -485,6 +487,26 @@
     }
   });
 
+  // Tells the server how the user left the parts that open and close. Opening one
+  // needs no answer. But without a word the server would draw it closed again when
+  // the page is loaded the next time. No tool runs for this, and nothing comes back.
+  const report = () => {
+    clearTimeout(reportTimer);
+    reportTimer = setTimeout(() => {
+      const data = new URLSearchParams();
+      new FormData(form).forEach((value, name) => {
+        if (typeof value === 'string' && /^_(token$|open\[)/.test(name)) data.append(name, value);
+      });
+
+      fetch(address, {
+        method: 'POST',
+        body: data,
+        credentials: 'same-origin',
+        headers: { 'X-Script-Ui': 'layout' },
+      }).catch(() => { /* the next request of the page carries the same fields */ });
+    }, 300);
+  };
+
   // A part that the user opens or closes says so in a hidden field. The field
   // travels with every request, and the server draws the part the way the user
   // left it. (The event does not bubble.)
@@ -499,6 +521,7 @@
 
     field.value = state;
     turned.set(field.name, state);
+    report();
   }, true);
 
   // The page can change while a file dialog is open: the user typed into a field

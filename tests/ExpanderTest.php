@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Runio\ScriptUi\Tests;
 
+use Runio\ScriptUi\Http\Request;
 use Runio\ScriptUi\Http\Response;
 use Runio\ScriptUi\Tests\Support\ToolTestCase;
 
@@ -146,6 +147,145 @@ final class ExpanderTest extends ToolTestCase
         self::assertTrue($this->isOpen($this->get($tool), 'details'));
         $states = $this->session->get('state');
         self::assertSame(['details' => '1'], array_values($states)[0]['_open'], 'only what an expander sends is kept');
+    }
+
+    // ------------------------------------------- what the page script reports
+
+    public function testThePageScriptReportsHowABoxWasLeftWithoutRunningTheTool(): void
+    {
+        // Opening a box needs no answer from the server. But the server has to hear of
+        // it, or the box would be closed again when the page is loaded the next time.
+        $runs = 0;
+        $name = null;
+        $tool = function () use (&$runs, &$name): void {
+            $runs++;
+            $name = text('Name');
+            expander('Details', static fn () => note('inside'));
+        };
+
+        $this->post($tool, ['name' => 'Ava']);
+        $runs = 0;
+
+        $response = $this->post($tool, ['_open' => ['details' => '1'], 'name' => 'Eve'], ['X-Script-Ui' => 'layout']);
+        self::assertSame(204, $response->status);
+        self::assertSame('', $response->body);
+        self::assertSame(0, $runs, 'the tool did not run');
+
+        self::assertTrue($this->isOpen($this->get($tool), 'details'), 'the next page view shows the box the way it was left');
+        self::assertSame('Ava', $name, 'and nothing else was taken from the report');
+
+        $this->post($tool, ['_open' => ['details' => '0']], ['X-Script-Ui' => 'layout']);
+        self::assertFalse($this->isOpen($this->get($tool), 'details'));
+        self::assertSame('Ava', $name);
+    }
+
+    public function testAReportNeedsTheTokenOfTheForm(): void
+    {
+        $tool = function (): void {
+            expander('Details', static fn () => note('inside'));
+        };
+        $this->token();
+
+        $response = $this->kernel()->handle(
+            new Request('POST', '/tool', [], ['_open' => ['details' => '1']], ['X-Script-Ui' => 'layout']),
+            'tool',
+            $tool,
+        );
+        self::assertSame(419, $response->status);
+        self::assertFalse($this->isOpen($this->get($tool), 'details'));
+
+        // And it is a form that is sent, never a link that is followed.
+        $response = $this->get($tool, ['X-Script-Ui' => 'layout'], ['_open' => ['details' => '1'], '_token' => $this->token()]);
+        self::assertSame(200, $response->status);
+        self::assertFalse($this->isOpen($response, 'details'));
+    }
+
+    public function testAReportOnAPageThatWasNeverSubmittedIsKeptToo(): void
+    {
+        $name = null;
+        $tool = function () use (&$name): void {
+            $name = text('Name', default: 'nobody');
+            expander('Details', static fn () => note('inside'));
+        };
+
+        $this->get($tool);
+        $this->post($tool, ['_open' => ['details' => '1', 'not a key!' => '1', 'other' => 'yes']], ['X-Script-Ui' => 'layout']);
+
+        self::assertTrue($this->isOpen($this->get($tool), 'details'));
+        self::assertSame('nobody', $name);
+        // The mark says that no run of the tool saved this.
+        self::assertSame(['_open' => ['details' => '1'], '_no_run' => '1'], array_values($this->session->get('state'))[0]);
+
+        // The first run that does save takes the mark away, and keeps what was reported.
+        $this->post($tool, ['name' => 'Ava'] + $this->form($this->get($tool)));
+        $state = array_values($this->session->get('state'))[0];
+        self::assertArrayNotHasKey('_no_run', $state);
+        self::assertSame(['details' => '1'], $state['_open']);
+
+        // A report that says nothing leaves nothing behind.
+        $this->session->set('state', []);
+        $this->post($tool, ['_open' => ['not a key!' => '1']], ['X-Script-Ui' => 'layout']);
+        self::assertSame([], $this->session->get('state'));
+    }
+
+    public function testManyReportsKeepNoMoreThanOneFormCouldHold(): void
+    {
+        $tool = function (): void {
+            expander('Details', static fn () => note('inside'));
+        };
+
+        for ($batch = 0; $batch < 3; $batch++) {
+            $made = [];
+            for ($n = 0; $n < 400; $n++) {
+                $made['made-up-' . $batch . '-' . $n] = '1';
+            }
+            $this->post($tool, ['_open' => $made], ['X-Script-Ui' => 'layout']);
+        }
+        $this->post($tool, ['_open' => ['details' => '1']], ['X-Script-Ui' => 'layout']);
+
+        $kept = array_values($this->session->get('state'))[0]['_open'];
+        self::assertCount(500, $kept);
+        self::assertSame('details', array_key_first($kept), 'what the last report named is kept first');
+        self::assertTrue($this->isOpen($this->get($tool), 'details'));
+    }
+
+    public function testAReportIsNoRunToCompareTheNextFormWith(): void
+    {
+        // A table goes back to its first page when an input changed and its rows are
+        // others than before. After a report the first form must not look like a change.
+        $count = 60;
+        $tool = function () use (&$count): void {
+            text('Note', default: 'x');
+            expander('Details', static fn () => note('inside'));
+            table(array_map(static fn (int $id): array => ['id' => $id], range(1, $count)));
+        };
+
+        $first = $this->get($tool);
+        $this->post($tool, ['_open' => ['details' => '1']], ['X-Script-Ui' => 'layout']);
+
+        $count = 61;
+        $second = $this->post($tool, ['_click' => 'table:page:2'] + $this->form($first));
+        self::assertSame(['Page 2 of 3'], $this->texts($second, '//*[contains(@class,"sui-page-now")]'));
+    }
+
+    public function testAReportIsFiledUnderTheAddressItCameFrom(): void
+    {
+        // Two tools can share a script and differ in the query string. See Kernel::savedAt().
+        $tool = function (): void {
+            expander('Details', static fn () => note('inside'));
+        };
+        $kernel = $this->kernel();
+        $at = fn (string $method, string $page, array $post = [], array $headers = []): Response => $kernel->handle(
+            new Request($method, '/tool.php', ['page' => $page], $post, $headers),
+            'tool',
+            $tool,
+            selfUrl: '/tool.php?page=' . $page,
+        );
+
+        $at('POST', 'refund', ['_token' => $this->token(), '_open' => ['details' => '1']], ['X-Script-Ui' => 'layout']);
+
+        self::assertTrue($this->isOpen($at('GET', 'refund'), 'details'));
+        self::assertFalse($this->isOpen($at('GET', 'customers'), 'details'));
     }
 
     public function testALinkCannotOpenIt(): void

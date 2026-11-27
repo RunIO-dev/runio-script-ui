@@ -1734,6 +1734,8 @@ final class Page
      * How the user left the parts of a page that open and close, as far as a form
      * says it: which expanders are open. Checked and limited in size.
      *
+     * The page script reports this without a run of the tool: see Kernel::noteLayout().
+     *
      * @param array<array-key,mixed> $in
      *
      * @return array{_open?: array<array-key,string>}

@@ -20,7 +20,6 @@ final class UploadFolder
     /** The folder is looked through for old files at most this often, in seconds. */
     private const CLEAN_EVERY = 3600;
 
-    /** The name of a stored file: random, and nothing else. */
     /**
      * What a stored file is called: random, with an ending of its own. The ending
      * tells our files from anything else in the folder, and no web server and

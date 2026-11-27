@@ -153,7 +153,7 @@ Every cell is text, exactly as it stands in the file: `007` stays `007`, and `1,
 
 To keep a file, copy it with `saveTo($path)` to a place of your own. `saveTo()` refuses to overwrite a file unless you pass `overwrite: true`. The copy can be read by the PHP user only: `chmod()` it when somebody else has to read it, such as a web server that runs as another user.
 
-The files wait in a folder of their own inside PHP's temp folder. On Linux and macOS it is open to the PHP user only. Windows has no permissions of that kind, so name a folder there. You do that with `uploads:` in `serve()` or `configure()`. Give the library a folder of its own, outside the folders your web server serves, that only your application writes to. The library refuses a folder that everybody may write to. The rest is yours to set up.
+The files wait in a folder of their own inside PHP's temp folder. On Linux and macOS it is open to the PHP user only. Windows has no permissions of that kind, so name a folder there. You do that with `uploads:` in `serve()` or `configure()`. Give the library a folder of its own, outside the folders your web server serves, that only your application writes to. On Linux and macOS the library refuses a folder that everybody may write to. The rest is yours to set up.
 
 Files of users who never came back are deleted when they are a day old, while other files arrive. On a quiet server call `Runio\ScriptUi\clean_uploads()` from a daily job, as the system user that runs PHP for your web server. A job that runs as another user does not see the default folder, and neither does one on a server that gives every service a temp folder of its own. In both cases set `uploads:` and pass the same folder to `clean_uploads($folder)`.
 

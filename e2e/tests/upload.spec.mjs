@@ -157,6 +157,58 @@ test('a request that the server throws away is explained on the page', async ({ 
     page.problems = page.problems.filter((problem) => !/\b413\b/.test(problem));
 });
 
+test('a file that did not get through leaves its field and is not sent again later', async ({ page }) => {
+    await page.goto('/test-files');
+    await markDocument(page);
+    const sent = posts(page);
+
+    // The connection breaks while the file is on its way.
+    await page.route('**/test-files', (route) => ('POST' === route.request().method() ? route.abort('connectionreset') : route.continue()));
+    await attachments(page).setInputFiles(file('a.txt', 'AAAA'));
+
+    await expect(page.locator('#sui-offline')).toBeVisible();
+    await expect(complaint(page)).toHaveText('"a.txt" did not arrive. Please try again.');
+    expect(await waiting(attachments(page)), 'the file left the field').toBe(0);
+    await expect(attachments(page), 'the page is open again, with the focus where it was').toBeFocused();
+    await page.unroute('**/test-files');
+
+    // Something else on the page changes. Only that is sent, not the file once more.
+    await page.locator('#f-owner').fill('Ava');
+    await page.locator('#f-owner').blur();
+    await expect(page.locator('.sui-note')).toHaveText('Owner: Ava');
+    expect(await sent.at(-1).headerValue('content-type')).toMatch(/^application\/x-www-form-urlencoded/);
+    await expect(names(page)).toHaveCount(0);
+    await expect(page.locator('#sui-offline')).toHaveCount(0);
+
+    // The user chooses the file again, and now it arrives.
+    await attachments(page).setInputFiles(file('a.txt', 'AAAA'));
+    await expect(names(page)).toHaveText(['a.txt']);
+    expect(await sameDocument(page), 'no page load').toBe(true);
+
+    // The browser writes the broken request on its console. That one is expected here.
+    page.problems = page.problems.filter((problem) => !/ERR_CONNECTION_RESET|Failed to load resource/.test(problem));
+});
+
+test('a file is not sent twice when its answer has to wait for the mouse', async ({ page }) => {
+    await page.goto('/test-files');
+
+    // A mouse button is down when the answer arrives. The page is swapped when it comes up.
+    await page.mouse.move(600, 20);
+    await page.mouse.down();
+    const [answer] = await Promise.all([
+        page.waitForResponse((response) => 'POST' === response.request().method()),
+        attachments(page).setInputFiles(file('a.txt', 'AAAA')),
+    ]);
+    await answer.finished();
+
+    // The file is on the server. Until the page shows that, the field must not hold it any more:
+    // another request would send it a second time.
+    await expect.poll(() => waiting(attachments(page)), { timeout: 400 }).toBe(0);
+
+    await page.mouse.up();
+    await expect(names(page)).toHaveText(['a.txt']);
+});
+
 test('Remove takes the file away, and a new file takes the place of the old one', async ({ page }) => {
     await page.goto('/import');
     await orders(page).setInputFiles(file('first.csv'));

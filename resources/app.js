@@ -220,6 +220,20 @@
     return total > 0 && weight(collect().data) > total ? [say('data-sui-refused', '')] : [];
   };
 
+  // The files did not get through. They leave their fields, and each field says
+  // what became of them. Files that stayed would travel again with every later
+  // request, whatever it is about, and lock the page for the whole upload each time.
+  const handBack = (attribute) => {
+    body.querySelectorAll('input[type="file"]').forEach((input) => {
+      const names = Array.from(input.files, (file) => file.name);
+      if (names.length === 0) return;
+
+      const text = input.getAttribute(attribute) || '';
+      input.value = '';
+      complain(input, text.includes('{name}') ? names.map((name) => text.replace('{name}', () => name)) : [text]);
+    });
+  };
+
   // Opens the page again after a request that left it as it was, and puts the
   // focus back. A locked page takes the focus away from whatever had it.
   const unlock = (origin) => {
@@ -297,15 +311,9 @@
 
         if (response.status === 413 && files) {
           // More than a server takes at once. It did not look at the form at all, so
-          // the page stays as it is and says so. The files leave their fields, or
-          // every later request would carry them again.
+          // the page stays as it is and says so.
           offline(false);
-          body.querySelectorAll('input[type="file"]').forEach((input) => {
-            if (input.files.length === 0) return;
-            const refused = input.getAttribute('data-sui-refused') || '';
-            input.value = '';
-            complain(input, [refused]);
-          });
+          handBack('data-sui-refused');
           unlock(origin);
           return;
         }
@@ -318,6 +326,12 @@
         }
 
         offline(false);
+        if (files) {
+          // The files are on the server now. The answer may have to wait before it
+          // is shown, and until then nothing must send them a second time.
+          body.querySelectorAll('input[type="file"]').forEach((input) => { input.value = ''; });
+        }
+
         let title = '';
         try {
           title = decodeURIComponent(response.headers.get('X-Script-Ui-Title') || '');
@@ -352,6 +366,9 @@
       .catch((error) => {
         if (id !== serial || error.name === 'AbortError') return;
         offline(true);
+        // A server in front of PHP that finds a request too large often just closes
+        // the connection. That looks the same from here.
+        if (files) handBack('data-sui-failed');
         if (locked) unlock(origin);
       })
       .finally(() => {

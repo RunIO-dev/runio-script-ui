@@ -984,6 +984,17 @@ final class FileInputTest extends ToolTestCase
         );
     }
 
+    public function testThePageScriptLearnsWhatToSayWhenAFileDoesNotGetThrough(): void
+    {
+        // The connection can break while a file is on its way. The script puts the name in.
+        $response = $this->get($this->tool($file));
+
+        self::assertSame(
+            '"{name}" did not arrive. Please try again.',
+            $this->attr($response, '//input[@id="f-report"]', 'data-sui-failed'),
+        );
+    }
+
     public function testThePageScriptLearnsHowMuchOneRequestMayCarry(): void
     {
         // Several files can each be small enough and still be too much together.

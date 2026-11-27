@@ -1161,6 +1161,8 @@ final class Page
             . ($uploads->bodyLimit() === null ? '' : ' data-sui-total="' . $uploads->bodyLimit() . '"')
             // A server in front of PHP may take less than PHP does. Nobody here knows its limit.
             . ' data-sui-refused="' . Text::e($texts->get('error.too_large_text')) . '"'
+            // The connection can break while a file is on its way.
+            . ' data-sui-failed="' . Text::e($texts->get('file.failed', ['name' => '{name}'])) . '"'
             . ($described === '' ? '' : ' aria-describedby="' . Text::e($described) . '"')
             . '>';
 

@@ -353,6 +353,35 @@ final class UploadFolderTest extends TestCase
         self::assertSame('new', file_get_contents($this->base . '/kept.csv'));
     }
 
+    public function testALinkThatPointsNowhereIsNotWrittenThrough(): void
+    {
+        if (!self::hasPermissions()) {
+            self::markTestSkipped('This system has no links of this kind.');
+        }
+
+        // The place looks free: nothing is there to read. But a link sits at it, and
+        // a file written "there" would appear wherever the link points.
+        symlink($this->base . '/elsewhere.txt', $this->base . '/kept.csv');
+        $upload = $this->upload('new');
+
+        try {
+            $upload->saveTo($this->base . '/kept.csv');
+            self::fail('a link that points nowhere was taken for a free place');
+        } catch (\RuntimeException $error) {
+            self::assertStringContainsString('already there', $error->getMessage());
+        }
+        self::assertFileDoesNotExist($this->base . '/elsewhere.txt');
+        self::assertTrue(is_link($this->base . '/kept.csv'));
+        // Nothing half-made stays behind.
+        self::assertSame(['kept.csv', 'uploads'], array_values(array_diff(scandir($this->base) ?: [], ['.', '..'])));
+
+        // Asked to replace what is there, the link itself goes.
+        $upload->saveTo($this->base . '/kept.csv', overwrite: true);
+        self::assertFalse(is_link($this->base . '/kept.csv'));
+        self::assertSame('new', file_get_contents($this->base . '/kept.csv'));
+        self::assertFileDoesNotExist($this->base . '/elsewhere.txt');
+    }
+
     public function testSavingAFileOverItselfLeavesItWhole(): void
     {
         $upload = $this->upload('still here');

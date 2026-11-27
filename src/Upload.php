@@ -68,32 +68,46 @@ final class Upload
             throw new \RuntimeException(sprintf('The uploaded file "%s" is no longer there.', $this->name));
         }
 
-        // When a file is replaced, the copy is written next to it and moved onto it
-        // once it is complete. The old file is then never half written, and a link
-        // that somebody put at the target is replaced, not followed.
-        $written = $overwrite ? $path . '.' . bin2hex(random_bytes(6)) . '.part' : $path;
+        // The copy is written next to its place and put there when it is complete.
+        // A file that is replaced is then never half written. The name is random,
+        // so nobody can put a link where the copy is written.
+        $part = $path . '.' . bin2hex(random_bytes(6)) . '.part';
+        $failed = sprintf('"%s" could not be written.', $path);
 
         try {
-            // "x" makes the file and fails when something is there already, in one step.
-            // Asking first and writing after would leave a gap between the two.
-            $to = @fopen($written, 'xb');
+            $to = @fopen($part, 'xb');
             if ($to === false) {
-                throw new \RuntimeException(
-                    !$overwrite && (file_exists($path) || is_link($path))
-                        ? sprintf('"%s" is already there. Pass overwrite: true to replace it.', $path)
-                        : sprintf('"%s" could not be written.', $path),
-                );
+                throw new \RuntimeException($failed);
             }
 
-            @chmod($written, 0600);
+            @chmod($part, 0600);
             $copied = stream_copy_to_stream($from, $to);
-            $closed = fclose($to);
-
-            if ($copied === false || !$closed || ($overwrite && !@rename($written, $path))) {
-                @unlink($written);
-
-                throw new \RuntimeException(sprintf('"%s" could not be written.', $path));
+            if (!fclose($to) || $copied === false) {
+                throw new \RuntimeException($failed);
             }
+
+            if ($overwrite) {
+                // Moved onto the target in one step. A link at the target is replaced, not followed.
+                if (!@rename($part, $path)) {
+                    throw new \RuntimeException($failed);
+                }
+            } elseif (@\link($part, $path)) {
+                // PHP's own link(): this library has a function of that name too.
+                // A second name for the copy, made in one step. That fails when anything
+                // is at the target already, also a link that points nowhere. Opening
+                // the target for writing would follow such a link.
+                @unlink($part);
+            } elseif (file_exists($path) || is_link($path)) {
+                throw new \RuntimeException(sprintf('"%s" is already there. Pass overwrite: true to replace it.', $path));
+            } elseif (!@rename($part, $path)) {
+                // Some file systems cannot give a file a second name. There the place
+                // was looked at first and the copy moved after.
+                throw new \RuntimeException($failed);
+            }
+        } catch (\RuntimeException $error) {
+            @unlink($part);
+
+            throw $error;
         } finally {
             fclose($from);
         }

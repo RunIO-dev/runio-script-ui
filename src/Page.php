@@ -434,7 +434,9 @@ final class Page
 
         $this->values[$key] = $values;
         // Like a text that is too long to be remembered: the next page view then
-        // starts from the default, and not from "nothing ticked".
+        // starts from the default, and not from "nothing ticked". (Until then every
+        // form counts as a changed input, because nothing was saved to compare it
+        // with. A table only minds when its rows are others as well.)
         if (array_sum(array_map(strlen(...), $wires)) <= self::MAX_SAVED_BYTES) {
             $this->out['_seen'][] = $key;
             if ($wires !== []) {

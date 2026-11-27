@@ -232,6 +232,8 @@ Runio\ScriptUi\serve(
 );
 ```
 
+An entry is an array with `time`, `user`, `tool`, `action` (the label of the button), `key`, `confirmed`, `inputs`, `error` and `download`. `inputs` holds what every input of the page returned in that run, by key. Not every value is a text: a tick box gives `true` or `false`, `multiselect()` a list of options, a table the ids of its ticked rows, and a file field the name, the size and the SHA-256 of the file. Turn the entry into JSON if your log takes one line of text.
+
 Every PHP file in the folder becomes a tool, listed on an index page. The first comment in a file is its title, more comment lines are its description. Files that start with `_` are helpers and are never served.
 
 With a login check, error details go to the error log and not into the page. Pass `debug: true` where you develop.

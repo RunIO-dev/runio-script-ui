@@ -98,7 +98,10 @@ final class Page
      */
     private array $fileFields = [];
 
-    /** Marks the places where the file fields go. Random, so nothing a tool prints can be taken for one. */
+    /** @var list<\Closure():string> what is drawn when the page is finished, by the number of its place */
+    private array $places = [];
+
+    /** Marks those places. Random, so nothing a tool prints can be taken for one. */
     private ?string $mark = null;
 
     /**
@@ -664,7 +667,7 @@ final class Page
         };
 
         // The field is drawn when the page is finished. See fileFieldHtml().
-        $this->add($this->filePlace($key));
+        $this->add($this->later(fn (): string => $this->fileFieldHtml($key)));
 
         $files = [];
         foreach ($handles as $handle) {
@@ -1402,11 +1405,7 @@ final class Page
             $html .= implode('', $buffer);
         }
 
-        foreach (array_keys($this->fileFields) as $key) {
-            $html = str_replace($this->filePlace((string) $key), $this->fileFieldHtml((string) $key), $html);
-        }
-
-        return $html . ($this->failure === null ? '' : $this->failureHtml($this->failure));
+        return $this->finished($html) . ($this->failure === null ? '' : $this->failureHtml($this->failure));
     }
 
     // --------------------------------------------------------------- internals
@@ -1483,12 +1482,47 @@ final class Page
         return array_map('strval', array_keys($endings));
     }
 
-    /** What stands in the page where a file field goes, until the page is finished. */
-    private function filePlace(string $key): string
+    /**
+     * Keeps a place in the page for something that is drawn when the page is
+     * finished, and not where the script calls it. A file field is one: a tool
+     * typically forgets a file further down, and the field has to be empty then.
+     *
+     * @param \Closure():string $draw
+     *
+     * @return string what stands in the page until then
+     */
+    private function later(\Closure $draw): string
     {
         $this->mark ??= bin2hex(random_bytes(8));
+        $this->places[] = $draw;
 
-        return '<!--sui-file:' . $this->mark . ':' . $key . '-->';
+        return '<!--sui:' . $this->mark . ':' . array_key_last($this->places) . '-->';
+    }
+
+    /**
+     * Fills the places that were kept. What is drawn there can hold places of its
+     * own.
+     *
+     * The page is cut at the marks and put together again. A search with a
+     * pattern has limits of its own, and it answers with nothing when a page is
+     * too much for it.
+     */
+    private function finished(string $html): string
+    {
+        if ($this->places === []) {
+            return $html;
+        }
+
+        $pieces = explode('<!--sui:' . $this->mark . ':', $html);
+        $page = (string) array_shift($pieces);
+        foreach ($pieces as $piece) {
+            // The number of the place, and what follows the mark.
+            [$number, $rest] = explode('-->', $piece, 2) + ['', ''];
+            $draw = ctype_digit($number) ? ($this->places[(int) $number] ?? null) : null;
+            $page .= ($draw === null ? '' : $this->finished($draw())) . $rest;
+        }
+
+        return $page;
     }
 
     /** Writes into what is kept for the next page view which files a field holds. */

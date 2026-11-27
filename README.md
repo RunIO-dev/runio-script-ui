@@ -47,7 +47,7 @@ composer install
 php bin/script-ui serve examples/tools
 ```
 
-Open <http://localhost:8765>. The demo has six tools: refunds, orders to ship page by page, a sales dashboard with charts, a customer list with filters, an Arabic page (right to left, with the library's own texts in Arabic), and the audit log. The demo data lives in `examples/var/` and can be deleted at any time.
+Open <http://localhost:8765>. The demo has seven tools: refunds, orders to ship page by page, an import of orders from a CSV file, a sales dashboard with charts, a customer list with filters, an Arabic page (right to left, with the library's own texts in Arabic), and the audit log. The demo data lives in `examples/var/` and can be deleted at any time.
 
 ## How it works
 
@@ -57,6 +57,7 @@ A tool is a script that runs from top to bottom. Every time the user changes an 
 - `button()` returns `true` only in the run that its click started. `if (button('Save')) { ... }` does the work once per click.
 - `button('Delete', confirm: 'Delete 3 rows?')` returns `true` only after the user answered yes to exactly that question.
 - `table($rows, selectable: true)` returns the rows the user ticked.
+- `file_input('Orders', types: ['csv'])` returns the file the user uploaded, on every run until it is removed.
 - `download('Download CSV', $rows, 'orders.csv')` hands the user a file.
 - `rerun()` loads the page again after an action, so a table above the button shows the new data. Messages written after the click are kept.
 
@@ -70,11 +71,11 @@ The page works without JavaScript as a plain form. With JavaScript it updates in
 |---|---|
 | Text | `title` `heading` `note` `code` `json` `link` `divider` |
 | Messages | `success` `info` `warning` `error` |
-| Inputs | `text` `textarea` `number` `select` `checkbox` `date_input` |
+| Inputs | `text` `textarea` `number` `select` `checkbox` `date_input` `file_input` |
 | Data | `table` `chart` `metric` |
 | Actions | `button` `download` `csv` |
 | Layout and flow | `columns` `stop` `rerun` |
-| Hosting | `serve` `configure` `user` |
+| Hosting | `serve` `configure` `user` `clean_uploads` |
 
 All of them are documented in [`src/functions.php`](src/functions.php). Import the ones you use, or give the namespace a short name:
 
@@ -117,6 +118,46 @@ The table starts again at its first page when it is sorted or searched, and when
 A tick stays when the user turns the page or sorts, so the rows you get back can come from any page. The line under the table says how many rows are ticked and how many of them are on other pages. The box in the header ticks the rows of the page, or unticks them when all are ticked. It acts on the rows the user saw: a row that arrived in the meantime is left alone. "Clear selection" unticks every page. One table takes up to 1,000 ticks.
 
 The search only hides rows. A ticked row that it hides is not returned, so a button never acts on a row that is not in the list on screen. The line under the table says how many ticked rows are hidden, and each is ticked again as soon as the search shows it. Ticks also wait while a filter of your tool leaves the table without rows.
+
+### Uploaded files
+
+`file_input()` draws a field for a file and returns the file, or `null` while there is none:
+
+```php
+$file = file_input('Orders as CSV', types: ['csv'], maxSize: 5 * 1024 * 1024);
+
+if ($file !== null) {
+    $orders = $importer->read($file->path);      // your code: look into the file
+    table($orders);
+
+    if (button('Import ' . count($orders) . ' orders', confirm: 'Add them to the shop?')) {
+        $importer->save($orders);
+        $file->forget();                         // done: delete the file
+        success('Imported ' . $file->name . '.');
+        rerun();
+    }
+}
+```
+
+The file is an `Upload` with `name`, `size`, `path`, `contents()`, `saveTo()` and `forget()`. With `multiple: true` the field takes up to 20 files and returns a list, which is empty at first. A new file takes the place of the old one in a field for one file, and is added in a field for several.
+
+**The file is still there on the next run.** A tool runs again on every interaction, so the library keeps the file on the server, and the page shows its name and size with a "Remove" link. The user can look at a preview, change other inputs and confirm, all with the same file.
+
+**Call `forget()` when you are done.** Otherwise a file waits until the user removes or replaces it, the tool is reset, the field is no longer drawn, or a day has passed. To keep a file, copy it with `saveTo($path)` to a place of your own. `saveTo()` refuses to overwrite a file unless you pass `overwrite: true`.
+
+The files wait in a folder of their own inside PHP's temp folder, open to the PHP user only. Name another folder with `uploads:` in `serve()` or `configure()`, outside the folders your web server serves. Files of users who never came back are deleted when they are a day old, while other files arrive. On a quiet server call `Runio\ScriptUi\clean_uploads()` from a daily job.
+
+How large and how many:
+
+- `maxSize:` is in bytes. PHP has limits of its own and the smaller one counts: `upload_max_filesize` for a file (2 MB unless you changed it), `post_max_size` for a request with everything in it, `max_file_uploads` for the files of one request. The page writes the limit under the field.
+- With JavaScript, a file that is too large is turned down before it is sent. Without it the server says so afterwards.
+- A web server or proxy in front of PHP can take less than PHP does, and the page cannot know its limit. nginx takes 1 MB unless `client_max_body_size` says otherwise. Such an upload is sent and then turned down with a message.
+
+With JavaScript a file is sent as soon as it is chosen or dropped onto the field, and the page is locked until it has arrived. Without it the file travels with the next button.
+
+**What comes from the user's computer is not to be trusted.** `types: ['csv']` means that the name ends in `.csv`. It does not mean that the file holds CSV. The library makes the name safe to show and to log, and it never looks into the file, runs it or serves it. So: read the file from `$file->path`, never build a path from `$file->name`, never save an upload under a name of the user's choosing in a folder your web server serves, and check what is in the file before you use it.
+
+In the log, a button press names each file it got by name, size and the SHA-256 of its content.
 
 ### Downloads
 
@@ -199,6 +240,7 @@ Pages that are not a tool have no title to follow: the list of tools and pages s
 - **Everything is escaped.** Labels, table cells and messages are text, never HTML. Output printed with `echo` is shown as text too.
 - **A strict Content-Security-Policy** on every page: no inline styles, no inline handlers, nothing from other sites, no framing.
 - **A download is a file, never a page.** It is sent with the order to save it, never as HTML or a script, and it may do nothing if it is opened in the browser after all. Its name is made safe, also when it contains something a user typed. In CSV that the library writes, formula cells are defused. Every download goes to the log with the name and the size of the file. When the log cannot be written (the `log` callback throws or returns false), the file is not sent.
+- **An uploaded file is out of reach.** It lies in a folder that only the PHP user reads, under a random name without an ending. The page names it by a random handle that is not that name and only counts for the session, the tool and the field the file was uploaded to. No request can name a path, a file of another user or a file of another tool. The name the user gave is cleaned before it is shown or logged, and it is never used on the disk. The library does not serve uploads and does not run them.
 - **Selections come from your data.** `table()` returns rows from the array you passed in. The browser only says which rows are ticked, and a tick never moves to another row or another table. A row that the search of a table hides is not returned, and the search reads only the columns that are shown.
 - **A column you leave out stays out.** What a table puts into the page about a row, besides the cells it shows, is made with a secret that never leaves the session. Neither the id of a row nor a column you left out with `columns:` can be read from the page, or guessed by trying values against it.
 - **Files are found by listing the folder.** An address can never point outside it.
@@ -208,7 +250,9 @@ What stays your job: decide who may do what (`user()` tells you who is asking), 
 
 ## Limits of this first version
 
-- No file uploads yet.
+- Uploads have no progress bar and cannot be resumed. A field holds up to 20 files and a session 200. The kind of a file is judged by the ending of its name only.
+- Uploaded files wait in PHP's temp folder unless you set `uploads:`. They are closed to other system users, but another PHP application that runs as the same user can read them.
+- While a tool works on a request, PHP holds the session, and other requests of the same user wait. That shows with a large upload that a tool reads for a long time.
 - A table gets all its rows from the script and searches, sorts and pages them itself, on every run. That is quick up to about twenty thousand rows: on a laptop a search took 0.1 seconds, and so did sorting by a text column. For more, filter in the database first.
 - Charts are bar and line charts with one axis and at most 8 series.
 - State lives in the PHP session. Two tabs of the same tool share saved inputs.
@@ -237,7 +281,7 @@ npx playwright install chromium
 npx playwright test
 ```
 
-They drive the example tools in a real browser: the refund flow from the first key press to the audit log, downloads, the charts, the Arabic page, a dark theme, a phone-sized window and the page without JavaScript. They start their own two servers on ports 8775 and 8776 and work on a copy of the example tools, so a demo that is running keeps its data.
+They drive the example tools in a real browser: the refund flow from the first key press to the audit log, downloads, uploads up to a file that is dragged onto the page, the charts, the Arabic page, a dark theme, a phone-sized window and the page without JavaScript. They start their own two servers on ports 8775 and 8776 and work on a copy of the example tools, so a demo that is running keeps its data.
 
 ## License
 

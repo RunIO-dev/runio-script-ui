@@ -179,7 +179,8 @@ function date_input(
  * sent, and its ending says nothing about what is in it.
  *
  * @param list<string>|null $types    the endings a file may have, such as ['csv', 'xlsx']. null takes every kind of file
- * @param bool              $multiple take several files, up to 20. The function then returns a list
+ * @param bool              $multiple take several files, up to 20 and never more than PHP takes in one
+ *                                    request (max_file_uploads in php.ini). The function then returns a list
  * @param int|null          $maxSize  the largest file in bytes. PHP's own limits (upload_max_filesize and
  *                                    post_max_size in php.ini) count as well, and the smaller one wins
  *

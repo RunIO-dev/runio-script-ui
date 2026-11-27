@@ -28,7 +28,10 @@ export function watch(page) {
     return page;
 }
 
-/** Waits until the page has swapped in the answer to the request that is on its way. */
+/**
+ * Waits until the request that is on its way has been answered. The answer is then on the page.
+ * While a mouse button is held it is not: the page script keeps it back until the button is released.
+ */
 export const settled = (page) =>
     page.waitForFunction(() => !document.getElementById('sui-body').hasAttribute('aria-busy'));
 

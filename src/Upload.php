@@ -103,6 +103,9 @@ final class Upload
      * Deletes the file now and empties its field. Call it when the tool is done
      * with the file, after an import for example: the file would otherwise wait
      * in its field, ready to be imported a second time.
+     *
+     * The file is gone at once and stays gone, also when the run fails further
+     * down. Whatever was done with it has happened by then.
      */
     public function forget(): void
     {

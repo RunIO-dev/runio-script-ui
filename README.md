@@ -143,9 +143,15 @@ The file is an `Upload` with `name`, `size`, `path`, `contents()`, `saveTo()` an
 
 **The file is still there on the next run.** A tool runs again on every interaction, so the library keeps the file on the server, and the page shows its name and size with a "Remove" link. The user can look at a preview, change other inputs and confirm, all with the same file.
 
-**Call `forget()` when you are done.** Otherwise a file waits until the user removes or replaces it, the tool is reset, the field is no longer drawn, or a day has passed. To keep a file, copy it with `saveTo($path)` to a place of your own. `saveTo()` refuses to overwrite a file unless you pass `overwrite: true`.
+**Call `forget()` when you are done.** It deletes the file at once. Otherwise a file waits until the user removes or replaces it, the tool is reset, the field is no longer drawn, or a day has passed.
 
-The files wait in a folder of their own inside PHP's temp folder, open to the PHP user only. Name another folder with `uploads:` in `serve()` or `configure()`, outside the folders your web server serves. Files of users who never came back are deleted when they are a day old, while other files arrive. On a quiet server call `Runio\ScriptUi\clean_uploads()` from a daily job.
+**A field that is not drawn gives its file up**, as a text field loses its text. That includes a run that ends above the field, with `stop()` or an early `return`. When a file should survive that, draw its field before anything that can end the run.
+
+To keep a file, copy it with `saveTo($path)` to a place of your own. `saveTo()` refuses to overwrite a file unless you pass `overwrite: true`. The copy can be read by the PHP user only: `chmod()` it when somebody else has to read it, such as a web server that runs as another user.
+
+The files wait in a folder of their own inside PHP's temp folder. On Linux and macOS it is open to the PHP user only. Windows has no permissions of that kind, so name a folder there. You do that with `uploads:` in `serve()` or `configure()`. Give the library a folder of its own, outside the folders your web server serves, that only your application writes to. The library refuses a folder that everybody may write to. The rest is yours to set up.
+
+Files of users who never came back are deleted when they are a day old, while other files arrive. On a quiet server call `Runio\ScriptUi\clean_uploads()` from a daily job, as the system user that runs PHP for your web server. A job that runs as another user does not see the default folder, and neither does one on a server that gives every service a temp folder of its own. In both cases set `uploads:` and pass the same folder to `clean_uploads($folder)`.
 
 How large and how many:
 
@@ -240,7 +246,7 @@ Pages that are not a tool have no title to follow: the list of tools and pages s
 - **Everything is escaped.** Labels, table cells and messages are text, never HTML. Output printed with `echo` is shown as text too.
 - **A strict Content-Security-Policy** on every page: no inline styles, no inline handlers, nothing from other sites, no framing.
 - **A download is a file, never a page.** It is sent with the order to save it, never as HTML or a script, and it may do nothing if it is opened in the browser after all. Its name is made safe, also when it contains something a user typed. In CSV that the library writes, formula cells are defused. Every download goes to the log with the name and the size of the file. When the log cannot be written (the `log` callback throws or returns false), the file is not sent.
-- **An uploaded file is out of reach.** It lies in a folder that only the PHP user reads, under a random name that says nothing about it. The page names it by a random handle that is not that name and only counts for the session, the tool and the field the file was uploaded to. No request can name a path, a file of another user or a file of another tool. The name the user gave is cleaned before it is shown or logged, and it is never used on the disk. The library does not serve uploads and does not run them.
+- **An uploaded file is out of reach.** It lies under a random name that says nothing about it, in a folder that only the PHP user reads. (That holds for the library's own folder on Linux and macOS. A folder you name with `uploads:` is as closed as you made it.) The page names it by a random handle that is not that name and only counts for the session, the tool and the field the file was uploaded to. No request can name a path, a file of another user or a file of another tool. The name the user gave is cleaned before it is shown or logged, and it is never used on the disk. The library does not serve uploads and does not run them.
 - **Selections come from your data.** `table()` returns rows from the array you passed in. The browser only says which rows are ticked, and a tick never moves to another row or another table. A row that the search of a table hides is not returned, and the search reads only the columns that are shown.
 - **A column you leave out stays out.** What a table puts into the page about a row, besides the cells it shows, is made with a secret that never leaves the session. Neither the id of a row nor a column you left out with `columns:` can be read from the page, or guessed by trying values against it.
 - **Files are found by listing the folder.** An address can never point outside it.
@@ -250,7 +256,8 @@ What stays your job: decide who may do what (`user()` tells you who is asking), 
 
 ## Limits of this first version
 
-- Uploads have no progress bar and cannot be resumed. A field holds up to 20 files and a session 200. The kind of a file is judged by the ending of its name only.
+- Uploads have no progress bar, and cannot be resumed or stopped once they are on their way. A field holds up to 20 files and a session 200. The kind of a file is judged by the ending of its name only.
+- Nothing limits the bytes that uploads take on the disk, only their number: a session keeps up to 200 files of the size you allow, for a day at most. Somebody who is logged in and means harm can use that. Keep `maxSize:` and PHP's limits as low as your tools need.
 - Uploaded files wait in PHP's temp folder unless you set `uploads:`. They are closed to other system users, but another PHP application that runs as the same user can read them.
 - While a tool works on a request, PHP holds the session, and other requests of the same user wait. That shows with a large upload that a tool reads for a long time.
 - A table gets all its rows from the script and searches, sorts and pages them itself, on every run. That is quick up to about twenty thousand rows: on a laptop a search took 0.1 seconds, and so did sorting by a text column. For more, filter in the database first.

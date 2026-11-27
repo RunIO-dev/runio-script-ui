@@ -178,6 +178,10 @@ function date_input(
  * about it is trusted: its name is made safe, its content is whatever the user
  * sent, and its ending says nothing about what is in it.
  *
+ * A field that is not drawn in a run gives its file up, as a text field loses
+ * its text. That includes a run that ends above the field with stop() or an
+ * early return.
+ *
  * @param list<string>|null $types    the endings a file may have, such as ['csv', 'xlsx']. null takes every kind of file
  * @param bool              $multiple take several files, up to 20 and never more than PHP takes in one
  *                                    request (max_file_uploads in php.ini). The function then returns a list
@@ -399,7 +403,11 @@ function configure(
  * itself while files arrive. Call it from a scheduled job when the files of
  * users who left must not wait for the next upload to be cleaned away.
  *
- * @param string|null $folder the folder you passed as uploads:. null: the folder inside PHP's temp folder
+ * The job has to run as the system user that runs PHP for the web server.
+ * As another user it finds another folder, and nothing in it.
+ *
+ * @param string|null $folder the folder you passed as uploads:. null: the folder of this
+ *                            system user inside PHP's temp folder
  *
  * @return int how many files were deleted
  */

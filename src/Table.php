@@ -254,17 +254,15 @@ final class Table
 
         $html = '<div class="sui-table-block">'
             . $box
-            . self::grid($key, $fields, $records, $visible, $first, $ids, $chosen, $sort, $selectable, $rowKey, $texts)
+            // Every column sorts, and its header says so with its own number.
+            . self::grid($key, $fields, $records, $visible, $first, $ids, $chosen, array_keys($fields), $sort, $selectable, $rowKey, $texts)
             . '<div class="sui-table-bar">'
             // The page script reads this line to people who use a screen reader.
             . '<p class="sui-table-foot" data-sui-status>' . Text::e($status) . '</p>'
             // Ticks on other pages and behind the search cannot be unticked one by one.
-            // When it is pressed the button goes away, and the focus moves to the box in the header.
-            . ($chosen === [] && $parked === [] ? '' : '<button type="submit" class="sui-link-btn" id="' . Text::e('b-' . $key . ':none') . '"'
-                . ' data-sui-return="' . Text::e('b-' . $key . ':all') . '" name="_click" value="' . Text::e($key . ':none') . '">'
-                . Text::e($texts->get('table.clear')) . '</button>')
+            . ($chosen === [] && $parked === [] ? '' : self::clearButton($key, $texts))
             . ($tooMany ? '<p class="sui-table-limit" data-sui-status>' . Text::e($texts->get('table.selected_max', ['count' => $texts->number(self::MAX_SELECTED)])) . '</p>' : '')
-            . ($pages > 1 ? self::pager($key, $page, $pages, $texts) : '')
+            . ($pages > 1 ? self::pager($key, $page, $pages, $page < $pages, $texts) : '')
             . '</div>'
             . $hidden
             . '</div>';
@@ -712,7 +710,8 @@ final class Table
         return [$chosen, $parked, $tooMany];
     }
 
-    private static function pager(string $key, int $page, int $pages, Texts $texts): string
+    /** @param bool $more another page follows this one */
+    private static function pager(string $key, int $page, int $pages, bool $more, Texts $texts): string
     {
         // A button that cannot be pressed cannot hold the keyboard focus either.
         // Each of the two names the other, and the page script moves the focus there.
@@ -725,8 +724,16 @@ final class Table
         return '<div class="sui-pager" role="group" aria-label="' . Text::e($texts->get('table.pages')) . '">'
             . $button('prev', 'next', $texts->get('table.previous'), $page > 1 ? $page - 1 : null)
             . '<span class="sui-page-now">' . Text::e($texts->get('table.page', ['page' => $texts->number($page), 'pages' => $texts->number($pages)])) . '</span>'
-            . $button('next', 'prev', $texts->get('table.next'), $page < $pages ? $page + 1 : null)
+            . $button('next', 'prev', $texts->get('table.next'), $more ? $page + 1 : null)
             . '</div>';
+    }
+
+    /** The button that unticks every row. When it is pressed it goes away, and the focus moves to the box in the header. */
+    private static function clearButton(string $key, Texts $texts): string
+    {
+        return '<button type="submit" class="sui-link-btn" id="' . Text::e('b-' . $key . ':none') . '"'
+            . ' data-sui-return="' . Text::e('b-' . $key . ':all') . '" name="_click" value="' . Text::e($key . ':none') . '">'
+            . Text::e($texts->get('table.clear')) . '</button>';
     }
 
     /**
@@ -738,10 +745,11 @@ final class Table
      * @param int                                          $first   how many rows of the list come before the page
      * @param array<int,array{wire: string, name: string}> $ids
      * @param array<int,true>                              $chosen
-     * @param array{int, string}|null                      $sort
+     * @param array<int,int>                               $sends   the columns whose headers sort: the column => the number its header sends
+     * @param array{int, string}|null                      $sort    the number that the header of the sorted column sends, and "asc" or "desc"
      * @param string                                       $rowKey  the id column
      */
-    private static function grid(string $key, array $fields, array $records, array $visible, int $first, array $ids, array $chosen, ?array $sort, bool $selectable, string $rowKey, Texts $texts): string
+    private static function grid(string $key, array $fields, array $records, array $visible, int $first, array $ids, array $chosen, array $sends, ?array $sort, bool $selectable, string $rowKey, Texts $texts): string
     {
         // A column of numbers is set to the right so the digits line up. All rows
         // decide, not only those of the page: a column must not jump between pages.
@@ -783,11 +791,16 @@ final class Table
                 . ' aria-label="' . $label . '" title="' . $label . '"></button></th>';
         }
         foreach ($fields as $column => $field) {
-            $direction = $sort !== null && $sort[0] === $column ? $sort[1] : null;
+            $send = $sends[$column] ?? null;
+            $direction = $sort !== null && $sort[0] === $send ? $sort[1] : null;
             $html .= '<th scope="col"' . ($numeric[$column] ? ' class="sui-num"' : '')
-                . ($direction === null ? '' : ' aria-sort="' . ($direction === 'asc' ? 'ascending' : 'descending') . '"') . '>'
-                . '<button type="submit" class="sui-sort" id="' . Text::e('s-' . $key . ':' . $column) . '" name="_click" value="' . Text::e($key . ':sort:' . $column) . '" dir="auto">'
-                . Text::e($field['label']) . '</button></th>';
+                . ($direction === null ? '' : ' aria-sort="' . ($direction === 'asc' ? 'ascending' : 'descending') . '"')
+                . ($send === null
+                    // A column that cannot be sorted has its name there, and nothing to press.
+                    ? ' dir="auto">' . Text::e($field['label'])
+                    : '><button type="submit" class="sui-sort" id="' . Text::e('s-' . $key . ':' . $column) . '" name="_click" value="' . Text::e($key . ':sort:' . $send) . '" dir="auto">'
+                        . Text::e($field['label']) . '</button>')
+                . '</th>';
         }
         $html .= '</tr></thead><tbody>';
 

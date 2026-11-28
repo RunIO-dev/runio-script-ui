@@ -412,8 +412,10 @@ final class Kernel
             default => null,
         };
 
-        $name = $name === null ? null : mb_substr(mb_scrub($name, 'UTF-8'), 0, 200, 'UTF-8');
+        // Whose session it is, is told by all of the name. A tool and the log
+        // get what a page and a line of a log can hold of it.
         $this->claim($name);
+        $name = $name === null ? null : mb_substr(mb_scrub($name, 'UTF-8'), 0, 200, 'UTF-8');
 
         return ['name' => $name, 'who' => $result === true ? null : $result];
     }
@@ -427,7 +429,8 @@ final class Kernel
      * not handed on then: the session starts from nothing for the new user.
      *
      * A user is known by the name the login check gives. A login check that
-     * names nobody cannot tell users apart.
+     * names nobody cannot tell users apart. The session keeps a fingerprint of
+     * the name and not the name: it may be long, and it may be an address.
      *
      * A session without an owner is a new one, with nothing in it to lose, or
      * one that an older version began. Nobody can say whose inputs that one
@@ -435,8 +438,8 @@ final class Kernel
      */
     private function claim(?string $name): void
     {
-        // A name is never empty, so this is nobody else's.
-        $owner = $name ?? '';
+        // A fingerprint is never empty, so this is nobody else's.
+        $owner = $name === null ? '' : hash('sha256', $name);
         if ($this->session->get('owner') === $owner) {
             return;
         }

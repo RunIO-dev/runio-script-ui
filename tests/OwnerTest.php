@@ -96,6 +96,35 @@ final class OwnerTest extends ToolTestCase
         self::assertSame('', $this->noteOf($this->get(self::note())));
     }
 
+    public function testNamesThatDifferOnlyAtTheirEndAreDifferentUsers(): void
+    {
+        // user() gives a tool the first 200 characters of a name. Whose session
+        // it is, is told by all of the name.
+        $this->login = str_repeat('a', 200) . '-ava';
+        $this->post(self::note(), ['note' => 'the plan of ava', '_click' => 'save']);
+        self::assertSame('the plan of ava', $this->noteOf($this->get(self::note())));
+
+        $this->login = str_repeat('a', 200) . '-ben';
+
+        self::assertSame('', $this->noteOf($this->get(self::note())));
+    }
+
+    public function testTheSessionDoesNotHoldTheNameItself(): void
+    {
+        // A name may be an email address, and may be long. The session keeps what tells it from other names.
+        $this->login = 'ava@example.com';
+        $this->get(self::note());
+
+        $owner = $this->session->get('owner');
+        self::assertIsString($owner);
+        self::assertSame(64, strlen($owner));
+        self::assertStringNotContainsString('ava', $owner);
+
+        $this->login = true;
+        $this->get(self::note());
+        self::assertSame('', $this->session->get('owner'));
+    }
+
     public function testAFormOfTheUserBeforeIsNotTakenFromTheNextOne(): void
     {
         $ran = false;

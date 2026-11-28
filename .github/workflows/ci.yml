@@ -35,6 +35,9 @@ jobs:
             dependencies: highest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Composer and npm run code of other packages in this checkout.
+          persist-credentials: false
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -67,6 +70,9 @@ jobs:
       CI: '1'
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Composer and npm run code of other packages in this checkout.
+          persist-credentials: false
 
       # The oldest PHP the package supports.
       - uses: shivammathur/setup-php@v2
@@ -126,6 +132,9 @@ jobs:
             symfony: '8.1.*'
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Composer and npm run code of other packages in this checkout.
+          persist-credentials: false
 
       - uses: shivammathur/setup-php@v2
         with:

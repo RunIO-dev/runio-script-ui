@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- `variables:` in `serve()` gives every tool of a folder variables by name.
 - `user()` and the log name a user object of Symfony or Laravel by its identifier (`getUserIdentifier()`, `getAuthIdentifier()`), when the login check returns one.
 - The list of tools says when the folder of tools lies in the web root, where a web server runs a tool file by its name and past the checks of `serve()`. The note shows only where error details are shown.
 - `allow:` in `serve()` and `configure()` says who may open which tool. It gets what the login check returned and the id of a tool. A tool that is not allowed is left out of the list and answers "Not allowed" before anything of it runs. Only a plain `true` opens a tool, and the question is asked on every request.

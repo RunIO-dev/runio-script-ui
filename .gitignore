@@ -5,6 +5,13 @@
 /.phpunit.result.cache
 /coverage/
 
+# The website: what npm installs, what a build writes, and what the generators write
+/site/node_modules/
+/site/.vitepress/dist/
+/site/.vitepress/cache/
+/site/diagrams/*.md
+/site/reference/functions.md
+
 # Demo data, created on first use
 /examples/var/
 

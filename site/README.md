@@ -47,7 +47,9 @@ The build is a folder of plain files. Copy it to the folder that the web server 
 
 ```bash
 npm run build
-rsync -av --delete .vitepress/dist/ <host>:<folder of the domain>/
+rsync -rlt --chmod=D755,F644 --delete .vitepress/dist/ <host>:<folder of the domain>/
 ```
+
+The command sets the modes of the files itself. Some disks report every file as writable by everybody, an NTFS disk under Linux for one, and `rsync -a` would carry that to the server. `--delete` removes what lies in the folder and is not part of the build, so the folder has to belong to the site alone.
 
 Publish from a release tag, so that the site describes a version that people can install.

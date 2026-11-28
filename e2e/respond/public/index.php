@@ -41,6 +41,13 @@ final class AppSession
 
     public static function start(): self
     {
+        // The sessions of earlier test runs are cleared away.
+        foreach (glob(sys_get_temp_dir() . '/script-ui-e2e-app-*.json') ?: [] as $old) {
+            if (filemtime($old) < time() - 3600) {
+                @unlink($old);
+            }
+        }
+
         $id = $_COOKIE['app_session'] ?? '';
         $cookie = null;
         if (!is_string($id) || preg_match('/^[0-9a-f]{32}$/D', $id) !== 1) {

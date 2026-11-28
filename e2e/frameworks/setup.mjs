@@ -10,9 +10,10 @@
 // system temp folder. Every later run only copies the files of this folder over them, which is
 // quick. So run it again after you changed one of them.
 //
-// LARAVEL and SYMFONY choose the versions, as Composer writes them. Without them the newest
-// ones that the PHP on this machine can run are taken: Laravel 13 needs PHP 8.3 and Symfony 8
-// needs PHP 8.4, and below that Laravel 12 and Symfony 7.4 are.
+// LARAVEL and SYMFONY choose the versions, as Composer writes them: LARAVEL='^12.0' for
+// example. Without them the newest ones that the PHP on this machine can run are taken.
+// Laravel 13 needs PHP 8.3 and Symfony 8 needs PHP 8.4. Below that it is Laravel 12 and
+// Symfony 7.4. An application that was set up with other versions is made anew.
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

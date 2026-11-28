@@ -988,13 +988,16 @@ th[aria-sort="descending"] .sui-sort::after {
 }
 
 .sui-table-foot,
-.sui-table-limit {
+.sui-table-limit,
+.sui-table-unselected {
   margin: 0;
   color: var(--ink-2);
   font-size: 13px;
 }
 
-.sui-table-limit {
+/* What became of ticks that the table could not take, or could not keep. */
+.sui-table-limit,
+.sui-table-unselected {
   color: var(--bad-ink);
 }
 

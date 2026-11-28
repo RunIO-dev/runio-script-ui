@@ -63,16 +63,18 @@ final class Table
     }
 
     /**
-     * @param iterable<mixed>             $rows
+     * @param iterable<mixed>|\Closure    $rows          all rows, or a function that hands over one page of them: see paged()
      * @param array<array-key,mixed>|null $columns
      * @param array<array-key,mixed>      $in            the bag of this run
      * @param string                      $click         the button the user pressed, or ''
      * @param bool                        $inputsChanged the user changed an input of the tool since the page was drawn
      * @param string                      $secret        a secret of the session that no page and no form ever holds
+     * @param array<array-key,mixed>|null $sortable      with a function: the columns whose headers sort
+     * @param \Closure|null               $count         with a function: says how many rows there are for a search
      */
     public static function draw(
         string $key,
-        iterable $rows,
+        iterable|\Closure $rows,
         bool $selectable,
         ?array $columns,
         string $rowKey,
@@ -84,6 +86,8 @@ final class Table
         bool $inputsChanged,
         string $secret,
         Texts $texts,
+        ?array $sortable = null,
+        ?\Closure $count = null,
     ): self {
         if ($pageSize < 1 || $pageSize > self::MAX_PAGE_SIZE) {
             throw new \InvalidArgumentException(sprintf('table(): pageSize has to be between 1 and %d.', self::MAX_PAGE_SIZE));
@@ -91,6 +95,20 @@ final class Table
         if ($secret === '') {
             // Without it, what the form carries could be made from the rows alone.
             throw new \LogicException('A table cannot be drawn without the secret of the session.');
+        }
+
+        if ($rows instanceof \Closure) {
+            return self::paged($key, $rows, $count, self::sortable($sortable), $selectable, $columns, $rowKey, $pageSize, $search, $empty, $in, $click, $inputsChanged, $secret, $texts);
+        }
+        if ($sortable !== null || $count !== null) {
+            throw new \InvalidArgumentException('table(): sortable: and count: go with a function that returns one page of rows. A table that gets all its rows sorts every column and counts them itself.');
+        }
+        if (is_array($rows) && array_is_list($rows) && count($rows) === 2 && is_object($rows[0]) && is_string($rows[1]) && is_callable($rows)) {
+            // The older way to name a method. PHP would call it. As rows it is an object and a word.
+            throw new \InvalidArgumentException(sprintf(
+                'table(): a method named as [$object, \'%1$s\'] is not run: the table would show it as two rows. Pass the method itself: $object->%1$s(...).',
+                $rows[1],
+            ));
         }
 
         $originals = [];
@@ -268,6 +286,297 @@ final class Table
             . '</div>';
 
         return new self($html, $picked, $named, $keep);
+    }
+
+    /**
+     * A table whose rows stay where they are. A function hands over one page of
+     * them at a time, searched and sorted by whoever keeps them: a database, as
+     * a rule. The table works out its question from the same fields of the form
+     * as a table that holds all its rows.
+     *
+     * The ticks count for the page on the screen. The table never holds a row
+     * of another page, so it could not hand one to the script. What it returns
+     * is always a row that the function gave in this run. A tick of a row that
+     * is not on the page is dropped. When the user turned the page, searched or
+     * sorted, the page says how many were.
+     *
+     * @param \Closure                               $rows     gets a TableQuery, returns the rows of one page
+     * @param \Closure|null                          $count    gets the search, returns how many rows there are
+     * @param list<array{field: string, by: string}> $sortable see sortable()
+     * @param array<array-key,mixed>|null            $columns
+     * @param array<array-key,mixed>                 $in
+     */
+    private static function paged(
+        string $key,
+        \Closure $rows,
+        ?\Closure $count,
+        array $sortable,
+        bool $selectable,
+        ?array $columns,
+        string $rowKey,
+        int $pageSize,
+        bool $search,
+        ?string $empty,
+        array $in,
+        string $click,
+        bool $inputsChanged,
+        string $secret,
+        Texts $texts,
+    ): self {
+        $keep = [];
+        $hidden = '';
+        $query = $search ? self::query($key, $in) : '';
+        if ($query !== '') {
+            $keep['_find'] = $query;
+        }
+
+        // The form names the sorted column by its place in sortable:. A column
+        // that is not in that list cannot be asked for.
+        $sort = self::sort($key, count($sortable), $in, $click);
+        if ($sort !== null) {
+            $keep['_sort'] = $sort[0] . ':' . $sort[1];
+            $hidden .= self::hidden('_sort', $key, $keep['_sort']);
+        }
+
+        $counted = $count === null ? null : self::counted($count, $query);
+        $pages = $counted === null ? null : max(1, (int) ceil($counted / $pageSize));
+
+        // A page number belongs to one list: searched and sorted like this, cut
+        // into pages of this size. Of the rows the table knows only how many
+        // there are. When an input of the tool changed and that number with it,
+        // the list is another one. Without a count nothing says whether it is.
+        $view = self::fingerprint('view', ($keep['_sort'] ?? '') . "\0" . $pageSize . "\0" . $query, $secret);
+        $list = self::fingerprint('list', "function\0" . $counted, $secret);
+        $seen = $counted === null && $inputsChanged ? null : self::seenPage($key, $in, $view, $list, $inputsChanged);
+        $page = 1;
+        // Whether the user went somewhere else in this run: to another list, or
+        // to another page of this one. A page that the table itself moves to,
+        // because rows are gone, is not their doing.
+        $turned = $seen === null;
+        if ($seen !== null) {
+            // A click on "Next" is a click on a page of the list the user saw.
+            $page = preg_match('/^' . preg_quote($key, '/') . ':page:([1-9]\d{0,6})$/D', $click, $match) === 1 ? (int) $match[1] : $seen;
+            $turned = $page !== $seen;
+        }
+        if ($pages !== null) {
+            // Rows were deleted and the page is gone: show the last one that is left.
+            $page = min($page, $pages);
+        }
+
+        $ask = static fn (int $page): array => self::asked($rows, new TableQuery(
+            $query,
+            $sort === null ? null : $sortable[$sort[0]]['by'],
+            $sort !== null && $sort[1] === 'desc',
+            // Nobody counted the rows: one row more than a page holds says whether another page follows.
+            $pageSize + ($counted === null ? 1 : 0),
+            ($page - 1) * $pageSize,
+        ));
+
+        $originals = $counted === 0 ? [] : $ask($page);
+        if ($originals === [] && $page > 1) {
+            // Nothing is there any more, or the form named a page that never was. The list starts again.
+            $page = 1;
+            $originals = $ask(1);
+        }
+        $more = $pages === null ? count($originals) > $pageSize : $page < $pages;
+        $originals = array_slice($originals, 0, $pageSize);
+        $records = array_map(Rows::record(...), $originals);
+        $box = $search ? self::searchBox($key, $query, $texts) : '';
+
+        // The rows the form says are ticked. "Clear selection" unticks them all.
+        $wanted = $selectable && $click !== $key . ':none' ? self::wanted($key, $in) : [];
+
+        if ($records === []) {
+            // No row is left to be ticked: see $left further down.
+            $note = self::unselected($turned ? count($wanted) : 0, $texts);
+            if ($query === '') {
+                $none = '<p class="sui-empty" dir="auto">' . Text::e($empty ?? $texts->get('table.empty')) . '</p>';
+
+                return new self(($note === '' ? $none : '<div class="sui-table-block">' . $none . $note . '</div>') . $hidden, keep: $keep);
+            }
+
+            return new self(
+                '<div class="sui-table-block">' . $box
+                    . '<p class="sui-empty" data-sui-status dir="auto">' . Text::e($texts->get('table.no_match')) . '</p>'
+                    . $note . $hidden . '</div>',
+                named: $selectable ? [] : null,
+                keep: $keep,
+            );
+        }
+
+        $fields = Rows::columns($records, $columns, 'table()');
+
+        // Which headers sort: the column => the place of its entry in sortable:.
+        $sends = [];
+        foreach ($sortable as $number => $entry) {
+            foreach ($fields as $column => $field) {
+                if ((string) $field['field'] === $entry['field']) {
+                    $sends[$column] ??= $number;
+                    continue 2;
+                }
+            }
+
+            // Without columns: the table shows the columns that the rows of the page have.
+            throw new \InvalidArgumentException(sprintf(
+                'table(): sortable: names "%s", and the table shows no such column. Where not every row has every column, say with columns: which ones the table shows.',
+                $entry['field'],
+            ));
+        }
+
+        $keep['_page'] = $page . '.' . $view . '.' . $list;
+        $hidden .= self::hidden('_page', $key, $keep['_page']);
+        $first = ($page - 1) * $pageSize;
+        $visible = array_keys($records);
+
+        $ids = [];
+        $chosen = [];
+        $named = null;
+        $left = 0;
+        if ($selectable) {
+            $ids = self::rowIds($records, $rowKey, $fields, $secret);
+            $positions = [];
+            foreach ($ids as $index => $id) {
+                $positions[$id['wire']] = $index;
+            }
+            // Every row of the page can be ticked, and the table knows no other row.
+            $listed = array_fill_keys($visible, true);
+            [$chosen] = self::ticked($wanted, $ids, $positions, $listed);
+            if ($seen !== null && $click === $key . ':all') {
+                [$chosen] = self::tickPage($chosen, self::shownRows($key, $in, $positions, $listed), 0);
+            }
+            // A tick of a row that is not on this page cannot be kept. Where the
+            // user went somewhere else, the page says how many were left behind:
+            // they may believe these rows are still ticked. Where they stayed, the
+            // row is gone. The tool deleted it, as a rule, on their own request.
+            $left = $turned ? count(array_diff_key(array_flip($wanted), $positions)) : 0;
+            // The page says which rows it shows. The next click on the box in the header is about these.
+            $hidden .= self::hidden('_rows', $key, Text::json(array_column($ids, 'wire'), false));
+
+            $named = [];
+            foreach (array_keys($chosen) as $index) {
+                $keep['_sel'][] = $ids[$index]['wire'];
+                $named[] = $ids[$index]['name'];
+            }
+        }
+
+        $picked = [];
+        foreach (array_keys($chosen) as $index) {
+            $picked[] = $originals[$index];
+        }
+
+        $range = ['from' => $texts->number($first + 1), 'to' => $texts->number($first + count($records))];
+        $status = match (true) {
+            $pages !== null && $pages > 1 => $texts->get('table.range', $range + ['count' => $texts->number((int) $counted)]),
+            $pages === null && ($page > 1 || $more) => $texts->get('table.range_open', $range),
+            // One page holds them all, so the table has counted them itself.
+            ($counted ?? count($records)) === 1 => $texts->get('table.rows_one'),
+            default => $texts->get('table.rows', ['count' => $texts->number($counted ?? count($records))]),
+        };
+        if ($selectable) {
+            // Where the list has more pages than this one, the line says whose ticks it counts.
+            $status .= ' · ' . $texts->get($page > 1 || $more ? 'table.selected_page' : 'table.selected', ['count' => $texts->number(count($chosen))]);
+        }
+
+        return new self(
+            '<div class="sui-table-block">'
+                . $box
+                . self::grid($key, $fields, $records, $visible, $first, $ids, $chosen, $sends, $sort, $selectable, $rowKey, $texts)
+                . '<div class="sui-table-bar">'
+                . '<p class="sui-table-foot" data-sui-status>' . Text::e($status) . '</p>'
+                . ($chosen === [] ? '' : self::clearButton($key, $texts))
+                . self::unselected($left, $texts)
+                . ($page > 1 || $more ? self::pager($key, $page, $pages, $more, $texts) : '')
+                . '</div>'
+                . $hidden
+                . '</div>',
+            $picked,
+            $named,
+            $keep,
+        );
+    }
+
+    /**
+     * The columns that a table with a function may be sorted by. ['id', 'total']
+     * names them. ['customer' => 'c.name'] also says what the function gets
+     * for a column, in place of its name.
+     *
+     * The function only ever gets a value of this list. So it may put that
+     * value into a query as it is.
+     *
+     * @param array<array-key,mixed>|null $sortable
+     *
+     * @return list<array{field: string, by: string}> "by" is what the function gets
+     */
+    private static function sortable(?array $sortable): array
+    {
+        $list = [];
+        foreach ($sortable ?? [] as $key => $value) {
+            if (!is_string($value) || $value === '') {
+                throw new \InvalidArgumentException("table(): sortable: needs column names as text: ['id', 'total'], or ['customer' => 'c.name'] to say what the function gets for a column.");
+            }
+            $list[] = ['field' => is_string($key) ? $key : $value, 'by' => $value];
+        }
+
+        return $list;
+    }
+
+    /**
+     * Asks the function for a page. It has to answer with rows, and with no
+     * more of them than it was asked for. A function that leaves out the limit
+     * hands over the whole table. The page would show its first rows then,
+     * whichever page the user turns to, and that is told before it is believed.
+     *
+     * @return list<mixed>
+     */
+    private static function asked(\Closure $rows, TableQuery $query): array
+    {
+        $answer = $rows($query);
+        if (!is_iterable($answer)) {
+            throw new \LogicException(sprintf('table(): the function has to return the rows of one page, as an array or another list. It returned %s.', get_debug_type($answer)));
+        }
+
+        $page = [];
+        foreach ($answer as $row) {
+            if (count($page) === $query->limit) {
+                throw new \LogicException(sprintf(
+                    'table(): the function returned more rows than it was asked for, which were %d. It hands over one page: put $query->limit and $query->offset into what it reads.',
+                    $query->limit,
+                ));
+            }
+            $page[] = $row;
+        }
+
+        return $page;
+    }
+
+    /**
+     * Says that ticks were dropped: the form named rows that a table with a
+     * function does not hold in this run. It is said in the run that drops
+     * them, and the page script reads it to people who use a screen reader.
+     */
+    private static function unselected(int $rows, Texts $texts): string
+    {
+        if ($rows === 0) {
+            return '';
+        }
+
+        return '<p class="sui-table-unselected" data-sui-status>'
+            . Text::e($rows === 1 ? $texts->get('table.unselected_one') : $texts->get('table.unselected', ['count' => $texts->number($rows)]))
+            . '</p>';
+    }
+
+    /** How many rows there are for this search, as count: says. */
+    private static function counted(\Closure $count, string $query): int
+    {
+        $counted = $count($query);
+        if (!is_int($counted) || $counted < 0) {
+            throw new \LogicException(sprintf(
+                'table(): count: has to return how many rows there are, as a whole number from 0 up. It returned %s.',
+                is_int($counted) ? (string) $counted : get_debug_type($counted),
+            ));
+        }
+
+        return $counted;
     }
 
     /**
@@ -710,8 +1019,11 @@ final class Table
         return [$chosen, $parked, $tooMany];
     }
 
-    /** @param bool $more another page follows this one */
-    private static function pager(string $key, int $page, int $pages, bool $more, Texts $texts): string
+    /**
+     * @param int|null $pages how many pages there are, or null when nobody counted the rows
+     * @param bool     $more  another page follows this one
+     */
+    private static function pager(string $key, int $page, ?int $pages, bool $more, Texts $texts): string
     {
         // A button that cannot be pressed cannot hold the keyboard focus either.
         // Each of the two names the other, and the page script moves the focus there.
@@ -723,7 +1035,9 @@ final class Table
 
         return '<div class="sui-pager" role="group" aria-label="' . Text::e($texts->get('table.pages')) . '">'
             . $button('prev', 'next', $texts->get('table.previous'), $page > 1 ? $page - 1 : null)
-            . '<span class="sui-page-now">' . Text::e($texts->get('table.page', ['page' => $texts->number($page), 'pages' => $texts->number($pages)])) . '</span>'
+            . '<span class="sui-page-now">' . Text::e($pages === null
+                ? $texts->get('table.page_open', ['page' => $texts->number($page)])
+                : $texts->get('table.page', ['page' => $texts->number($page), 'pages' => $texts->number($pages)])) . '</span>'
             . $button('next', 'prev', $texts->get('table.next'), $more ? $page + 1 : null)
             . '</div>';
     }

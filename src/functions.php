@@ -307,20 +307,35 @@ function valid(): bool
  *
  * Pass all rows: the table sorts all of them and cuts them into pages itself.
  *
- * @param iterable<mixed>             $rows       arrays or objects, for example what a database query returned
- * @param bool                        $selectable adds a tick box to every row. A tick stays when the page of the table changes
+ * Or pass a function, for a table that is too long for that. The table asks it for one page
+ * at a time and hands it a TableQuery: the search, the order, a limit and an offset. The
+ * function reads those rows from the database and returns them, and the table never holds
+ * more than a page. Such a table sorts by the columns that $sortable names, searches when
+ * the function does, and its ticks count for the page on the screen.
+ *
+ * @param iterable<mixed>|\Closure    $rows       arrays or objects, for example what a database query returned.
+ *                                                Or a function that gets a TableQuery and returns the rows of one page
+ * @param bool                        $selectable adds a tick box to every row. A tick stays when the page of the table changes,
+ *                                                unless the rows come from a function
  * @param array<array-key,mixed>|null $columns    ['id', 'total'] to choose columns, ['id' => 'Order'] to also rename them
  * @param string                      $rowKey     the column that identifies a row. A row without it is known by what is in it:
  *                                                its tick is dropped when the row changes
  * @param int                         $pageSize   how many rows one page shows, from 1 to 200
  * @param bool                        $search     adds a search box. It filters the rows while the user types and reads
- *                                                the columns that are shown. A ticked row that it hides is not returned
+ *                                                the columns that are shown. A ticked row that it hides is not returned.
+ *                                                With a function it only hands over what was typed: the function searches
  * @param string|null                 $empty      what to say when there are no rows. By default "No rows." in the language of the page
+ * @param array<array-key,mixed>|null $sortable   with a function only: the columns whose headers sort, ['id', 'total'].
+ *                                                ['customer' => 'c.name'] also says what the function gets for a column.
+ *                                                The function only ever gets a value of this list, or null
+ * @param \Closure|null               $count      with a function only: gets the search and returns how many rows there are.
+ *                                                Without it the table shows no page count, only "Previous" and "Next"
  *
- * @return list<mixed> the rows the user ticked on all pages of the list, exactly as they were passed in (always empty unless $selectable)
+ * @return list<mixed> the rows the user ticked on all pages of the list, exactly as they were passed in (always empty unless $selectable).
+ *                     With a function: the ticked rows of the page on the screen, as the function returned them
  */
 function table(
-    iterable $rows,
+    iterable|\Closure $rows,
     bool $selectable = false,
     ?array $columns = null,
     ?string $key = null,
@@ -328,8 +343,10 @@ function table(
     int $pageSize = 25,
     bool $search = false,
     ?string $empty = null,
+    ?array $sortable = null,
+    ?\Closure $count = null,
 ): array {
-    return Runtime::page()->table($rows, $selectable, $columns, $key, $rowKey, $pageSize, $search, $empty);
+    return Runtime::page()->table($rows, $selectable, $columns, $key, $rowKey, $pageSize, $search, $empty, $sortable, $count);
 }
 
 /**

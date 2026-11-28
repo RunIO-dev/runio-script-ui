@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- `table()` takes a function in place of the rows, for a table that is too long to pass in. The table asks it for one page at a time with a `TableQuery` (the search, the order, a limit and an offset), and the rows stay in the database. `sortable:` names the columns whose headers sort, and `count:` says how many rows there are. Without `count:` the table offers "Previous" and "Next" without a count. Ticks count for the page on the screen, and the table says so when a turned page leaves ticked rows behind.
 - `respond()` hands the page back instead of sending it, for an application built on Symfony or Laravel: a controller makes the response of its framework from the status, the headers and the body. `session:` keeps what the tools keep in the session of the application. Tried inside Laravel 12 and 13 and Symfony 7.4 and 8.1.
 - `variables:` in `serve()` gives every tool of a folder variables by name.
 - `user()` and the log name a user object of Symfony or Laravel by its identifier (`getUserIdentifier()`, `getAuthIdentifier()`), when the login check returns one.

@@ -722,15 +722,16 @@ final class Page
     // ------------------------------------------------------------------- data
 
     /**
-     * @param iterable<mixed>             $rows
+     * @param iterable<mixed>|\Closure    $rows     all rows, or a function that hands over one page of them
      * @param array<array-key,mixed>|null $columns
+     * @param array<array-key,mixed>|null $sortable
      *
      * @return list<mixed> the selected rows, exactly as they were passed in
      */
-    public function table(iterable $rows, bool $selectable, ?array $columns, ?string $key, string $rowKey, int $pageSize, bool $search, ?string $empty): array
+    public function table(iterable|\Closure $rows, bool $selectable, ?array $columns, ?string $key, string $rowKey, int $pageSize, bool $search, ?string $empty, ?array $sortable = null, ?\Closure $count = null): array
     {
         $key = $this->claimTable($key);
-        $table = Table::draw($key, $rows, $selectable, $columns, $rowKey, $pageSize, $search, $empty, $this->in, $this->click, $this->inputsChanged, $this->secret, $this->texts());
+        $table = Table::draw($key, $rows, $selectable, $columns, $rowKey, $pageSize, $search, $empty, $this->in, $this->click, $this->inputsChanged, $this->secret, $this->texts(), $sortable, $count);
 
         foreach ($table->keep as $name => $value) {
             $this->out[$name][$key] = $value;

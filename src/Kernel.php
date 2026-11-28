@@ -454,7 +454,8 @@ final class Kernel
      * What a user object goes by. The user of Symfony says who it is with
      * getUserIdentifier(), and the user of Laravel with getAuthIdentifier(). Both
      * are asked before __toString(): a model of Laravel turns into all of its
-     * fields as JSON, which is no name and nothing for a log.
+     * fields as JSON, which is no name and nothing for a log. So a user that
+     * has such a method and no identifier yet stays without a name.
      */
     private static function nameOf(object $user): string|int|null
     {
@@ -462,7 +463,12 @@ final class Kernel
             if (method_exists($user, $method) && is_callable([$user, $method])) {
                 $name = $user->$method();
 
-                return is_string($name) || is_int($name) ? $name : null;
+                return match (true) {
+                    is_string($name), is_int($name) => $name,
+                    // The key of a row may be an object of its own, a UUID for example.
+                    $name instanceof \Stringable => (string) $name,
+                    default => null,
+                };
             }
         }
 

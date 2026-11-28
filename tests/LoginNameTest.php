@@ -146,6 +146,46 @@ final class LoginNameTest extends ToolTestCase
         self::assertSame('42', $this->nameOf($identified(42)));
     }
 
+    public function testAnIdentifierThatIsAnObjectGoesByItsText(): void
+    {
+        // The key of a row may be an object of its own, as a UUID often is.
+        $user = new class () {
+            public function getAuthIdentifier(): \Stringable
+            {
+                return new class () implements \Stringable {
+                    public function __toString(): string
+                    {
+                        return '01JD3V7QZ4';
+                    }
+                };
+            }
+        };
+
+        self::assertSame('01JD3V7QZ4', $this->nameOf($user));
+    }
+
+    public function testAUserWithoutAnIdentifierIsNotNamedByItsFields(): void
+    {
+        // A model that was not saved yet has no key. What it is as a text is
+        // still all of its fields, and no name.
+        $user = new class () implements \Stringable {
+            public function getAuthIdentifier(): mixed
+            {
+                return null;
+            }
+
+            public function __toString(): string
+            {
+                return '{"name":"Ava","email":"ava@example.com"}';
+            }
+        };
+
+        [$response, $name] = $this->view($user);
+
+        self::assertNull($name);
+        self::assertStringNotContainsString('ava@example.com', $response->body);
+    }
+
     public function testTheIdentifierOfSymfonyComesBeforeThatOfLaravel(): void
     {
         // A class may carry both, when an application moved from one to the

@@ -152,7 +152,7 @@ test.describe('a folder of tools in the web root', () => {
     test('is pointed out on the list', async ({ page }) => {
         await page.goto(WEB_ROOT_URL);
 
-        await expect(cards(page)).toHaveText(['Say hello']);
+        await expect(cards(page)).toHaveText(['Break down', 'Say hello']);
         await expect(note(page)).toContainText('lies in the web root');
         await expect(note(page).locator('code')).toHaveText(/[\\/]e2e[\\/]webroot[\\/]tools$/);
 

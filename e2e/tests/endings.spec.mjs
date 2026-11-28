@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { OWN_URL, TOOLS_URL, watch } from './support.mjs';
+import { OWN_URL, TOOLS_URL, WEB_ROOT_URL, watch } from './support.mjs';
 
 // A run that never reaches its last line: the tool ends PHP with exit, or PHP breaks down with
 // a fatal error that nothing can catch. Both are tried the two ways a tool can run: served
@@ -40,3 +40,16 @@ for (const { way, leave, broken } of WAYS) {
         expect(await documents(page, broken)).toBe(1);
     });
 }
+
+test('a fatal error is reported also when the application raised a warning after it', async ({ page }) => {
+    // The script of this server adds a step to the shutdown of PHP that raises a warning,
+    // before serve() adds its own. Asked why it ended, PHP then names the warning.
+    const broken = `${WEB_ROOT_URL}/?_tool=broken&warn-at-the-end=1`;
+    const response = await page.goto(broken);
+
+    // Not a good page with half a tool on it: the run failed, and the page says so.
+    expect(response.status()).toBe(500);
+    await expect(said(page)).toHaveText('Drawn before the end.');
+    await expect(page.locator('#sui-body > .sui-error')).toContainText('PHP ended while the tool ran.');
+    expect(await documents(page, broken)).toBe(1);
+});

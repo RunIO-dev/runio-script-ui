@@ -121,6 +121,34 @@ final class ServeTest extends ToolTestCase
         self::assertSame('/admin/tools/', $this->attr($response, '//a[contains(@class,"sui-home")]', 'href'));
     }
 
+    public function testTheListIsAtTheBaseAsItIsWritten(): void
+    {
+        $home = fn (?string $base, string $path): ?string => $this->attr($this->serve('GET', $path, base: $base), '//a[contains(@class,"sui-home")]', 'href');
+
+        // Symfony and Laravel answer "/admin/tools/" with a redirect to the address
+        // without the slash. A folder that a web server serves is the other way
+        // round. So the link to the list ends as the base ends.
+        self::assertSame('/admin/tools', $home('/admin/tools', '/admin/tools/hello'));
+        self::assertSame('/admin/tools/', $home('/admin/tools/', '/admin/tools/hello'));
+        self::assertSame('/admin/tools', $home('admin/tools', '/admin/tools/hello'));
+
+        // At the top of a site the list is at "/", however that is written.
+        self::assertSame('/', $home('', '/hello'));
+        self::assertSame('/', $home('/', '/hello'));
+
+        // Both spellings of the address are answered, whichever the base has.
+        foreach (['/admin/tools', '/admin/tools/'] as $base) {
+            foreach (['/admin/tools', '/admin/tools/'] as $path) {
+                self::assertSame(['Boom', 'Say hello'], $this->texts($this->serve('GET', $path, base: $base), '//a[contains(@class,"sui-card")]//strong'), $base . ' ' . $path);
+            }
+        }
+
+        // The way back from a page that turns somebody away follows the same rule.
+        $missing = $this->serve('GET', '/admin/tools/missing', base: '/admin/tools');
+        self::assertSame(404, $missing->status);
+        self::assertSame('/admin/tools', $this->attr($missing, '//a[contains(@class,"sui-link")]', 'href'));
+    }
+
     public function testSubmittingAServedToolWorks(): void
     {
         $response = $this->serve('POST', '/hello', post: ['name' => 'Ava'], base: '');

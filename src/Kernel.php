@@ -70,7 +70,8 @@ final class Kernel
      * Serves a folder of tool files: the list of tools, or the tool the address names.
      *
      * @param string|null $base    null: tools are chosen with "?_tool=id" on the current address.
-     *                             A path such as "" or "/admin/tools": tools live at "{base}/{id}".
+     *                             A path such as "" or "/admin/tools": tools live at "{base}/{id}",
+     *                             and the list at the base as it is written, with or without "/" at its end.
      * @param string|null $webRoot the folder the web server hands files out from by their names,
      *                             when it does that. The list says so when the tools lie in it
      */
@@ -879,6 +880,10 @@ final class Kernel
             ];
         }
 
+        // The list is at the base as it was written: "/admin/tools" for a route of
+        // an application, "/admin/tools/" for a folder that a web server serves.
+        // Each of the two answers the other spelling with a redirect.
+        $slash = str_ends_with($base, '/');
         $base = trim($base, '/');
         $base = $base === '' ? '' : '/' . $base;
 
@@ -893,7 +898,7 @@ final class Kernel
 
         return [
             'id' => $rest === '' ? null : $rest,
-            'home' => $base . '/',
+            'home' => $base === '' || $slash ? $base . '/' : $base,
             'url' => static fn (string $toolId): string => $base . '/' . rawurlencode($toolId),
         ];
     }

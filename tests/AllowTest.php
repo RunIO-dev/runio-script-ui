@@ -219,7 +219,7 @@ final class AllowTest extends ToolTestCase
         self::assertSame(['You may not open this tool.'], $this->texts($response, '//p[contains(@class,"sui-note")]'));
         // The way back leads to the tools this user may open.
         self::assertSame(['All tools'], $this->texts($response, '//a[contains(@class,"sui-link")]'));
-        self::assertSame('/admin/tools/', $this->attr($response, '//a[contains(@class,"sui-link")]', 'href'));
+        self::assertSame('/admin/tools', $this->attr($response, '//a[contains(@class,"sui-link")]', 'href'));
         // The page says nothing about the tool: not its title, and no form of it.
         self::assertStringNotContainsString('Payroll', $response->body);
         self::assertSame(0, $this->hits($response, '//form'));

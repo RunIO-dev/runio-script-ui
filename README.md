@@ -388,7 +388,7 @@ Only `true` opens a tool. Any answer other than `true` or `false`, and a check t
 
 A file name is an address, and "Not allowed" is another answer than "There is no tool at this address". So whoever is logged in can find out that a tool with a certain name is there, without seeing anything of it. Name the files with that in mind.
 
-By default tools are chosen with `?_tool=refund`. With `base: '/admin/tools'` they get clean addresses such as `/admin/tools/refund` (send those addresses to the script in your web server configuration).
+By default tools are chosen with `?_tool=refund`. With `base: '/admin/tools'` they get clean addresses such as `/admin/tools/refund` (send those addresses to the script in your web server configuration). The list is at the base as you write it: at `/admin/tools`, or at `/admin/tools/` when the base ends with a slash.
 
 **One script on its own.** A script that the web server runs directly works too. Call `Runio\ScriptUi\configure(auth: ...)` in a file every tool includes, before anything is drawn. See [`examples/direct/hello.php`](examples/direct/hello.php). `configure()` takes `allow:` too. A script on its own is asked about by its file name: `payroll` for `payroll.php`. Then the name has to be one that a tool of a folder could have (lower-case letters, digits, `-` and `_`), or the script stays closed. Both checks are asked when the script calls its first function of the library. Put `title()` at the top: what stands above it runs for everybody. A script that shows several pages, such as an `index.php` with `?page=`, is one script, and it is asked about as `index`.
 

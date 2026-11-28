@@ -1,0 +1,22 @@
+# Two users for the tests, kept in this file. Symfony logs them in itself: see ToolsController.
+security:
+    password_hashers:
+        Symfony\Component\Security\Core\User\InMemoryUser: plaintext
+
+    providers:
+        users:
+            memory:
+                users:
+                    ava: { password: test, roles: [ROLE_USER, ROLE_PAYROLL] }
+                    ben: { password: test, roles: [ROLE_USER] }
+
+    firewalls:
+        dev:
+            pattern: ^/(_(profiler|wdt)|css|images|js)/
+            security: false
+        main:
+            provider: users
+            http_basic: ~
+            logout:
+                path: /logout
+                target: /admin/tools

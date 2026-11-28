@@ -476,6 +476,17 @@
     unread = true;
   };
 
+  // A bar of progress() that is not full: a task is under way, and the page is
+  // there to be watched. (A bar without a value has the position -1. One that
+  // is not shown, in a closed expander or behind a tab, is watched by nobody.
+  // A browser that cannot say what is shown takes every bar to be.)
+  const shown = (element) => typeof element.checkVisibility !== 'function' || element.checkVisibility();
+  const underWay = () => Array.from(body.querySelectorAll('.sui-progress progress')).some((bar) => bar.position < 1 && shown(bar));
+
+  // All the news of the page is good: success() and info(). A warning, an error
+  // and what is wrong with a field are never passed by.
+  const allGood = () => !body.querySelector('[data-sui-result]:not([role="status"])');
+
   // Every answer says anew whether the page wants to be run again, and how
   // often. An answer without the line of refresh() ends it. One that failed
   // says nothing either way: the rate of before goes on, with longer waits.
@@ -492,11 +503,16 @@
 
     // A run of the user that failed is news too. A run of the page's own that
     // failed is simply tried again.
-    if ((failed && !own) || body.querySelector('[data-sui-result]')) {
+    const news = (failed && !own) || Boolean(body.querySelector('[data-sui-result]'));
+    if (news && (failed || document.hidden || !underWay() || !allGood())) {
       hold();
     } else {
+      // Good news next to a task that is under way, on a page in view: whoever
+      // started the task is looking at it. They get the time to read, and then
+      // the page goes on. A bar that stood still until the next touch would say
+      // that the task does.
       unread = false;
-      wait(0);
+      wait(news ? READ : 0);
     }
   };
 

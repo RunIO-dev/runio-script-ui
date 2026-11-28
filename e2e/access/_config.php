@@ -29,4 +29,6 @@ return [
 
         return in_array($tool, $may[$user] ?? [], true);
     },
+    // Every tool of the folder gets this as $desk.
+    'variables' => ['desk' => 'returns desk'],
 ];

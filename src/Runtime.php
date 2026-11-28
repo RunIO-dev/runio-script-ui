@@ -61,6 +61,7 @@ final class Runtime
 
     /**
      * @param array<array-key,mixed>|null $texts
+     * @param array<array-key,mixed>|null $variables
      */
     public static function serve(
         string $directory,
@@ -73,6 +74,7 @@ final class Runtime
         ?array $texts = null,
         ?string $uploads = null,
         ?callable $allow = null,
+        ?array $variables = null,
     ): void {
         if (self::$page !== null) {
             throw new \LogicException('serve() cannot be called from inside a tool.');
@@ -81,7 +83,7 @@ final class Runtime
 
         $request = Request::fromGlobals();
         $kernel = new Kernel(
-            self::config()->with($auth, $log, $debug, $name, $language, $texts, $uploads, $allow),
+            self::config()->with($auth, $log, $debug, $name, $language, $texts, $uploads, $allow, $variables),
             new NativeSession($request->secure),
         );
 

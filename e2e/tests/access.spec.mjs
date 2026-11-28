@@ -19,7 +19,8 @@ test('the list shows what this user may open, and a tool on it works as always',
     await page.getByRole('link', { name: 'Refund orders' }).click();
     await page.getByLabel('Order').fill('1001');
     await page.getByRole('button', { name: 'Refund' }).click();
-    await expect(page.locator('.sui-success')).toHaveText('Refunded 1001 for ava.');
+    // The desk is a variable that the settings give to every tool of the folder.
+    await expect(page.locator('.sui-success')).toHaveText('Refunded 1001 for ava at the returns desk.');
 });
 
 test('another user gets another list', async ({ page, context }) => {
@@ -184,7 +185,7 @@ test.describe('without JavaScript', () => {
         await page.goto(`${ACCESS_URL}/refund`);
         await page.getByLabel('Order').fill('1002');
         await page.getByRole('button', { name: 'Refund' }).click();
-        await expect(page.locator('.sui-success')).toHaveText('Refunded 1002 for ava.');
+        await expect(page.locator('.sui-success')).toHaveText('Refunded 1002 for ava at the returns desk.');
 
         await context.addCookies([{ name: 'closed', value: 'refund', url: ACCESS_URL }]);
         await page.getByRole('button', { name: 'Refund' }).click();

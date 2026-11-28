@@ -8,5 +8,5 @@ title('Refund orders');
 $order = text('Order');
 
 if (button('Refund')) {
-    success('Refunded ' . $order . ' for ' . user() . '.');
+    success('Refunded ' . $order . ' for ' . user() . ' at the ' . $desk . '.');
 }

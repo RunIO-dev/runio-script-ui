@@ -137,8 +137,9 @@ final class Kernel
             return $page;
         }
 
-        $this->execute($page, static function () use ($tool): void {
-            self::load($tool->file);
+        $variables = $this->config->variables;
+        $this->execute($page, static function () use ($tool, $variables): void {
+            self::load($tool->file, $variables);
         });
 
         return $this->finish($page);
@@ -942,10 +943,18 @@ final class Kernel
         }
     }
 
-    /** Runs a tool file. It sees no variables of the library, only its own. */
-    private static function load(string $__scriptUiToolFile): void
+    /**
+     * Runs a tool file: self::load($file, $variables).
+     *
+     * The tool sees the variables the application gave it and nothing else. So
+     * this function names no parameters, which would be variables of the tool
+     * too. The names were checked when the tools were set up: see Config.
+     */
+    private static function load(): void
     {
-        require $__scriptUiToolFile;
+        extract(func_get_arg(1), EXTR_SKIP);
+
+        require func_get_arg(0);
     }
 
     private function token(): string

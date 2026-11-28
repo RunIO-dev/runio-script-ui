@@ -41,6 +41,7 @@ final class Config
      * @param string|null            $uploads  the folder that keeps uploaded files until a tool is done with them.
      *                                         null means a folder of its own inside PHP's temp folder
      * @param callable|null          $allow    who may open which tool: see the property
+     * @param array<array-key,mixed> $variables variables for every tool of a folder: name => value
      */
     public function __construct(
         ?callable $auth = null,
@@ -51,8 +52,10 @@ final class Config
         public readonly array $texts = [],
         public readonly ?string $uploads = null,
         ?callable $allow = null,
+        public readonly array $variables = [],
     ) {
         Texts::check($language, $texts);
+        self::checkVariables($variables);
 
         $this->auth = $auth === null ? null : $auth(...);
         $this->log = $log === null ? null : $log(...);
@@ -73,6 +76,7 @@ final class Config
         ?array $texts = null,
         ?string $uploads = null,
         ?callable $allow = null,
+        ?array $variables = null,
     ): self {
         return new self(
             $auth ?? $this->auth,
@@ -83,7 +87,40 @@ final class Config
             $texts ?? $this->texts,
             $uploads ?? $this->uploads,
             $allow ?? $this->allow,
+            $variables ?? $this->variables,
         );
+    }
+
+    /**
+     * A tool gets each value as a variable of that name, so every key has to be
+     * a name that PHP takes for a variable. Said here, where the tools are set
+     * up, and not later inside a tool.
+     *
+     * @param array<array-key,mixed> $variables
+     */
+    private static function checkVariables(array $variables): void
+    {
+        foreach (array_keys($variables) as $name) {
+            if (!is_string($name)) {
+                throw new \InvalidArgumentException(sprintf(
+                    'variables: needs a name for every value: [\'orders\' => $orders] makes $orders in every tool. The value at %d has none.',
+                    $name,
+                ));
+            }
+
+            if (in_array($name, ['this', 'GLOBALS', '_GET', '_POST', '_COOKIE', '_FILES', '_SERVER', '_SESSION', '_REQUEST', '_ENV'], true)) {
+                throw new \InvalidArgumentException(sprintf('variables: "%s" belongs to PHP and cannot be given to a tool. Choose another name.', $name));
+            }
+
+            // The names PHP itself takes: a letter or "_" first, then letters, digits and "_".
+            // Letters of any script count, which PHP reads as the bytes above 127.
+            if (preg_match('/^[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*$/D', $name) !== 1) {
+                throw new \InvalidArgumentException(sprintf(
+                    'variables: "%s" cannot be the name of a variable. A name starts with a letter or "_", and holds letters, digits and "_" only.',
+                    $name,
+                ));
+            }
+        }
     }
 
     /** The name of the tool collection, in the language of the page when none was given. */

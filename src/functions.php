@@ -627,6 +627,9 @@ function clean_uploads(?string $folder = null): int
  *                                              and returns true or false. A tool that is not allowed is left out of
  *                                              the list, and answers "Not allowed" before anything of it runs. Without
  *                                              it everybody who gets past the login check may open every tool
+ * @param array<array-key,mixed>|null $variables variables for every tool of the folder, by name: ['orders' => $orders]
+ *                                              makes $orders in each tool. A tool is a script of its own and sees no
+ *                                              variable of yours otherwise
  */
 function serve(
     string $directory,
@@ -639,6 +642,7 @@ function serve(
     ?array $texts = null,
     ?string $uploads = null,
     ?callable $allow = null,
+    ?array $variables = null,
 ): void {
-    Runtime::serve($directory, $auth, $log, $name, $debug, $base, $language, $texts, $uploads, $allow);
+    Runtime::serve($directory, $auth, $log, $name, $debug, $base, $language, $texts, $uploads, $allow, $variables);
 }

@@ -79,7 +79,7 @@ composer install
 php bin/script-ui serve examples/tools
 ```
 
-Open <http://localhost:8765>. The demo has eight tools: refunds, orders to ship page by page, an import of orders from a CSV file, a form for coupons that says under each field what is wrong with it, a sales dashboard with charts, a customer list with filters, an Arabic page (right to left, with the library's own texts in Arabic), and the audit log. The demo data lives in `examples/var/` and can be deleted at any time.
+Open <http://localhost:8765>. The demo has nine tools: refunds, orders to ship page by page, an import of orders from a CSV file, a form for coupons that says under each field what is wrong with it, a sales dashboard with charts, a customer list with filters, an archive of 100,000 orders that is read one page at a time, an Arabic page (right to left, with the library's own texts in Arabic), and the audit log. The demo data lives in `examples/var/` and can be deleted at any time.
 
 ## How it works
 
@@ -108,7 +108,7 @@ The page works without JavaScript as a plain form. With JavaScript it updates in
 | Data | `table` `chart` `metric` |
 | Actions | `button` `download` `csv` |
 | Layout and flow | `columns` `expander` `tabs` `refresh` `stop` `rerun` |
-| Hosting | `serve` `configure` `user` `clean_uploads` |
+| Hosting | `serve` `respond` `configure` `user` `clean_uploads` |
 
 All of them are documented in [`src/functions.php`](src/functions.php). Import the ones you use, or give the namespace a short name:
 
@@ -206,6 +206,67 @@ The table starts again at its first page when it is sorted or searched, and when
 A tick stays when the user turns the page or sorts, so the rows you get back can come from any page. The line under the table says how many rows are ticked and how many of them are on other pages. The box in the header ticks the rows of the page, or unticks them when all are ticked. It acts on the rows the user saw: a row that arrived in the meantime is left alone. "Clear selection" unticks every page. One table takes up to 1,000 ticks.
 
 The search only hides rows. A ticked row that it hides is not returned, so a button never acts on a row that is not in the list on screen. The line under the table says how many ticked rows are hidden, and each is ticked again as soon as the search shows it. Ticks also wait while a filter of your tool leaves the table without rows.
+
+### Tables that are too long to pass in
+
+A table that gets all its rows is quick up to about twenty thousand of them. For more, pass a function in place of the rows. The table asks it for one page at a time, and the rows stay in the database:
+
+```php
+use Runio\ScriptUi\TableQuery;
+
+// To LIKE, % and _ stand for any text. A user who types one means that character.
+$like = fn (string $search): string => '%' . strtr($search, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
+
+$picked = table(
+    function (TableQuery $query) use ($pdo, $like): array {
+        $rows = $pdo->prepare(
+            "SELECT id, customer, total FROM orders WHERE customer LIKE :search ESCAPE '!'"
+            . ' ORDER BY ' . ($query->sort ?? 'id') . ($query->descending ? ' DESC' : ' ASC') . ', id'
+            . ' LIMIT :limit OFFSET :offset'
+        );
+        $rows->bindValue('search', $like($query->search));
+        $rows->bindValue('limit', $query->limit, PDO::PARAM_INT);
+        $rows->bindValue('offset', $query->offset, PDO::PARAM_INT);
+        $rows->execute();
+
+        return $rows->fetchAll(PDO::FETCH_ASSOC);
+    },
+    selectable: true,
+    search: true,
+    sortable: ['id', 'customer', 'total'],
+    count: function (string $search) use ($pdo, $like): int {
+        $count = $pdo->prepare("SELECT COUNT(*) FROM orders WHERE customer LIKE :search ESCAPE '!'");
+        $count->execute(['search' => $like($search)]);
+
+        return (int) $count->fetchColumn();
+    },
+);
+```
+
+The function gets a `TableQuery`. Nothing in it is taken from the browser as it came:
+
+| Value | What it holds |
+|---|---|
+| `search` | What the search box holds, as one line of at most 200 characters, or `''`. Bind it as a parameter, like any text a user typed. |
+| `sort` | What the user sorted by: a value out of your `sortable:` list and never anything else, so it may go into the query as it is. `null` while no header was clicked. |
+| `descending` | `true` for high to low. |
+| `limit`, `offset` | The page, as whole numbers that the table worked out. Without `count:` the limit is one row more than a page holds. |
+
+`sortable:` names the columns whose headers sort. No other header can be clicked. `['customer' => 'c.name']` says what the function gets for a column, which helps in a query with joins. End the order with a column that no two rows share, as the example does with `, id`. Rows that sort alike may otherwise change places between two pages, and one of them shows up twice or not at all.
+
+`count:` gets the search and returns how many rows it leaves. The table then says "Rows 26 to 50 of 100,000" and knows its last page. Leave it out when counting is slow. The table then asks for one row more than a page holds, to see whether another page follows, and offers "Previous" and "Next" without a count.
+
+`search: true` shows the box and hands over what was typed, as one piece of text. What is searched, and how, is up to your query. The table does not split the text into words or look past accents, as it does when it holds all rows. Whether `LIKE` tells upper case from lower case depends on the database: PostgreSQL does and has `ILIKE` for a search that does not. And `LIKE` never matches a column that is `NULL`, not even for an empty search: where `customer` may be `NULL`, search in `COALESCE(customer, '')`.
+
+Ticks count for the page on the screen. The table holds one page, so it returns the ticked rows of that page, as the function returned them in that run. A tick does not travel to another page. When the user turns the page, sorts or searches, the ticked rows that are not on the new page are unticked, and the table says how many they were. It says nothing when the user stayed on their page and a ticked row is gone, as after a button that deleted it. Where the list has more pages than one, the line under the table reads "2 selected on this page". A button still never acts on a row the user does not see.
+
+The table starts again at its first page when it is sorted or searched. When the user changes another input of the tool, it stays on its page while the count is the same, and starts again when the count changed or there is none. A function that returns more rows than it was asked for is turned down with an error: it most likely left out the limit.
+
+The function and `count:` run on every run of the tool: with every click, with every pause while the user types into the search box and with every `refresh()`, also while the table sits in a closed expander or in a tab that is not in view. A page far into the list makes the database pass over all rows before it. So the query has to be one that your database answers quickly: an index on the columns of `sortable:`, a search it can do fast, and no `count:` where counting is slow.
+
+The table shows the columns that the rows of the page have. Name them with `columns:` where not every row has every column, or the headers change from page to page.
+
+The demo has such a table over 100,000 orders: [`examples/tools/archive.php`](examples/tools/archive.php).
 
 ### Uploaded files
 
@@ -515,6 +576,7 @@ Pages that are not a tool have no title to follow: the list of tools and pages s
 - **An uploaded file is out of reach.** It lies under a random name that says nothing about it, in a folder that only the PHP user reads. (That holds for the library's own folder on Linux and macOS. A folder you name with `uploads:` is as closed as you made it.) The page names it by a random handle that is not that name and only counts for the session, the tool and the field the file was uploaded to. No request can name a path, a file of another user or a file of another tool. The name the user gave is cleaned before it is shown or logged, and it is never used on the disk. The library does not serve uploads and does not run them.
 - **A page that refreshes changes nothing.** A run that the page starts by itself presses no button, takes no file and saves nothing, whatever its request says. It needs the token of the form like every other run.
 - **Selections come from your data.** `table()` returns rows from the array you passed in. The browser only says which rows are ticked, and a tick never moves to another row or another table. A row that the search of a table hides is not returned, and the search reads only the columns that are shown.
+- **A query gets nothing straight from the browser.** A table that reads its pages through a function hands that function a search text to bind as a parameter, a sort value out of your own `sortable:` list, and a limit and an offset that are whole numbers. A form cannot name another column, and a page that is not there ends at one that is.
 - **A column you leave out stays out.** What a table puts into the page about a row, besides the cells it shows, is made with a secret that never leaves the session. Neither the id of a row nor a column you left out with `columns:` can be read from the page, or guessed by trying values against it.
 - **Files are found by listing the folder.** An address can never point outside it.
 - **Error details stay private.** They are shown only while no login check is set, because then nobody but your own computer gets in. With a login check they go to the error log unless you pass `debug: true`. PHP warnings and notices are kept out of the page in the same way.
@@ -527,7 +589,8 @@ What stays your job: decide who may open which tool (`allow:`) and who may do wh
 - Nothing limits the bytes that uploads take on the disk, only their number: a session keeps up to 200 files of the size you allow, for a day at most. Somebody who is logged in and means harm can use that. Keep `maxSize:` and PHP's limits as low as your tools need.
 - Uploaded files wait in PHP's temp folder unless you set `uploads:`. They are closed to other system users, but another PHP application that runs as the same user can read them.
 - While a tool works on a request, PHP holds the session, and other requests of the same user wait. That shows with a large upload that a tool reads for a long time.
-- A table gets all its rows from the script and searches, sorts and pages them itself, on every run. That is quick up to about twenty thousand rows: on a laptop a search took 0.1 seconds, and so did sorting by a text column. For more, filter in the database first.
+- A table gets all its rows from the script and searches, sorts and pages them itself, on every run. That is quick up to about twenty thousand rows: on a laptop a search took 0.1 seconds, and so did sorting by a text column. For more, pass a function and let the database search, sort and cut the pages.
+- A table that reads its pages through a function keeps ticks for the page on the screen only. It has no "filtered from" count, and it decides by the rows of one page which columns hold numbers.
 - `multiselect()` is a group of tick boxes. It has no search and no "select all", so it suits lists of up to a few dozen options. The ticks of one field are remembered between page views up to 8 KB of option values. Beyond that the next page view starts from the default again.
 - A message of `field_error()` is gone with the next run, unless the script says it again. Nothing keeps a note under its field until that field is corrected: check on every run for that. Only inputs can be marked, not a table and not a button.
 - Every tab of `tabs()` runs on every run. There is no way yet to run only the open one, and a link cannot open a tab or an expander.
@@ -547,7 +610,7 @@ composer install
 php vendor/bin/phpunit
 ```
 
-The suite runs every function through the same kernel a real request uses. It needs no web server.
+The suite runs every function through the same kernel a real request uses. It needs no web server. The tests that read a table from SQLite are left out where PHP has no `pdo_sqlite`.
 
 Browser tests, written with [Playwright](https://playwright.dev). They need PHP 8.2 or newer and Node.js 20 or newer:
 

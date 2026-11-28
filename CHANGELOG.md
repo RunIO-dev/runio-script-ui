@@ -13,7 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `allow:` in `serve()` and `configure()` says who may open which tool. It gets what the login check returned and the id of a tool. A tool that is not allowed is left out of the list and answers "Not allowed" before anything of it runs. Only a plain `true` opens a tool, and the question is asked on every request.
 
 ### Security
-- What the library keeps in a session belongs to the user the login check named. When another name shows up in the same session, as after a login without a logout before it, the saved inputs, the uploaded files, the waiting messages and the token of the forms are dropped. Before, they went to whoever used the session next.
+- What the library keeps in a session belongs to the user the login check named. When another name shows up in the same session, as after a login without a logout before it, the saved inputs, the uploaded files, the waiting messages and the token of the forms are dropped. Before, they went to whoever used the session next. A session that an older version began has no owner yet, so it starts from nothing once as well.
 
 ### Changed
 - A served tool that ends PHP with `exit` gets its page sent at that moment, and no longer when PHP shuts down.

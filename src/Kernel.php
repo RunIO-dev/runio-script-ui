@@ -428,22 +428,22 @@ final class Kernel
      *
      * A user is known by the name the login check gives. A login check that
      * names nobody cannot tell users apart.
+     *
+     * A session without an owner is a new one, with nothing in it to lose, or
+     * one that an older version began. Nobody can say whose inputs that one
+     * holds, so it starts from nothing as well.
      */
     private function claim(?string $name): void
     {
         // A name is never empty, so this is nobody else's.
         $owner = $name ?? '';
-        $before = $this->session->get('owner');
-        if ($before === $owner) {
+        if ($this->session->get('owner') === $owner) {
             return;
         }
 
-        // A session that an older version began has no owner. It is not emptied.
-        if ($before !== null) {
-            // The files first: the list that names them goes with everything else.
-            (new Uploads($this->folder, $this->session, ''))->forgetEverything();
-            $this->session->clear();
-        }
+        // The files first: the list that names them goes with everything else.
+        (new Uploads($this->folder, $this->session, ''))->forgetEverything();
+        $this->session->clear();
         $this->session->set('owner', $owner);
     }
 

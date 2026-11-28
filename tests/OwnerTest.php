@@ -85,6 +85,17 @@ final class OwnerTest extends ToolTestCase
         self::assertSame($token, $this->token());
     }
 
+    public function testNamesThatOnlyLookEqualAreDifferentUsers(): void
+    {
+        // PHP calls these two equal when it compares them as numbers.
+        $this->login = '10';
+        $this->post(self::note(), ['note' => 'the plan of user 10', '_click' => 'save']);
+
+        $this->login = '1e1';
+
+        self::assertSame('', $this->noteOf($this->get(self::note())));
+    }
+
     public function testAFormOfTheUserBeforeIsNotTakenFromTheNextOne(): void
     {
         $ran = false;
@@ -173,18 +184,35 @@ final class OwnerTest extends ToolTestCase
         self::assertSame('', $this->noteOf($this->get(self::note())));
     }
 
-    public function testASessionFromBeforeThisRuleIsNotEmptied(): void
+    public function testWhatNobodyOwnsIsNotHandedToTheUserWhoShowsUp(): void
     {
-        // A session that was begun by an older version has no owner yet. Its
-        // user finds everything as it was.
+        // A session that an older version began has no owner. Nobody can say
+        // whose inputs it holds, so they go, once.
         $this->post(self::note(), ['note' => 'from before', '_click' => 'save']);
+        $token = $this->token();
         $this->session->remove('owner');
 
-        self::assertSame('from before', $this->noteOf($this->get(self::note())));
-
-        // From then on it has one.
-        $this->login = 'ben';
         self::assertSame('', $this->noteOf($this->get(self::note())));
+        self::assertNotSame($token, $this->token());
+
+        // From then on it has an owner, who keeps everything.
+        $this->post(self::note(), ['note' => 'mine now', '_click' => 'save']);
+        self::assertSame('mine now', $this->noteOf($this->get(self::note())));
+    }
+
+    public function testTheFilesThatNobodyOwnsAreDeleted(): void
+    {
+        $tool = static function (): void {
+            file_input('Report');
+        };
+        $this->post($tool, files: ['report' => $this->arrived('salaries.csv', "name,pay\nAva,1\n")]);
+        self::assertCount(1, $this->stored());
+        $this->session->remove('owner');
+
+        $page = $this->get($tool);
+
+        self::assertSame([], $this->texts($page, '//*[contains(@class,"sui-file-name")]'));
+        self::assertSame([], $this->stored());
     }
 
     public function testWithoutALoginCheckNothingIsEverEmptied(): void

@@ -646,3 +646,57 @@ function serve(
 ): void {
     Runtime::serve($directory, $auth, $log, $name, $debug, $base, $language, $texts, $uploads, $allow, $variables);
 }
+
+/**
+ * serve() for an application that sends its pages itself, as one built on
+ * Symfony or Laravel does. It works out the same page, and hands it back
+ * instead of sending it: the status, the headers and the body. A controller
+ * makes the response of its framework from them:
+ *
+ *     $page = respond(__DIR__ . '/../../tools', base: '/admin/tools', session: $request->getSession());
+ *
+ *     return new Response($page->body, $page->status, $page->headers);
+ *
+ * The headers belong to the page. Without them it does not work: they carry
+ * the rule that lets the script of the page run, and nothing else.
+ *
+ * The request is the one PHP itself is working on ($_SERVER, $_GET, $_POST and
+ * $_FILES). The test client of a framework does not fill those in, so a tool
+ * cannot be tried with it.
+ *
+ * Every setting is the one of serve(), and there is one more:
+ *
+ * @param callable|null               $auth      see serve()
+ * @param callable|null               $log       see serve()
+ * @param string|null                 $name      see serve()
+ * @param bool|null                   $debug     see serve()
+ * @param string|null                 $base      see serve(). In an application it is the path of the route
+ *                                               that leads to the controller, as the browser sees it
+ * @param string|null                 $language  see serve()
+ * @param array<array-key,mixed>|null $texts     see serve()
+ * @param string|null                 $uploads   see serve()
+ * @param callable|null               $allow     see serve()
+ * @param array<array-key,mixed>|null $variables see serve()
+ * @param object|null                 $session   the session of your application: the tools keep what they have to keep
+ *                                               in it, under one key, and a logout of your application ends that too.
+ *                                               An object with get() and set(), as in Symfony, or with get() and
+ *                                               put(), as in Laravel. null: PHP's own session
+ *
+ * @return Http\Response the page: ->status, ->headers and ->body
+ */
+function respond(
+    string $directory,
+    ?callable $auth = null,
+    ?callable $log = null,
+    ?string $name = null,
+    ?bool $debug = null,
+    ?string $base = null,
+    ?string $language = null,
+    ?array $texts = null,
+    ?string $uploads = null,
+    ?callable $allow = null,
+    ?array $variables = null,
+    ?object $session = null,
+): Http\Response {
+    return Runtime::respond($directory, $auth, $log, $name, $debug, $base, $language, $texts, $uploads, $allow, $variables, $session);
+}

@@ -12,6 +12,8 @@ use Runio\ScriptUi\Tests\Support\ToolTestCase;
 
 use function Runio\ScriptUi\configure;
 use function Runio\ScriptUi\note;
+use function Runio\ScriptUi\respond;
+use function Runio\ScriptUi\serve;
 use function Runio\ScriptUi\title;
 use function Runio\ScriptUi\user;
 
@@ -37,6 +39,63 @@ final class RuntimeTest extends ToolTestCase
         $this->expectExceptionMessage('browser');
 
         title('Hello');
+    }
+
+    public function testServeOnTheCommandLineSaysHowToStartAServer(): void
+    {
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('Start a server with "php vendor/bin/script-ui serve <folder>"');
+
+        serve(__DIR__);
+    }
+
+    public function testRespondOnTheCommandLineSaysWhyThereIsNoRequest(): void
+    {
+        // This is where the test client of Symfony or Laravel ends up. Starting
+        // a server, the advice of serve(), would tell its user nothing.
+        try {
+            respond(__DIR__);
+            self::fail('respond() answered on the command line.');
+        } catch (\LogicException $error) {
+            self::assertStringContainsString('respond() takes the request from PHP itself', $error->getMessage());
+            self::assertStringContainsString('The test client of a framework runs there too and does not fill them in.', $error->getMessage());
+            self::assertStringContainsString('with a browser test', $error->getMessage());
+            self::assertStringNotContainsString('script-ui serve', $error->getMessage());
+        }
+    }
+
+    public function testRespondRefusesWhatIsNoSessionBeforeAnythingElse(): void
+    {
+        // A mistake in the code is named first, also where there is no request.
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('session: has to be the session of your application');
+
+        respond(__DIR__, session: new \stdClass());
+    }
+
+    public function testRespondChecksTheSettingsLikeServe(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('"this" belongs to PHP');
+
+        respond(__DIR__, variables: ['this' => 1]);
+    }
+
+    public function testNeitherIsCalledFromInsideATool(): void
+    {
+        $served = $this->get(function (): void {
+            note('before');
+            serve(__DIR__);
+        });
+        self::assertSame(500, $served->status);
+        self::assertStringContainsString('serve() cannot be called from inside a tool.', $served->body);
+
+        $responded = $this->get(function (): void {
+            note('before');
+            respond(__DIR__);
+        });
+        self::assertSame(500, $responded->status);
+        self::assertStringContainsString('respond() cannot be called from inside a tool.', $responded->body);
     }
 
     public function testConfigureSetsTheDefaults(): void

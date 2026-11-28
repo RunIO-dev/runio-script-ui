@@ -6,7 +6,9 @@ namespace Runio\ScriptUi;
 
 use Runio\ScriptUi\Http\Request;
 use Runio\ScriptUi\Http\Response;
+use Runio\ScriptUi\Session\FrameworkSession;
 use Runio\ScriptUi\Session\NativeSession;
+use Runio\ScriptUi\Session\Session;
 use Runio\ScriptUi\Signal\Stop;
 
 /**
@@ -14,7 +16,7 @@ use Runio\ScriptUi\Signal\Stop;
  * is being drawn right now, and starts everything up on a real web request.
  *
  * A tool can run in two ways:
- *  - served: serve() picks the file and runs it;
+ *  - served: serve() or respond() picks the file and runs it;
  *  - direct: the web server runs the script itself, and the first function it
  *    calls starts the page. The page is sent when the script ends.
  *
@@ -29,6 +31,9 @@ final class Runtime
     private static ?Kernel $kernel = null;
 
     private static bool $hooked = false;
+
+    /** respond() was called: the application sends the page, and reports its fatal errors itself. */
+    private static bool $handsBack = false;
 
     /** The web server runs the script itself, and the page is sent when the script ends. */
     private static bool $direct = false;
@@ -79,21 +84,127 @@ final class Runtime
         ?callable $allow = null,
         ?array $variables = null,
     ): void {
-        if (self::$page !== null) {
-            throw new \LogicException('serve() cannot be called from inside a tool.');
+        [$kernel, $request] = self::start('serve', self::config()->with($auth, $log, $debug, $name, $language, $texts, $uploads, $allow, $variables), null);
+
+        $kernel->serve($request, new ToolFinder($directory), $base, self::webRoot())->send();
+    }
+
+    /**
+     * serve() for an application that sends its pages itself, as one built on
+     * Symfony or Laravel does: the page is handed back and not sent.
+     *
+     * @param array<array-key,mixed>|null $texts
+     * @param array<array-key,mixed>|null $variables
+     * @param object|null                 $session   the session of the application. null: PHP's own
+     */
+    public static function respond(
+        string $directory,
+        ?callable $auth,
+        ?callable $log,
+        ?string $name,
+        ?bool $debug,
+        ?string $base,
+        ?string $language = null,
+        ?array $texts = null,
+        ?string $uploads = null,
+        ?callable $allow = null,
+        ?array $variables = null,
+        ?object $session = null,
+    ): Response {
+        [$kernel, $request] = self::start(
+            'respond',
+            self::config()->with($auth, $log, $debug, $name, $language, $texts, $uploads, $allow, $variables),
+            // Looked at before anything else: an object that is no session is a
+            // mistake in the code, wherever that code runs.
+            $session === null ? null : new FrameworkSession($session),
+        );
+        self::$handsBack = true;
+
+        // A tool may close its page and print an answer of its own. That answer
+        // comes to rest here and is handed back like a page. Printed straight
+        // to the browser it would leave before the application is done: a
+        // framework puts its own type on what it sends after that, where PHP
+        // still holds the output back, and Symfony cannot set its cookie.
+        $headers = headers_list();
+        ob_start();
+        $level = ob_get_level();
+
+        try {
+            $response = $kernel->serve($request, new ToolFinder($directory), $base, self::webRoot());
+        } catch (\Throwable $error) {
+            self::passOn($level);
+
+            throw $error;
         }
-        self::assertWeb();
+
+        if (!$response->alreadySent || ob_get_level() < $level) {
+            // A page as usual. Or the tool closed every buffer there is, and
+            // its answer is on its way: nothing can be done about that one.
+            self::passOn($level);
+
+            return $response;
+        }
+
+        while (ob_get_level() > $level && @ob_end_flush()) {
+        }
+        $status = http_response_code();
+
+        return new Response(is_int($status) ? $status : 200, (string) ob_get_clean(), self::takeHeaders($headers));
+    }
+
+    /**
+     * The kernel for the request PHP is working on, and that request.
+     *
+     * @return array{Kernel, Request}
+     */
+    private static function start(string $caller, Config $config, ?Session $session): array
+    {
+        if (self::$page !== null) {
+            throw new \LogicException($caller . '() cannot be called from inside a tool.');
+        }
+        self::assertWeb($caller);
 
         $request = Request::fromGlobals();
-        $kernel = new Kernel(
-            self::config()->with($auth, $log, $debug, $name, $language, $texts, $uploads, $allow, $variables),
-            new NativeSession($request->secure),
-        );
+        $kernel = new Kernel($config, $session ?? new NativeSession($request->secure));
 
         // After a fatal error inside a tool the page it drew so far is still sent.
         self::hook();
 
-        $kernel->serve($request, new ToolFinder($directory), $base, self::webRoot())->send();
+        return [$kernel, $request];
+    }
+
+    /** Closes the buffer of respond(). What is in it goes on to where it was going. */
+    private static function passOn(int $level): void
+    {
+        while (ob_get_level() >= $level && @ob_end_flush()) {
+        }
+    }
+
+    /**
+     * The headers a tool set for an answer of its own, taken out of PHP's
+     * hands: the application sends them with the answer.
+     *
+     * @param list<string> $before the headers that were set before the tool ran
+     *
+     * @return array<string,string>
+     */
+    private static function takeHeaders(array $before): array
+    {
+        $headers = [];
+        foreach (array_diff(headers_list(), $before) as $line) {
+            $parts = explode(':', $line, 2);
+            // A cookie may come several times, and a response holds one value
+            // for a name. Cookies stay with PHP, which sends them as well.
+            if (count($parts) === 2 && strcasecmp(trim($parts[0]), 'Set-Cookie') !== 0) {
+                $headers[trim($parts[0])] = trim($parts[1]);
+            }
+        }
+
+        foreach (array_keys($headers) as $name) {
+            header_remove($name);
+        }
+
+        return $headers;
     }
 
     /**
@@ -145,6 +256,7 @@ final class Runtime
         self::$config = null;
         self::$page = null;
         self::$kernel = null;
+        self::$handsBack = false;
         self::$direct = false;
     }
 
@@ -245,22 +357,45 @@ final class Runtime
                     : new \ErrorException('PHP ended while the tool ran. The error log of PHP says why.'));
             }
 
+            if ($died && self::$handsBack) {
+                // An application reports a fatal error itself, as it does on each
+                // of its pages. Laravel has sent its error page by now, and Symfony
+                // has printed one into the buffer of this page, which PHP empties
+                // into the answer when it ends. The page of the tool stays out of
+                // it: two documents would leave as one answer.
+                // What is to be logged about the run is still logged.
+                $kernel->finish($page);
+                $kernel->persist();
+
+                return;
+            }
+
             $page->release();
             $response = $kernel->finish($page);
-            // PHP is ending. An application that keeps the session never gets to
-            // save it, and what the page keeps was just written into it.
+            // PHP is ending. An application that called respond() never gets to
+            // save its session, and what the page keeps was just written into it.
             $kernel->persist();
             $response->send();
         });
     }
 
-    private static function assertWeb(): void
+    private static function assertWeb(string $caller = 'serve'): void
     {
-        if (PHP_SAPI === 'cli' || PHP_SAPI === 'phpdbg') {
+        if (PHP_SAPI !== 'cli' && PHP_SAPI !== 'phpdbg') {
+            return;
+        }
+
+        if ($caller === 'respond') {
             throw new \LogicException(
-                'Script UI draws in a browser, and this script runs on the command line. '
-                . 'Start a server with "php vendor/bin/script-ui serve <folder>" and open the address it prints.',
+                'respond() takes the request from PHP itself ($_SERVER, $_GET, $_POST and $_FILES), and on the command line PHP has none. '
+                . 'The test client of a framework runs there too and does not fill them in. '
+                . 'Try the tools through a web server: in a browser, or with a browser test.',
             );
         }
+
+        throw new \LogicException(
+            'Script UI draws in a browser, and this script runs on the command line. '
+            . 'Start a server with "php vendor/bin/script-ui serve <folder>" and open the address it prints.',
+        );
     }
 }

@@ -1,0 +1,109 @@
+/* The colours of the library's own pages (resources/app.css). */
+:root {
+    --vp-c-brand-1: #1b64be;
+    --vp-c-brand-2: #2a74cf;
+    --vp-c-brand-3: #1b64be;
+    --vp-c-brand-soft: rgba(27, 100, 190, 0.14);
+}
+
+.dark {
+    --vp-c-brand-1: #6aabf1;
+    --vp-c-brand-2: #8fc0f5;
+    --vp-c-brand-3: #2f76cc;
+    --vp-c-brand-soft: rgba(106, 171, 241, 0.16);
+}
+
+/* ---------------------------------------------------------------- diagrams */
+
+/* A diagram takes its colours from the page. On a phone it keeps its size and moves sideways. */
+figure.diagram {
+    margin: 28px 0;
+    overflow-x: auto;
+}
+
+figure.diagram svg.sui-diagram {
+    display: block;
+    min-width: 560px;
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto;
+    color: var(--vp-c-text-1);
+    font-family: var(--vp-font-family-base);
+}
+
+figure.diagram figcaption {
+    margin-top: 12px;
+    color: var(--vp-c-text-2);
+    font-size: 14px;
+    line-height: 1.5;
+    text-align: center;
+}
+
+/* The parts that are Script UI itself. */
+.sui-diagram rect.a,
+.sui-diagram ellipse.a,
+.sui-diagram path.a,
+.sui-diagram line.a {
+    stroke: var(--vp-c-brand-1);
+    stroke-opacity: 1;
+}
+
+.sui-diagram rect.a,
+.sui-diagram ellipse.a {
+    fill: var(--vp-c-brand-1);
+    fill-opacity: 0.1;
+}
+
+.sui-diagram text.a,
+.sui-diagram marker path.a {
+    fill: var(--vp-c-brand-1);
+    stroke: none;
+}
+
+.sui-diagram text.m {
+    font-family: var(--vp-font-family-mono);
+}
+
+/* ---------------------------------------------------------------- pictures of pages */
+
+/* A picture of a tool's page, framed like a small browser window. */
+.vp-doc img.shot,
+.shot img {
+    display: block;
+    width: 100%;
+    border: 1px solid var(--vp-c-divider);
+    border-radius: 10px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+}
+
+/* A long page: the top of it says what the tool is. */
+.vp-doc img.shot.cut {
+    max-height: 460px;
+    object-fit: cover;
+    object-position: top;
+}
+
+figure.shot {
+    margin: 24px 0;
+}
+
+figure.shot figcaption {
+    margin-top: 10px;
+    color: var(--vp-c-text-2);
+    font-size: 14px;
+    text-align: center;
+}
+
+/* Code on the left, its page on the right. Under each other where there is no room. */
+.side-by-side {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    align-items: start;
+    margin: 24px 0;
+}
+
+.side-by-side > * {
+    min-width: 0;
+    margin: 0 !important;
+}

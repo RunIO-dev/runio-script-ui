@@ -673,7 +673,7 @@ What stays your job: decide who may open which tool (`allow:`) and who may do wh
 
 ## Development and tests
 
-This repository holds the library at its root, plus example tools in `examples/` and browser tests in `e2e/`. Neither of those ships with the Composer package.
+This repository holds the library at its root, plus example tools in `examples/`, browser tests in `e2e/` and the website in `site/`. None of those ships with the Composer package.
 
 Unit tests:
 
@@ -705,6 +705,16 @@ npx playwright test -c frameworks
 ```
 
 `LARAVEL='^12.0' SYMFONY='7.4.*' node frameworks/setup.mjs` chooses other versions. The two servers use the ports 8781 and 8782.
+
+The website reads parts of this file, the doc comments of `src/functions.php` and the example tools in, so a change to one of them can break a page. Its build finds that out. It needs Node.js only:
+
+```bash
+cd site
+npm install
+npm run build
+```
+
+[`site/README.md`](site/README.md) says where each text of the website lives.
 
 ## License
 

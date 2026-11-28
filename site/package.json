@@ -1,0 +1,15 @@
+{
+  "name": "script-ui-site",
+  "private": true,
+  "type": "module",
+  "description": "The website of runio/script-ui: what it is for, tutorials, examples and diagrams.",
+  "scripts": {
+    "generate": "node diagrams/draw.mjs && node tools/reference.mjs",
+    "dev": "npm run generate && vitepress dev",
+    "build": "npm run generate && vitepress build && node tools/check.mjs",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4"
+  }
+}

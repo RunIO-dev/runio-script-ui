@@ -1,0 +1,2 @@
+# A page that is not there gets the "not found" page of the site.
+ErrorDocument 404 /404.html

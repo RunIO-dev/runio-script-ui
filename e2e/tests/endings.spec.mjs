@@ -36,7 +36,8 @@ for (const { way, leave, broken } of WAYS) {
         expect(response.status()).toBe(500);
         await expect(said(page)).toHaveText('Drawn before the end.');
         // Without a login check, on this computer, the error is shown with its details.
-        await expect(page.locator('#sui-body > .sui-error')).toContainText('Cannot redeclare function declared_twice_by_a_test()');
+        // PHP 8.5 calls it "Cannot redeclare function …". Before, it left the word out.
+        await expect(page.locator('#sui-body > .sui-error')).toContainText(/Cannot redeclare (function )?declared_twice_by_a_test\(\)/);
         expect(await documents(page, broken)).toBe(1);
     });
 }

@@ -212,7 +212,8 @@ final class Runtime
             }
 
             // A response holds one value for a name. Several lines of one
-            // header mean the same as one line that lists their values.
+            // header mean the same as one line that lists their values, for
+            // every header that may come more than once, but for cookies.
             $names[$known] ??= $name;
             $value = trim($parts[1]);
             $headers[$names[$known]] = isset($headers[$names[$known]]) ? $headers[$names[$known]] . ', ' . $value : $value;
@@ -224,7 +225,9 @@ final class Runtime
 
         // PHP lets go of every line of a name at once. A line that the
         // application had set under such a name, and that the tool left as it
-        // was, goes back.
+        // was, goes back. (For a line that starts with "Location:", PHP also
+        // sets the status of a redirect. A framework sets its own status when
+        // it sends, and a tool has no reason to add a second Location.)
         foreach (array_intersect($before, $now) as $line) {
             if (isset($names[strtolower(trim(explode(':', $line, 2)[0]))])) {
                 header($line, false);

@@ -1000,7 +1000,8 @@ final class Kernel
 
         // The list is at the base as it was written: "/admin/tools" for a route of
         // an application, "/admin/tools/" for a folder that a web server serves.
-        // Each of the two answers the other spelling with a redirect.
+        // An application or a web server leads the other spelling there with a
+        // redirect of its own. Here both spellings show the list.
         $slash = str_ends_with($base, '/');
         $base = trim($base, '/');
         $base = $base === '' ? '' : '/' . $base;

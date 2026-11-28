@@ -16,6 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - What the library keeps in a session belongs to the user the login check named. When another name shows up in the same session, as after a login without a logout before it, the saved inputs, the uploaded files, the waiting messages and the token of the forms are dropped. Before, they went to whoever used the session next. A session that an older version began has no owner yet, so it starts from nothing once as well.
 
 ### Changed
+- A user object that has `getUserIdentifier()` or `getAuthIdentifier()` goes by what that returns, also when the object is a text as well (`__toString()`). Before, the text was its name.
+- The `Session` interface has a new method, `clear()`. A class of your own that implements the interface needs it too.
 - A served tool that ends PHP with `exit` gets its page sent at that moment, and no longer when PHP shuts down.
 - The list of tools is at the base as `base:` is written. With `base: '/admin/tools'` the links to the list now lead to `/admin/tools` and no longer to `/admin/tools/`. End the base with a slash to keep the old address.
 

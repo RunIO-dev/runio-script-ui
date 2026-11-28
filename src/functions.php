@@ -657,8 +657,10 @@ function serve(
  *
  *     return new Response($page->body, $page->status, $page->headers);
  *
- * The headers belong to the page. Without them it does not work: they carry
- * the rule that lets the script of the page run, and nothing else.
+ * The headers belong to the answer, and so does the status. Pass all of them
+ * on: they say where a pressed button leads on to, what a file is called and
+ * of which kind it is, that the page is not to be kept, and which script the
+ * page may run.
  *
  * The request is the one PHP itself is working on ($_SERVER, $_GET, $_POST and
  * $_FILES). The test client of a framework does not fill those in, so a tool

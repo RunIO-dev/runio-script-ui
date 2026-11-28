@@ -455,13 +455,13 @@ Route::match(['get', 'post'], '/admin/tools/{tool?}', function (Request $request
 $middleware->validateCsrfTokens(except: ['admin/tools', 'admin/tools/*']);
 ```
 
-Pass all of `$page->headers` on. They carry the rule that lets the script of the page run.
+Pass the status and all of `$page->headers` on. They belong to the answer: where a pressed button leads on to, the name and the kind of a download, the order not to keep the page, and the rule that lets the script of the page run.
 
 **The session.** With `session:` the tools keep what they keep in the session of your application, under the one key `_script_ui`, and a logout ends it. Without it they use PHP's own session. In Laravel that is a second session next to Laravel's, and a logout of Laravel does not end it.
 
 The session needs room. What one tool keeps of its inputs is a few kilobytes as a rule and 256 KB at most, and a session remembers 50 tools. A session that lives in a cookie, such as Laravel's `cookie` driver, is too small: a cookie holds about 4 KB. A database column of 64 KB can run full too. The `BLOB` that Symfony's `PdoSessionHandler` creates on MySQL is one, and Symfony names `MEDIUMBLOB` for more.
 
-**The user.** `auth:` returns the user object of the framework, and `allow:` gets that object. `user()` and the log name it by `getUserIdentifier()` in Symfony and by `getAuthIdentifier()` in Laravel, which is the key of the row unless your model says otherwise. To show an email instead, return it: `auth: fn () => $request->user()?->email`. Then `allow:` gets the email too.
+**The user.** `auth:` returns the user object of the framework, and `allow:` gets that object. `user()` and the log name it by `getUserIdentifier()` in Symfony and by `getAuthIdentifier()` in Laravel, which is the key of the row unless your model says otherwise. To show an email instead, return it: `auth: fn () => $request->user()?->email`. Then `allow:` gets the email too. What a tool keeps is bound to that name, so a name that changes, such as an email, starts from nothing once. For the same reason every place that serves tools in one session has to name a user the same way, and two kinds of users that share a number, such as admin 1 and customer 1, need names that differ.
 
 **Laravel checks every form for its own token.** The forms of the tools carry the token of the library, and the library checks it on every request. So the route is taken out of Laravel's check, with the line for `bootstrap/app.php` above. Without it Laravel 12 answers every pressed button with "419 Page Expired". Laravel 13 lets a button through when the browser says that the request comes from the same site. Browsers say that on HTTPS and on localhost only, so the line is needed there as well. The line takes every address under `admin/tools` out of Laravel's check, so keep those addresses for the tools alone.
 
@@ -470,6 +470,8 @@ The session needs room. What one tool keeps of its inputs is a few kilobytes as 
 **Errors.** The error handling of the framework stays in charge. Laravel makes an error of every PHP warning, and Symfony does in its dev environment: a warning in a tool then ends the run, and the page says that the tool failed. After a fatal error the framework shows its own error page. What the tool had printed with `echo` by then stands in front of it.
 
 **End a run with `stop()`, not with `exit`.** `exit` ends the framework together with the tool. The page is still sent and what the tool keeps is saved, but nothing of the framework runs after that line. In Laravel the lock of `->block()` is not given back, and the next click of that user waits until it runs out, which is 10 seconds.
+
+**A file that a tool sends by itself.** Hand files to `download()`. A tool may also close its page with one `ob_end_clean()` and print an answer of its own, and `respond()` hands that back with its status and headers. It holds all of the answer in memory, so it cannot stream: give a large file a route of its own. A tool that closes every output buffer, as in `while (ob_get_level()) ob_end_clean();`, sends its answer past `respond()` and past the framework, without the cookies and headers of your application. The error log says so.
 
 **Another Content-Security-Policy.** The page brings its own. A browser applies every policy it gets, so a second one that your application adds to all its responses blocks the script and the styles of the page. Leave this route out of it.
 

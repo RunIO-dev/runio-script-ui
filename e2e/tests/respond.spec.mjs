@@ -165,8 +165,9 @@ test('after a fatal error the application reports it, and the page of the tool s
 
     expect(response.status()).toBe(500);
     expect(response.headers()['x-app']).toBe('stand-in');
-    // One document: the error page of the application, and nothing of the tool behind it.
+    // One document: the error page of the application, and no page of the tool behind it.
+    // What the tool had printed itself is in PHP's hands by then, and stands in front.
     expect(await response.text()).toBe(
-        '<!doctype html><html lang="en"><title>Error</title><h1 id="app-error">The application broke down.</h1></html>',
+        'Printed before the end.<!doctype html><html lang="en"><title>Error</title><h1 id="app-error">The application broke down.</h1></html>',
     );
 });

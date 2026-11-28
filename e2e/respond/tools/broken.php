@@ -6,6 +6,7 @@ use function Runio\ScriptUi\{title, note};
 
 title('Break down');
 note('Drawn before the end.');
+echo 'Printed before the end.';
 
 eval('function declared_twice_by_a_test(): void {}');
 eval('function declared_twice_by_a_test(): void {}');

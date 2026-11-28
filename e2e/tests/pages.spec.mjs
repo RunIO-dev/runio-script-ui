@@ -22,6 +22,7 @@ test('the index page lists the tools', async ({ page }) => {
         'Customers',
         'Give a coupon',
         'Import orders',
+        'Order archive',
         'Refund orders',
         'Sales dashboard',
         'Ship orders',

@@ -20,6 +20,7 @@ test('the index page lists the tools', async ({ page }) => {
     expect(names.filter((name) => !name.startsWith('Test:'))).toEqual([
         'Audit log',
         'Customers',
+        'Export orders',
         'Give a coupon',
         'Import orders',
         'Order archive',

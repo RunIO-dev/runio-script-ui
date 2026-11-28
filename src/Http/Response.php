@@ -10,7 +10,9 @@ namespace Runio\ScriptUi\Http;
 final class Response
 {
     /**
-     * @param array<string,string> $headers
+     * @param int                  $status      the HTTP status
+     * @param string               $body        the page, or the file of a download
+     * @param array<string,string> $headers     the headers that belong to the answer, by name
      * @param bool                 $alreadySent the script answered on its own; there is nothing left to send
      */
     public function __construct(
@@ -21,6 +23,7 @@ final class Response
     ) {
     }
 
+    /** One header by its name, in whatever case it is written. null when the answer has none of that name. */
     public function header(string $name): ?string
     {
         foreach ($this->headers as $key => $value) {
@@ -32,6 +35,7 @@ final class Response
         return null;
     }
 
+    /** Sends the status, the headers and the body. It does nothing when the script answered on its own. */
     public function send(): void
     {
         if ($this->alreadySent) {

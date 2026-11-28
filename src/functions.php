@@ -96,21 +96,25 @@ function progress(string $label, int|float|null $value = null, int|float $max = 
     Runtime::page()->progress($label, $value, $max, $text);
 }
 
+/** A message that something worked. Line breaks are kept. */
 function success(string $text): void
 {
     Runtime::page()->callout('success', $text);
 }
 
+/** A message that tells the user something they should know. Line breaks are kept. */
 function info(string $text): void
 {
     Runtime::page()->callout('info', $text);
 }
 
+/** A message that something needs care. Software that reads the page out says it at once. */
 function warning(string $text): void
 {
     Runtime::page()->callout('warning', $text);
 }
 
+/** A message that something went wrong. Software that reads the page out says it at once. What is wrong with one input belongs to field_error(). */
 function error(string $text): void
 {
     Runtime::page()->callout('error', $text);

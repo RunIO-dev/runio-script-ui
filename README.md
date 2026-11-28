@@ -363,9 +363,27 @@ Every PHP file in the folder becomes a tool, listed on an index page. The first 
 
 With a login check, error details go to the error log and not into the page. Pass `debug: true` where you develop.
 
+**Who may open which tool.** The login check lets somebody in, and then every tool is open to them. `allow:` decides for one user and one tool:
+
+```php
+Runio\ScriptUi\serve(
+    __DIR__ . '/tools',
+    auth: fn () => $_SESSION['admin_email'] ?? null,
+    allow: fn (mixed $user, string $tool) => $permissions->has($user, 'tool.' . $tool),
+);
+```
+
+It gets two things. The first is what your login check returned, as it is: a name, a number or the user object of your application. It is `null` when the login check only said `true`, and when there is no login check. The second is the id of the tool: the file name without `.php`, so `refund` for `tools/refund.php`. It answers `true` or `false`. Compare strictly where you compare: `in_array($user, $team, true)`.
+
+A tool that is not allowed is left out of the list, and whoever opens its address reads "Not allowed" before anything of the tool runs, whether that is a page view, a pressed button or a download. The question is asked on every request, so access that you take away ends with the next click, also on a page that is open.
+
+Only `true` opens a tool. Any answer other than `true` or `false`, and a check that throws, lets nobody in, and the reason goes to the error log. That holds for the list too: it asks once for every tool, so one answer that is neither closes the list for everybody. Keep the check cheap for the same reason. What somebody may do inside a tool they may open stays the tool's own `if`: `user()` tells it who is asking.
+
+A file name is an address, and "Not allowed" is another answer than "There is no tool at this address". So whoever is logged in can find out that a tool with a certain name is there, without seeing anything of it. Name the files with that in mind.
+
 By default tools are chosen with `?_tool=refund`. With `base: '/admin/tools'` they get clean addresses such as `/admin/tools/refund` (send those addresses to the script in your web server configuration).
 
-**One script on its own.** A script that the web server runs directly works too. Call `Runio\ScriptUi\configure(auth: ...)` in a file every tool includes, before anything is drawn. See [`examples/direct/hello.php`](examples/direct/hello.php).
+**One script on its own.** A script that the web server runs directly works too. Call `Runio\ScriptUi\configure(auth: ...)` in a file every tool includes, before anything is drawn. See [`examples/direct/hello.php`](examples/direct/hello.php). `configure()` takes `allow:` too. A script on its own is asked about by its file name: `payroll` for `payroll.php`. Then the name has to be one that a tool of a folder could have (lower-case letters, digits, `-` and `_`), or the script stays closed. Both checks are asked when the script calls its first function of the library. Put `title()` at the top: what stands above it runs for everybody.
 
 ### Languages
 
@@ -394,6 +412,7 @@ Pages that are not a tool have no title to follow: the list of tools and pages s
 ## What the library does for safety
 
 - **No login check, no outside access.** Without `auth`, tools only answer to a browser on the computer they run on. The request must come from a loopback address, with a local host name, and must not look passed on (proxy headers, HTTP/1.0, `Connection: close`). No check of this kind can see through every proxy or tunnel, so anything that can be reached from outside needs `auth`.
+- **A tool can be closed to some users.** `allow:` is asked before anything of a tool runs, on every request, and only a plain `true` opens the tool. Without `allow:` every tool is open to everybody who gets past the login check.
 - **Forged requests are refused.** Every form carries a token. A button only counts on a form that was sent from the page itself. The "Reset" link carries a code of its own.
 - **Everything is escaped.** Labels, table cells and messages are text, never HTML. Output printed with `echo` is shown as text too.
 - **A strict Content-Security-Policy** on every page: no inline styles, no inline handlers, nothing from other sites, no framing.
@@ -405,7 +424,7 @@ Pages that are not a tool have no title to follow: the list of tools and pages s
 - **Files are found by listing the folder.** An address can never point outside it.
 - **Error details stay private.** They are shown only while no login check is set, because then nobody but your own computer gets in. With a login check they go to the error log unless you pass `debug: true`. PHP warnings and notices are kept out of the page in the same way.
 
-What stays your job: decide who may do what (`user()` tells you who is asking), and never change data outside an `if (button(...))` block, because the script also runs on every plain page view.
+What stays your job: decide who may open which tool (`allow:`) and who may do what inside one (`user()` tells you who is asking), and never change data outside an `if (button(...))` block, because the script also runs on every plain page view.
 
 ## Limits of this first version
 

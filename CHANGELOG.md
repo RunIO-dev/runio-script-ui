@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- `allow:` in `serve()` and `configure()` says who may open which tool. It gets what the login check returned and the id of a tool. A tool that is not allowed is left out of the list and answers "Not allowed" before anything of it runs. Only a plain `true` opens a tool, and the question is asked on every request.
+
 ## [0.1.0] - 2026-11-27
 
 First version. Requires PHP 8.2+ with the mbstring and session extensions, and no other package.

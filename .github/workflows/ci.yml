@@ -66,7 +66,7 @@ jobs:
         run: vendor/bin/phpunit --fail-on-skipped
 
   browser:
-    name: Browser (Playwright, example tools)
+    name: Browser (Playwright, example tools and website)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -92,7 +92,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: e2e/package-lock.json
+          cache-dependency-path: |
+            e2e/package-lock.json
+            site/package-lock.json
 
       - name: Install Playwright
         working-directory: e2e
@@ -104,6 +106,19 @@ jobs:
         working-directory: e2e
         run: npx playwright test
 
+      # The first page of the website has two pictures that a visitor can use. They are
+      # simulations, so they are used here in a browser, and what the picture of one click says
+      # is compared with the real site/samples/hello.php, run by the library.
+      - name: Build the website
+        working-directory: site
+        run: |
+          npm ci
+          npm run build
+
+      - name: Run the browser tests of the website
+        working-directory: e2e
+        run: npx playwright test -c site
+
       - name: Upload the report
         if: failure()
         uses: actions/upload-artifact@v4
@@ -112,6 +127,8 @@ jobs:
           path: |
             e2e/playwright-report
             e2e/test-results
+            e2e/site/playwright-report
+            e2e/site/test-results
           retention-days: 7
 
   frameworks:
@@ -195,6 +212,7 @@ jobs:
           cache-dependency-path: site/package-lock.json
 
       # The build needs no PHP: the page of all functions is read from the doc comments as text.
+      # It starts with the tests of the live pictures of the first page (npm test).
       # After VitePress, site/tools/check.mjs looks for what a build does not notice: a part of
       # the README that the website reads in and that is gone, a link to a heading that was
       # renamed, a tutorial that names a line of a demo tool that has moved.

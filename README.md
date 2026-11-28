@@ -79,7 +79,7 @@ composer install
 php bin/script-ui serve examples/tools
 ```
 
-Open <http://localhost:8765>. The demo has nine tools: refunds, orders to ship page by page, an import of orders from a CSV file, a form for coupons that says under each field what is wrong with it, a sales dashboard with charts, a customer list with filters, an archive of 100,000 orders that is read one page at a time, an Arabic page (right to left, with the library's own texts in Arabic), and the audit log. The demo data lives in `examples/var/` and can be deleted at any time.
+Open <http://localhost:8765>. The demo has ten tools: refunds, orders to ship page by page, an import of orders from a CSV file, a form for coupons that says under each field what is wrong with it, a sales dashboard with charts, a customer list with filters, an archive of 100,000 orders that is read one page at a time, an export that takes half a minute and shows how far it is, an Arabic page (right to left, with the library's own texts in Arabic), and the audit log. The demo data lives in `examples/var/` and can be deleted at any time.
 
 ## How it works
 
@@ -105,7 +105,7 @@ The page works without JavaScript as a plain form. With JavaScript it updates in
 | Messages | `success` `info` `warning` `error` |
 | Inputs | `text` `textarea` `number` `select` `radio` `multiselect` `checkbox` `date_input` `file_input` |
 | Checks | `field_error` `valid` |
-| Data | `table` `chart` `metric` |
+| Data | `table` `chart` `metric` `progress` |
 | Actions | `button` `download` `csv` |
 | Layout and flow | `columns` `expander` `tabs` `refresh` `stop` `rerun` |
 | Hosting | `serve` `respond` `configure` `user` `clean_uploads` |
@@ -384,7 +384,7 @@ table($queue->jobs());
 
 `refresh(30)` runs the script again 30 seconds after every answer, as long as somebody has the page open and in view. Where it is called, a small line says when the page was made, with a button that pauses it.
 
-**It never takes the page from under your hands.** A refresh waits while a text is half typed, while a question of a button waits for its answer, and for two seconds after the mouse or a key was last touched. It also waits while a list or a calendar is open or text is marked, for a minute at most. An answer that arrives in such a moment waits too. What a button said stays until you are back and had ten seconds to read it.
+**It never takes the page from under your hands.** A refresh waits while a text is half typed, while a question of a button waits for its answer, and for two seconds after the mouse or a key was last touched. It also waits while a list or a calendar is open or text is marked, for a minute at most. An answer that arrives in such a moment waits too. What a button said stays until you are back and had ten seconds to read it. There is one exception. Next to a bar of `progress()` that is not full, good news (`success()` or `info()`) gets its ten seconds and the page then goes on, whether you touched it or not: a task that is under way is there to be watched. A warning, an error and a note under a field wait for you there too. A bar in a closed expander or behind a tab is watched by nobody, and changes nothing.
 
 **It is a run that nobody asked for.** A refresh presses no button, sends no file, writes nothing to the log and does not change the inputs that the page remembers. What a button showed is gone after the next refresh, as it is after any other run. So `refresh()` suits pages that show the same thing on every run.
 
@@ -397,6 +397,53 @@ table($queue->jobs());
 - A page that keeps asking keeps its session alive. So it stops by itself when nobody touched it for an hour, and says "Paused". `stopAfter:` sets another time in seconds, longer than the wait. `stopAfter: null` lets a screen on a wall run for ever.
 - The page script does that stopping, not the server. Your login check runs for a refresh as for any other request. If it logs people out after a time without a request, it should not count the requests that nobody asked for. They carry the header `X-Script-Ui: refresh`, which PHP shows as `$_SERVER['HTTP_X_SCRIPT_UI']`.
 - Without JavaScript nothing refreshes. The line then only says when the page was made.
+
+### A task that takes long
+
+An import of fifty thousand rows does not fit into one run of a tool: the browser waits, PHP's time limit ends the script, and nobody sees how far it is. Work like that belongs to a worker: a job in a queue, a cron job, a command. The tool starts the task and then shows how far it is.
+
+```php
+title('Import orders');
+
+$import = $imports->latest();    // your own storage: a row that the worker keeps up to date
+
+if ($import?->status === 'running') {
+    refresh(2);
+    progress('Importing orders', $import->done, $import->total);
+
+    return;
+}
+
+if ($import?->status === 'finished') {
+    success(number_format($import->done) . ' orders are imported.');
+}
+
+if (button('Start the import', style: 'primary')) {
+    $imports->start();           // writes the row and hands the work to the worker
+    rerun();
+}
+```
+
+`progress()` draws a label, a bar and a percentage from the two numbers it gets in this run. It keeps nothing, returns nothing and does not move by itself. `refresh(2)` is what moves it: the script runs again every two seconds and reads the numbers anew. When the task is over the script no longer reaches `refresh()`, and the page stands still.
+
+- `progress('Waiting for a worker')`, without a value, draws a bar that only says that work is going on. A `max:` of 0 or less does the same, and so does `NAN` or `INF`: a task that has not counted its rows yet has not done all of them.
+- The value counts up to the third argument, and up to 100 without one: `progress('Disk', 73)`. More than that counts as all of it, and less than 0 as nothing. The percentage is cut and not rounded, so it says "100%" only when all of it is done. Both are numbers: a script with `strict_types` casts what a database hands it as text, `(int) $row['done']`.
+- `text:` puts your own words beside the bar in place of the percentage, and a screen reader says them for the value: `progress('Importing orders', 1200, 3000, text: '1,200 of 3,000 orders')`. The time that is left belongs there too when you know it.
+- A bar is not an input. It has no key, a link cannot set it, and a page may show several. Its label is its name, for a screen reader too, so an empty label is an error.
+
+**The task is yours.** The library starts no worker and keeps no task. A worker writes down how far it is, every few hundred rows rather than every row, and the tool reads that. Every open page reads it every two seconds, so make it one cheap query. A queue may know the numbers already: in Laravel, the batch that `Bus::findBatch($id)` returns has `processedJobs()` and `totalJobs`.
+
+What such a tool has to think of:
+
+- **Start it once.** A button can be pressed twice, and by two people. Let the start find out that a task is running and write the new one in one statement of the database, not with a read and a write after it.
+- **Say nothing after the start.** The bar on the next page says that the task started. A `success()` next to it holds the page for ten seconds, so that it can be read, and the bar stands still that long. After that it is gone with the next run, read or not. What the user has to keep, the number of the task for example, belongs into the page and not into such a message.
+- **A worker can die.** Its bar then waits for ever. Let the worker write the time with every step, and say `warning()` in place of the bar when that time is too old.
+- **A task can fail.** Keep its state next to the numbers, and show `error()` in place of the bar with a short message of your own. What the worker threw belongs into your log: it names paths and queries.
+- **Stopping is a wish.** A button can write down that the task should stop. The worker has to look for that between two steps.
+- **Whose task it is.** The export of the demo belongs to the shop: everybody who opens the page sees the same one. A task that belongs to one user needs that user in its row, and `user()` says who is asking.
+- **Who may start it.** `allow:` says who may open the tool, and whoever opens it can press every button it draws. Where only a few may start or stop a task, ask `user()` and draw those buttons for them only.
+- **A page that nobody touches pauses after an hour.** For a longer task give `refresh()` a longer `stopAfter:`.
+- **Do not let the page do the work**, one slice with every refresh. A refresh runs only while somebody has the page open and in view, it waits while they type, and two open tabs would do the same slice twice. The work needs a worker that runs without a browser.
 
 ### Links that fill in fields
 
@@ -595,6 +642,7 @@ What stays your job: decide who may open which tool (`allow:`) and who may do wh
 - A message of `field_error()` is gone with the next run, unless the script says it again. Nothing keeps a note under its field until that field is corrected: check on every run for that. Only inputs can be marked, not a table and not a button.
 - Every tab of `tabs()` runs on every run. There is no way yet to run only the open one, and a link cannot open a tab or an expander.
 - `refresh()` runs the whole script and swaps the whole content. There is no way yet to refresh one part of a page, and the server pushes nothing: the page asks. When something above the place you look at grows or shrinks, the page moves under your eyes.
+- `progress()` shows two numbers that the tool has. The library has no queue and no worker, cannot stop a task and does not work out the time that is left. A bar moves when the page runs again, which `refresh()` does every two seconds at best.
 - Charts are bar and line charts with one axis and at most 8 series.
 - State lives in the session: PHP's own, or the one you pass to `respond()` with `session:`. Two browser tabs of the same tool share saved inputs. A session remembers the inputs of the 50 tools that were used last.
 - A script that runs on its own (without `serve()`) is told apart by its file and its path. Tools that share both and differ only in the query string (`index.php?page=refund`) work, but they do not remember their inputs separately.
@@ -622,7 +670,7 @@ npx playwright install chromium
 npx playwright test
 ```
 
-They drive the example tools in a real browser: the refund flow from the first key press to the audit log, downloads, uploads up to a file that is dragged onto the page, the charts, the Arabic page, a dark theme, a phone-sized window and the page without JavaScript. They start their own servers on ports 8775 to 8780 and work on a copy of the example tools, so a demo that is running keeps its data.
+They drive the example tools in a real browser: the refund flow from the first key press to the audit log, downloads, uploads up to a file that is dragged onto the page, the charts, a bar that follows a task of half a minute, the Arabic page, a dark theme, a phone-sized window and the page without JavaScript. They start their own servers on ports 8775 to 8780 and work on a copy of the example tools, so a demo that is running keeps its data.
 
 The same kind of tools run inside a real Laravel and a real Symfony in a suite of its own. It downloads the two applications with Composer first, into a folder outside this repository, which takes a minute or two:
 

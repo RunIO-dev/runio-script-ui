@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-28
+
+Tools run inside Symfony and Laravel, a tool can be closed to some users, a table reads its pages from a database, and a bar shows how far a long task is. Before you update from 0.1.0, read "Security" and "Changed": a few things behave differently, and a class of your own that implements `Session` needs one more method.
+
 ### Added
 - `progress()` shows how far a task is: a label, the browser's own bar and a percentage, or your own words with `text:`. Without a value the bar only says that work is going on. With `refresh()` on the same page it follows a task that a worker does somewhere else. There, good news of a button (`success()`, `info()`) next to a bar that is not full stays for ten seconds, and the page then goes on by itself. Bad news waits for the user, as on every page. The demo has a tool that exports orders this way.
 - `table()` takes a function in place of the rows, for a table that is too long to pass in. The table asks it for one page at a time with a `TableQuery` (the search, the order, a limit and an offset), and the rows stay in the database. `sortable:` names the columns whose headers sort, and `count:` says how many rows there are. Without `count:` the table offers "Previous" and "Next" without a count. Ticks count for the page on the screen, and the table says so when a turned page leaves ticked rows behind.
@@ -48,5 +52,6 @@ First version. Requires PHP 8.2+ with the mbstring and session extensions, and n
 - Pages update in place with JavaScript and work as plain forms without it. A title in Arabic or Hebrew turns the page right to left.
 - The library's own texts ("Yes", "Reset", "No rows.") in English, Arabic and German. A page follows the language of its title, `language:` sets one language for every page, and `texts:` replaces single texts or adds a language.
 
-[Unreleased]: https://github.com/RunIO-dev/runio-script-ui/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/RunIO-dev/runio-script-ui/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/RunIO-dev/runio-script-ui/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/RunIO-dev/runio-script-ui/releases/tag/v0.1.0

@@ -5,7 +5,7 @@
 
 Turn one PHP script into an internal tool with a web page. You write no HTML, no JavaScript, no controller and no template.
 
-> This is a first version, built to try the idea. Until version 1.0 a new version may change how a function is called. The [changelog](CHANGELOG.md) says what changed.
+> This is an early version, built to try the idea. Until version 1.0 a new version may change how a function is called. The [changelog](CHANGELOG.md) says what changed.
 
 ```php
 <?php // tools/refund.php
@@ -630,7 +630,7 @@ Pages that are not a tool have no title to follow: the list of tools and pages s
 
 What stays your job: decide who may open which tool (`allow:`) and who may do what inside one (`user()` tells you who is asking), and never change data outside an `if (button(...))` block, because the script also runs on every plain page view.
 
-## Limits of this first version
+## Limits of this version
 
 - Uploads have no progress bar, and cannot be resumed or stopped once they are on their way. A field holds up to 20 files and a session 200. The kind of a file is judged by the ending of its name only.
 - Nothing limits the bytes that uploads take on the disk, only their number: a session keeps up to 200 files of the size you allow, for a day at most. Somebody who is logged in and means harm can use that. Keep `maxSize:` and PHP's limits as low as your tools need.

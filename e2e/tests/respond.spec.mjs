@@ -13,7 +13,7 @@ test('the application sends the page that respond() hands back', async ({ page, 
     watch(page);
     await login(page);
     await expect(page.locator('a.sui-card strong')).toHaveText([
-        'Answer alone', 'Answer alone and leave', 'Break down', 'Export a list', 'Keep a note', 'Leave early',
+        'Answer alone', 'Answer alone and leave', 'Answer past everything', 'Break down', 'Export a list', 'Keep a note', 'Leave early',
     ]);
 
     const response = await page.goto(`${RESPOND_URL}/tools/note`);
@@ -148,6 +148,30 @@ test('an answer that a tool prints by itself is handed back like a page', async 
     expect(await response.text()).toBe('An answer of the tool itself.');
     // Cookies stay with PHP, which sends every one of them.
     expect((await context.cookies()).map((cookie) => cookie.name).sort()).toEqual(['app_session', 'first', 'second']);
+});
+
+test('a tool that closes every output buffer sends its answer past the application, and the log says so', async ({ page }) => {
+    await login(page);
+    // Whatever earlier tests left in the log is read away.
+    await page.request.get(`${RESPOND_URL}/log`);
+
+    const response = await page.goto(`${RESPOND_URL}/tools/own-past`);
+
+    // The answer left before respond() came back. The application could add nothing to it.
+    expect(response.status()).toBe(200);
+    expect(response.headers()['content-type']).toBe('text/plain; charset=utf-8');
+    expect(response.headers()['x-app']).toBeUndefined();
+    expect(await response.text()).toBe('An answer that left at once.');
+
+    // Nobody sees that in a browser, so the error log tells whoever looks for the reason.
+    const log = await (await page.request.get(`${RESPOND_URL}/log`)).text();
+    expect(log).toContain('Script UI: a tool closed every output buffer');
+    expect(log).toContain('download()');
+
+    // An answer that respond() could hand back is no reason for a line in the log.
+    await page.goto(`${RESPOND_URL}/tools/own`);
+    await page.goto(`${RESPOND_URL}/tools/note`);
+    expect(await (await page.request.get(`${RESPOND_URL}/log`)).text()).not.toContain('Script UI');
 });
 
 test('an answer that a tool prints before it ends PHP arrives as the tool made it', async ({ page }) => {

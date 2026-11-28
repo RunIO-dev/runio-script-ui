@@ -138,8 +138,15 @@ final class Runtime
         }
 
         if (!$response->alreadySent || ob_get_level() < $level) {
-            // A page as usual. Or the tool closed every buffer there is, and
-            // its answer is on its way: nothing can be done about that one.
+            if ($response->alreadySent) {
+                // The tool closed every buffer there is, this one too, and its
+                // answer is on its way. Nothing can be done about that one, and
+                // nobody sees in a browser why the cookie of the application or
+                // its headers are missing. So it is written down.
+                error_log('Script UI: a tool closed every output buffer and sent its answer itself, past respond(). '
+                    . 'The application can add no cookie and no header to that answer. '
+                    . 'Hand a file to download(), or close the buffer of the page alone, with one ob_end_clean().');
+            }
             self::passOn($level);
 
             return $response;

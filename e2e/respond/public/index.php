@@ -139,6 +139,18 @@ register_shutdown_function(static function (): void {
 });
 $path = (string) parse_url(is_string($_SERVER['REQUEST_URI'] ?? null) ? $_SERVER['REQUEST_URI'] : '/', PHP_URL_PATH);
 
+// What goes to the error log is kept in a file, so that a test can read what
+// the library wrote there. "/log" hands it out and starts it again.
+$log = sys_get_temp_dir() . '/script-ui-e2e-app-error.log';
+ini_set('error_log', $log);
+if ($path === '/log') {
+    header('Content-Type: text/plain; charset=utf-8');
+    echo is_file($log) ? (string) file_get_contents($log) : '';
+    @unlink($log);
+
+    return;
+}
+
 // Pages of the application itself: who is logged in is its business.
 if ($path === '/login') {
     $session->put('user', is_string($_GET['as'] ?? null) ? $_GET['as'] : 'ava');

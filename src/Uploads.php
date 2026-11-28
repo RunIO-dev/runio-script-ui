@@ -301,6 +301,17 @@ final class Uploads
         $this->save($all);
     }
 
+    /** Deletes every file of every tool in this session: it belongs to another user now. */
+    public function forgetEverything(): void
+    {
+        foreach ($this->all() as $entries) {
+            foreach ($entries as $entry) {
+                $this->folder->delete($entry['stored']);
+            }
+        }
+        $this->save([]);
+    }
+
     /**
      * The part of a submitted form that names files and may be kept in the
      * session. It is checked again when the next run reads it.

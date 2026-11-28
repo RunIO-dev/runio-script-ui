@@ -52,6 +52,30 @@ final class FrameworkSessionTest extends TestCase
         self::assertSame([1, 2], $symfony->data['cart']);
     }
 
+    public function testClearingForgetsWhatTheLibraryKeepsAndNothingOfTheApplication(): void
+    {
+        $symfony = new SymfonyLikeSession(['cart' => [1, 2]]);
+        $session = new FrameworkSession($symfony);
+        $session->set('csrf', 'abc');
+        $session->set('state', ['refund' => ['note' => 'late']]);
+
+        $session->clear();
+
+        self::assertNull($session->get('csrf'));
+        self::assertNull($session->get('state'));
+        self::assertSame(['cart' => [1, 2], '_script_ui' => []], $symfony->data);
+
+        // A session of Laravel is cleared with the method it is written with.
+        $laravel = new LaravelLikeSession();
+        $session = new FrameworkSession($laravel);
+        $session->set('csrf', 'abc');
+        $laravel->put('cart', [1, 2]);
+
+        $session->clear();
+
+        self::assertSame(['_script_ui' => [], 'cart' => [1, 2]], $laravel->all());
+    }
+
     public function testALaravelSessionIsWrittenWithPut(): void
     {
         $laravel = new LaravelLikeSession();
@@ -314,6 +338,10 @@ abstract class ArraySessionWithSave implements Session
     }
 
     public function remove(string $key): void
+    {
+    }
+
+    public function clear(): void
     {
     }
 

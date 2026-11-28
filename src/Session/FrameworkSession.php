@@ -67,6 +67,11 @@ final class FrameworkSession implements Session
         $this->session->{$this->write}(self::ROOT, $all);
     }
 
+    public function clear(): void
+    {
+        $this->session->{$this->write}(self::ROOT, []);
+    }
+
     /**
      * Writes the session now, where it can be told to. For a tool that ends PHP
      * by itself: the framework is not there any more to do it.

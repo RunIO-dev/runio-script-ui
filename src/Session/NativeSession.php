@@ -36,6 +36,12 @@ final class NativeSession implements Session
         unset($_SESSION[self::ROOT][$key]);
     }
 
+    public function clear(): void
+    {
+        $this->open();
+        $_SESSION[self::ROOT] = [];
+    }
+
     private function open(): void
     {
         if (session_status() !== PHP_SESSION_ACTIVE) {

@@ -15,4 +15,7 @@ interface Session
     public function set(string $key, mixed $value): void;
 
     public function remove(string $key): void;
+
+    /** Forgets everything the library keeps. What the application keeps in the same session stays. */
+    public function clear(): void;
 }

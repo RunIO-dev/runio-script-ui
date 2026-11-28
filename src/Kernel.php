@@ -412,7 +412,39 @@ final class Kernel
             default => null,
         };
 
-        return ['name' => $name === null ? null : mb_substr(mb_scrub($name, 'UTF-8'), 0, 200, 'UTF-8'), 'who' => $result === true ? null : $result];
+        $name = $name === null ? null : mb_substr(mb_scrub($name, 'UTF-8'), 0, 200, 'UTF-8');
+        $this->claim($name);
+
+        return ['name' => $name, 'who' => $result === true ? null : $result];
+    }
+
+    /**
+     * What the library keeps in a session belongs to the user who was logged
+     * in when it was kept. An application may put another user into the same
+     * session: a login without a logout before it leaves the session as it is,
+     * in Laravel and in Symfony, and so does one person who acts as another.
+     * The inputs, the files, the messages and the token of the one before are
+     * not handed on then: the session starts from nothing for the new user.
+     *
+     * A user is known by the name the login check gives. A login check that
+     * names nobody cannot tell users apart.
+     */
+    private function claim(?string $name): void
+    {
+        // A name is never empty, so this is nobody else's.
+        $owner = $name ?? '';
+        $before = $this->session->get('owner');
+        if ($before === $owner) {
+            return;
+        }
+
+        // A session that an older version began has no owner. It is not emptied.
+        if ($before !== null) {
+            // The files first: the list that names them goes with everything else.
+            (new Uploads($this->folder, $this->session, ''))->forgetEverything();
+            $this->session->clear();
+        }
+        $this->session->set('owner', $owner);
     }
 
     /**

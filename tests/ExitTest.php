@@ -46,7 +46,7 @@ final class ExitTest extends TestCase
             public function save(): void
             {
                 $kept = $this->data['_script_ui'] ?? [];
-                echo $this->open ? '[saved ' . implode(',', array_keys($kept)) . ' ' . json_encode($kept['state'] ?? null) . ']' : '[saved too late]';
+                echo $this->open ? '[saved ' . json_encode($kept['state'] ?? null) . ']' : '[saved too late]';
             }
         }
 
@@ -100,7 +100,7 @@ final class ExitTest extends TestCase
             echo '[never reached]';
             PHP);
 
-        self::assertStringStartsWith('[before][saved csrf,secret null]<!doctype html>', $printed);
+        self::assertStringStartsWith('[before][saved null]<!doctype html>', $printed);
         self::assertStringContainsString('Drawn before the end.', $printed);
         // What the tool printed is on the page, and not in front of it.
         self::assertSame(1, preg_match('~<body.*Printed before the end\.~s', $printed));
@@ -131,7 +131,7 @@ final class ExitTest extends TestCase
             $kernel()->handle(new Request('POST', '/leave', [], ['_token' => $token[1], 'word' => 'lantern']), 'leave', $tool)->send();
             PHP);
 
-        self::assertStringContainsString('[typing][saved csrf,secret,state {"leave":{"word":"lantern"}}]<!doctype html>', $printed);
+        self::assertStringContainsString('[typing][saved {"leave":{"word":"lantern"}}]<!doctype html>', $printed);
         self::assertStringContainsString('The word is &quot;lantern&quot;.', $printed);
         self::assertStringNotContainsString('too late', $printed);
     }

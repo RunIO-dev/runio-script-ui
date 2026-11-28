@@ -57,6 +57,21 @@ test('what a tool keeps lies in the session of the application', async ({ page }
     await expect(field(page, 'Note')).toHaveValue('');
 });
 
+test('another user in the same session starts from nothing', async ({ page }) => {
+    await login(page);
+    await page.goto(`${RESPOND_URL}/tools/note`);
+    await field(page, 'Note').fill('the plan of ava');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.locator('.sui-success')).toBeVisible();
+
+    // A login without a logout before it: the application keeps its session and puts
+    // another name into it. What the tools kept for the first user is not handed on.
+    await login(page, 'ben');
+    await page.goto(`${RESPOND_URL}/tools/note`);
+    await expect(page.locator('.sui-user')).toHaveText('ben');
+    await expect(field(page, 'Note')).toHaveValue('');
+});
+
 test('without a login of the application nobody gets in', async ({ page }) => {
     for (const path of ['/tools', '/tools/note']) {
         const response = await page.goto(RESPOND_URL + path);

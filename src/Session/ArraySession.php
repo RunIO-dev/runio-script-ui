@@ -26,4 +26,9 @@ final class ArraySession implements Session
     {
         unset($this->data[$key]);
     }
+
+    public function clear(): void
+    {
+        $this->data = [];
+    }
 }

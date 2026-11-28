@@ -106,12 +106,13 @@ final class AllowTest extends ToolTestCase
 
     /**
      * The token belongs to the session and not to a tool. It is made by a page
-     * view that the rules of a test have no say in, so no test counts it.
+     * view that the access rule of a test has no say in, so no test counts it.
+     * The login check is the one of the test: a session belongs to one user.
      */
     protected function token(): string
     {
         $config = $this->config;
-        $this->config = null;
+        $this->config = $config === null ? null : new Config(auth: $config->auth, debug: true);
 
         try {
             return parent::token();

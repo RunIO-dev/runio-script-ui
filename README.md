@@ -209,6 +209,8 @@ The search only hides rows. A ticked row that it hides is not returned, so a but
 
 ### Tables that are too long to pass in
 
+<!-- #region big-table -->
+
 A table that gets all its rows is quick up to about twenty thousand of them. For more, pass a function in place of the rows. The table asks it for one page at a time, and the rows stay in the database:
 
 ```php
@@ -265,6 +267,8 @@ The table starts again at its first page when it is sorted or searched. When the
 The function and `count:` run on every run of the tool: with every click, with every pause while the user types into the search box and with every `refresh()`, also while the table sits in a closed expander or in a tab that is not in view. A page far into the list makes the database pass over all rows before it. So the query has to be one that your database answers quickly: an index on the columns of `sortable:`, a search it can do fast, and no `count:` where counting is slow.
 
 The table shows the columns that the rows of the page have. Name them with `columns:` where not every row has every column, or the headers change from page to page.
+
+<!-- #endregion big-table -->
 
 The demo has such a table over 100,000 orders: [`examples/tools/archive.php`](examples/tools/archive.php).
 
@@ -424,6 +428,8 @@ if (button('Start the import', style: 'primary')) {
 }
 ```
 
+<!-- #region long-task -->
+
 `progress()` draws a label, a bar and a percentage from the two numbers it gets in this run. It keeps nothing, returns nothing and does not move by itself. `refresh(2)` is what moves it: the script runs again every two seconds and reads the numbers anew. When the task is over the script no longer reaches `refresh()`, and the page stands still.
 
 - `progress('Waiting for a worker')`, without a value, draws a bar that only says that work is going on. A `max:` of 0 or less does the same, and so does `NAN` or `INF`: a task that has not counted its rows yet has not done all of them.
@@ -445,11 +451,15 @@ What such a tool has to think of:
 - **A page that nobody touches pauses after an hour.** For a longer task give `refresh()` a longer `stopAfter:`.
 - **Do not let the page do the work**, one slice with every refresh. A refresh runs only while somebody has the page open and in view, it waits while they type, and two open tabs would do the same slice twice. The work needs a worker that runs without a browser.
 
+<!-- #endregion long-task -->
+
 ### Links that fill in fields
 
 `/refund?customer-email=ava@example.com` opens the tool with that field filled in. For `multiselect()` a link names every ticked option, `/customers?country[]=DE&country[]=FR`, and one option needs no brackets. A link can only fill plain fields. It can never press a button or tick a row of a table. What a link filled in is not saved until the user changes or submits something.
 
 ## Use it in your application
+
+<!-- #region host-folder -->
 
 **A folder of tools.** Put this in a script behind your web server:
 
@@ -509,9 +519,13 @@ Every tool of the folder then starts with `$orders` and `$mailer`. An object is 
 
 By default tools are chosen with `?_tool=refund`. With `base: '/admin/tools'` they get clean addresses such as `/admin/tools/refund` (send those addresses to the script in your web server configuration). The list is at the base as you write it: at `/admin/tools`, or at `/admin/tools/` when the base ends with a slash.
 
+<!-- #endregion host-folder -->
+
 **One script on its own.** A script that the web server runs directly works too. Call `Runio\ScriptUi\configure(auth: ...)` in a file every tool includes, before anything is drawn. See [`examples/direct/hello.php`](examples/direct/hello.php). `configure()` takes `allow:` too. A script on its own is asked about by its file name: `payroll` for `payroll.php`. Then the name has to be one that a tool of a folder could have (lower-case letters, digits, `-` and `_`), or the script stays closed. Both checks are asked when the script calls its first function of the library. Put `title()` at the top: what stands above it runs for everybody. A script that shows several pages, such as an `index.php` with `?page=`, is one script, and it is asked about as `index`.
 
 ### Inside Symfony and Laravel
+
+<!-- #region host-frameworks -->
 
 `serve()` sends the page itself. A framework wants to send it: a controller returns a response, and the framework adds its cookies and headers on the way out. `respond()` takes everything `serve()` takes. It works out the same page and hands it back, with `->status`, `->headers` and `->body`. One route leads every address under `base:` to it. The folder of tools lies next to `src/` or `app/`, outside the web root.
 
@@ -587,6 +601,8 @@ The session needs room. What one tool keeps of its inputs is a few kilobytes as 
 
 **What was tried.** Laravel 12 and 13 and Symfony 7.4 and 8.1, as they are after a fresh install, on PHP's built-in web server. The suite in [`e2e/frameworks`](e2e/frameworks) runs the same tools inside each of them. Not tried with a framework: php-fpm, Apache and nginx, Symfony's prod environment, and a user that comes from a database.
 
+<!-- #endregion host-frameworks -->
+
 ### Languages
 
 The texts the library writes itself ("Yes", "Cancel", "Reset", "No rows.") come in English, Arabic and German. Each page follows the language its title is written in, so a tool with an Arabic title is Arabic throughout and runs right to left. Call `title()` first: what is drawn before it does not know the language yet.
@@ -613,6 +629,8 @@ Pages that are not a tool have no title to follow: the list of tools and pages s
 
 ## What the library does for safety
 
+<!-- #region safety -->
+
 - **No login check, no outside access.** Without `auth`, tools only answer to a browser on the computer they run on. The request must come from a loopback address, with a local host name, and must not look passed on (proxy headers, HTTP/1.0, `Connection: close`). No check of this kind can see through every proxy or tunnel, so anything that can be reached from outside needs `auth`.
 - **A tool can be closed to some users.** `allow:` is asked before anything of a tool runs, on every request, and only a plain `true` opens the tool. Without `allow:` every tool is open to everybody who gets past the login check. Both checks are settings of `serve()`: a tool file that the web server runs by itself knows nothing of them, which is why the folder of tools stays out of the web root.
 - **What a tool keeps belongs to one user.** The inputs, the uploaded files and the messages that the library keeps in a session are dropped when the login check names another user in that session, as after a login without a logout before it. The forms of the user before are not taken any more. The library knows a user by the name the login check gives: a text, a number, or an object that says who it is (`getUserIdentifier()`, `getAuthIdentifier()` or `__toString()`). A login check that returns `true`, an array or another object names nobody, and then the users of one session cannot be told apart.
@@ -630,7 +648,11 @@ Pages that are not a tool have no title to follow: the list of tools and pages s
 
 What stays your job: decide who may open which tool (`allow:`) and who may do what inside one (`user()` tells you who is asking), and never change data outside an `if (button(...))` block, because the script also runs on every plain page view.
 
+<!-- #endregion safety -->
+
 ## Limits of this version
+
+<!-- #region limits -->
 
 - Uploads have no progress bar, and cannot be resumed or stopped once they are on their way. A field holds up to 20 files and a session 200. The kind of a file is judged by the ending of its name only.
 - Nothing limits the bytes that uploads take on the disk, only their number: a session keeps up to 200 files of the size you allow, for a day at most. Somebody who is logged in and means harm can use that. Keep `maxSize:` and PHP's limits as low as your tools need.
@@ -646,6 +668,8 @@ What stays your job: decide who may open which tool (`allow:`) and who may do wh
 - Charts are bar and line charts with one axis and at most 8 series.
 - State lives in the session: PHP's own, or the one you pass to `respond()` with `session:`. Two browser tabs of the same tool share saved inputs. A session remembers the inputs of the 50 tools that were used last.
 - A script that runs on its own (without `serve()`) is told apart by its file and its path. Tools that share both and differ only in the query string (`index.php?page=refund`) work, but they do not remember their inputs separately.
+
+<!-- #endregion limits -->
 
 ## Development and tests
 

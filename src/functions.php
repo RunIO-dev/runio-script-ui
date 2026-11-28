@@ -74,6 +74,28 @@ function metric(string $label, string|int|float $value, string|int|float|null $d
     Runtime::page()->metric($label, $value, $delta, $inverse);
 }
 
+/**
+ * A bar that shows how far a task is: progress('Importing orders', $done, $total).
+ *
+ * It draws what the two numbers say in this run, and nothing moves by itself. For a task
+ * that runs somewhere else, call refresh() on the same page: every run reads the numbers anew.
+ *
+ * @param string         $label what is counted. It names the bar, also for a screen reader,
+ *                              so it must not be empty
+ * @param int|float|null $value how much is done. Leave it out while nobody knows: the bar then
+ *                              only says that work is going on
+ * @param int|float      $max   how much there is to do. A value beyond it counts as all of it,
+ *                              and one below 0 as nothing. While $max is 0 or less, or one of
+ *                              the two is no number that can be counted with (NAN, INF), nobody
+ *                              knows how far the task is, and the bar says that
+ * @param string|null    $text  your own words beside the bar, in place of the percentage:
+ *                              "1,200 of 3,000 orders". '' leaves the place empty
+ */
+function progress(string $label, int|float|null $value = null, int|float $max = 100, ?string $text = null): void
+{
+    Runtime::page()->progress($label, $value, $max, $text);
+}
+
 function success(string $text): void
 {
     Runtime::page()->callout('success', $text);

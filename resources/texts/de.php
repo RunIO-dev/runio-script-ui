@@ -28,6 +28,9 @@ return [
     'refresh.pause' => 'Anhalten',
     'refresh.resume' => 'Fortsetzen',
 
+    // A task that takes long
+    'progress.percent' => "{percent}\u{00A0}%",
+
     // Tables
     'table.empty' => 'Keine Zeilen.',
     'table.select_page' => 'Alle Zeilen dieser Seite auswählen',

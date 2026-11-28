@@ -33,6 +33,9 @@ return [
     'refresh.pause' => 'Pause',
     'refresh.resume' => 'Resume',
 
+    // A task that takes long
+    'progress.percent' => '{percent}%',
+
     // Tables
     'table.empty' => 'No rows.',
     'table.select_page' => 'Select all rows on this page',

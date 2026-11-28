@@ -93,6 +93,9 @@ final class Page
     /** refresh() was called: the page runs again by itself. */
     private bool $refreshes = false;
 
+    /** How many bars progress() has drawn. Each gets a name of its own, for its label to point at. */
+    private int $bars = 0;
+
     /**
      * @var list<array{string, string, string}> the parts that can be out of sight and that the run is inside of
      *      right now, the outermost first. Each as what the page keeps of it: "_open" or "_tab", its key, and
@@ -264,6 +267,51 @@ final class Page
         }
 
         $this->add($html . '</div>');
+    }
+
+    /**
+     * A bar that shows how far a task is. It is the browser's own <progress>:
+     * a screen reader knows it, and it needs no style of its own for its
+     * width, which the page could not give it (see Csp).
+     */
+    public function progress(string $label, int|float|null $value, int|float $max, ?string $text): void
+    {
+        // The label is the name of the bar, for the eye and for a screen reader.
+        if (trim($label) === '') {
+            throw new \InvalidArgumentException(
+                'progress() needs a label that says what is counted, as in progress(\'Importing orders\', $done, $total). '
+                . 'A screen reader names the bar by it.',
+            );
+        }
+
+        $id = 'sui-progress-' . ++$this->bars;
+
+        // How far a task is can only be said with two numbers that fit together.
+        // Without them the bar says that work is going on, and no more.
+        $percent = null;
+        $numbers = '';
+        if ($value !== null && is_finite((float) $value) && is_finite((float) $max) && $max > 0) {
+            // A job may count more than it expected. That is no reason to fail a page.
+            $value = max(0, min($value, $max));
+            // Never "100%" before the end, however close: so the last step is cut, not rounded.
+            $percent = $value >= $max ? 100 : min(99, (int) floor(round($value / $max * 100, 6)));
+            $numbers = ' value="' . Text::e((string) $value) . '" max="' . Text::e((string) $max) . '"';
+        }
+
+        $beside = $text ?? ($percent === null ? '' : $this->t('progress.percent', ['percent' => (string) $percent]));
+
+        $this->add(
+            '<div class="sui-progress">'
+            . '<label for="' . $id . '" dir="auto">' . Text::e($label) . '</label>'
+            . '<div class="sui-progress-row">'
+            // Own words say more than a bare percentage: a screen reader reads them for the value.
+            . '<progress id="' . $id . '"' . $numbers . ($text === null || $text === '' ? '' : ' aria-valuetext="' . Text::e($text) . '"') . '></progress>'
+            // The percentage is what the bar says by itself: beside it, it is for the eye, or it would be
+            // read twice. Own words are read where they stand, because not every screen reader says them
+            // for the value. Heard twice is a smaller loss than never heard.
+            . ($beside === '' ? '' : '<span class="sui-progress-text"' . ($text === null ? ' aria-hidden="true"' : '') . ' dir="auto">' . Text::e($beside) . '</span>')
+            . '</div></div>',
+        );
     }
 
     public function callout(string $kind, string $text): void

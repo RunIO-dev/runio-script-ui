@@ -819,6 +819,49 @@ fieldset.sui-field {
   gap: 8px;
 }
 
+/* -------------------------------------------------------------- progress */
+
+/* The bar is the browser's own. It takes its colour from the page and its width from the place it has. */
+.sui-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 460px;
+}
+
+.sui-col > .sui-progress {
+  max-width: none;
+}
+
+.sui-progress > label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* A few words beside the bar. Where they do not fit, they go under it. The row is
+   as high as a line of them also while there are none, so a button under the
+   bar stays where it is when the words come. */
+.sui-progress-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-height: 20px;
+}
+
+.sui-progress progress {
+  flex: 1 1 160px;
+  min-width: 0;
+  height: 10px;
+  accent-color: var(--accent);
+}
+
+.sui-progress-text {
+  color: var(--ink-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------------------------------------------------------------- tables */
 
 /* A table, the line under it and its pager stay together. */

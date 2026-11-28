@@ -36,6 +36,9 @@ return [
     'refresh.pause' => 'إيقاف مؤقت',
     'refresh.resume' => 'متابعة',
 
+    // A task that takes long
+    'progress.percent' => '{percent}%',
+
     // Tables
     'table.empty' => 'لا توجد صفوف.',
     'table.select_page' => 'تحديد كل صفوف هذه الصفحة',

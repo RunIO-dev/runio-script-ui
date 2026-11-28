@@ -67,11 +67,13 @@ const playLabel = computed(() => {
 });
 
 // For a reader without JavaScript: the steps of the run that the picture plays by itself, as a list.
+// The link names the file of the page. Nothing rewrites a link that is written here, as it does
+// for the links of a markdown page, and the web server knows no page without ".html".
 const escaped = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 const fallback = '<div class="live-noscript"><p>This picture moves with JavaScript. Without it, this is what happens after somebody'
     + ` typed "${DEMO}" and pressed Greet:</p><ol>`
     + run({ name: DEMO, pressed: true }).steps.map((told) => `<li>${escaped(told.says)}</li>`).join('')
-    + '</ol><p><a href="/guide/how-it-works">How it works</a> shows the same steps as a drawing.</p></div>';
+    + '</ol><p><a href="/guide/how-it-works.html">How it works</a> shows the same steps as a drawing.</p></div>';
 
 // A step stays for as long as its sentence takes to read.
 const pace = (sentence) => 1400 + 16 * sentence.length;

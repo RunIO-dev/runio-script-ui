@@ -33,7 +33,7 @@ The version in the menu is the newest one that the changelog names.
 `tools/check.mjs` runs at the end of `npm run build` and fails when:
 
 - a file that was to be read in was not found, or a region is missing in the README;
-- a picture is missing, or a link on a page points to an anchor that is not there;
+- a picture is missing, or a link on a page points to a page or an anchor that is not there;
 - a link to a heading of the README names a heading the README does not have;
 - a diagram or a function is missing on its page;
 - a tutorial names a line of a demo tool that no longer holds what the tutorial says;

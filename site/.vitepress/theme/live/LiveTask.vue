@@ -5,9 +5,9 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import { EVERY, TOTAL, fresh, shows, start, stop, tick } from './task.js';
 
-// For a reader without JavaScript.
+// For a reader without JavaScript. The link names the file of the page: nothing rewrites it.
 const fallback = '<div class="live-noscript"><p>This picture moves with JavaScript. '
-    + '<a href="/tutorials/long-task">A task that takes long</a> shows the same as a drawing.</p></div>';
+    + '<a href="/tutorials/long-task.html">A task that takes long</a> shows the same as a drawing.</p></div>';
 
 // A way between two parts lights up for this long after it was used.
 const GLOW = 700;

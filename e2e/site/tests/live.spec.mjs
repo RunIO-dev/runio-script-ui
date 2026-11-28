@@ -428,9 +428,9 @@ test.describe('the first page in other settings', () => {
         const steps = run({ name: 'Ava', pressed: true }).steps;
         await expect(page.locator('.live-click .live-noscript')).toBeVisible();
         await expect(page.locator('.live-click .live-noscript li')).toHaveText(steps.map((step) => step.says));
-        await expect(page.locator('.live-click .live-noscript a')).toHaveAttribute('href', '/guide/how-it-works');
+        await expect(page.locator('.live-click .live-noscript a')).toHaveAttribute('href', '/guide/how-it-works.html');
         await expect(page.locator('.live-task').getByRole('button', { name: 'Start the export' })).toBeDisabled();
-        await expect(page.locator('.live-task .live-noscript a')).toHaveAttribute('href', '/tutorials/long-task');
+        await expect(page.locator('.live-task .live-noscript a')).toHaveAttribute('href', '/tutorials/long-task.html');
         await context.close();
     });
 });

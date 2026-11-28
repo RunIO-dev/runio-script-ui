@@ -55,6 +55,13 @@ for (const [name, { html, ids }] of pages) {
         if (!existsSync(join(dist, picture))) say(`the picture ${picture} is missing`);
     }
 
+    // A link to a page of the site names a file of the build. VitePress looks after the links of
+    // the markdown pages. A link that a component writes arrives as it was written, and the web
+    // server answers 404 to a page without ".html".
+    for (const [, address] of html.matchAll(/<a[^>]+href="(\/(?!\/)[^"#?]*)/g)) {
+        if (!existsSync(join(dist, fileOf(address)))) say(`links to ${address}, and the build has no such file`);
+    }
+
     // An anchor on this page, on another page of the site, and in the README on GitHub.
     for (const [, address, hash] of html.matchAll(/<a[^>]+href="(\/[^"#]*)?#([^"]+)"/g)) {
         const target = address === undefined ? ids : pages.get(fileOf(address))?.ids;

@@ -336,6 +336,9 @@ final class Kernel
 
         try {
             $result = self::call($this->config->auth, $request);
+            // A user object is asked for its name. That runs code of the application
+            // too, so it is treated like the login check itself.
+            $name = is_object($result) ? self::call(self::nameOf(...), $result) : $result;
         } catch (\Throwable $error) {
             // Never show why to someone who is not logged in.
             error_log('Script UI: the login check failed: ' . $error);
@@ -348,13 +351,31 @@ final class Kernel
         }
 
         $name = match (true) {
-            is_string($result) => $result,
-            is_int($result), is_float($result) => (string) $result,
-            $result instanceof \Stringable => (string) $result,
+            is_string($name) && $name !== '' => $name,
+            is_int($name), is_float($name) => (string) $name,
             default => null,
         };
 
         return ['name' => $name === null ? null : mb_substr(mb_scrub($name, 'UTF-8'), 0, 200, 'UTF-8'), 'who' => $result === true ? null : $result];
+    }
+
+    /**
+     * What a user object goes by. The user of Symfony says who it is with
+     * getUserIdentifier(), and the user of Laravel with getAuthIdentifier(). Both
+     * are asked before __toString(): a model of Laravel turns into all of its
+     * fields as JSON, which is no name and nothing for a log.
+     */
+    private static function nameOf(object $user): string|int|null
+    {
+        foreach (['getUserIdentifier', 'getAuthIdentifier'] as $method) {
+            if (method_exists($user, $method) && is_callable([$user, $method])) {
+                $name = $user->$method();
+
+                return is_string($name) || is_int($name) ? $name : null;
+            }
+        }
+
+        return $user instanceof \Stringable ? (string) $user : null;
     }
 
     /**

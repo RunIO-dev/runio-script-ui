@@ -6,7 +6,8 @@
   "scripts": {
     "generate": "node diagrams/draw.mjs && node tools/reference.mjs",
     "dev": "npm run generate && vitepress dev",
-    "build": "npm run generate && vitepress build && node tools/check.mjs",
+    "test": "node --test --test-reporter=dot .vitepress/theme/live/click.test.js .vitepress/theme/live/task.test.js",
+    "build": "npm run generate && npm test && vitepress build && node tools/check.mjs",
     "preview": "vitepress preview"
   },
   "devDependencies": {

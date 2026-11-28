@@ -1,0 +1,965 @@
+/* The live pictures of the first page: LiveClick.vue and LiveTask.vue. */
+
+.live-figure {
+    margin: 28px 0;
+}
+
+.live-figure figcaption {
+    margin-top: 12px;
+    color: var(--vp-c-text-2);
+    font-size: 14px;
+    line-height: 1.5;
+    text-align: center;
+}
+
+.live-noscript {
+    margin-top: 12px;
+    color: var(--vp-c-text-2);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.vp-doc .live-noscript p,
+.vp-doc .live-noscript ol {
+    margin: 8px 0;
+}
+
+.vp-doc .live-noscript li + li {
+    margin-top: 2px;
+}
+
+.live {
+    /* The colours of a page that Script UI draws, so the small page looks like a real one. */
+    --lv-plane: #f9f9f9;
+    --lv-surface: #ffffff;
+    --lv-ink: #191919;
+    --lv-ink-2: #666666;
+    --lv-hair: #e7e7e7;
+    --lv-control: #8a8a8a;
+    --lv-accent: #1b64be;
+    --lv-accent-ink: #ffffff;
+    --lv-good: #0aac23;
+    --lv-warn: #fbb315;
+    container-type: inline-size;
+    border: 1px solid var(--vp-c-divider);
+    border-radius: 12px;
+    background: var(--vp-c-bg-soft);
+    color: var(--vp-c-text-1);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.dark .live {
+    --lv-plane: #0b0b0b;
+    --lv-surface: #191919;
+    --lv-ink: #efefef;
+    --lv-ink-2: #9c9c9c;
+    --lv-hair: #303030;
+    --lv-control: #7d7d7d;
+    --lv-accent: #6aabf1;
+    --lv-accent-ink: #0b0b0b;
+}
+
+/* ------------------------------------------------------------------ the stage and its parts */
+
+.live-stage {
+    display: grid;
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 0.62fr) minmax(0, 1.5fr);
+    gap: 20px;
+    padding: 20px 20px 22px;
+}
+
+.live-part {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.vp-doc .live-name {
+    margin: 0 0 8px;
+    color: var(--vp-c-text-2);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 18px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    transition: color 0.25s;
+}
+
+.live-name span {
+    margin-left: 6px;
+    color: var(--vp-c-text-2);
+    font-family: var(--vp-font-family-mono);
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.live-part.on .live-name {
+    color: var(--vp-c-brand-1);
+}
+
+.live-part.on .live-window,
+.live-part.on .live-code,
+.live-part.on .live-box,
+.live-gate.on {
+    border-color: var(--vp-c-brand-1);
+    box-shadow: 0 0 0 3px var(--vp-c-brand-soft);
+}
+
+/* ------------------------------------------------------------------ the small browser */
+
+.live-window {
+    overflow: hidden;
+    border: 1px solid var(--vp-c-divider);
+    border-radius: 10px;
+    background: var(--lv-plane);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 6px 18px rgba(0, 0, 0, 0.06);
+    transition: border-color 0.25s, box-shadow 0.25s;
+}
+
+.vp-doc .live-chrome {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: 30px;
+    margin: 0;
+    padding: 0 10px;
+    border-bottom: 1px solid var(--vp-c-divider);
+    background: var(--vp-c-bg-alt);
+    line-height: 1;
+}
+
+.live-chrome i {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--vp-c-text-3);
+    opacity: 0.45;
+}
+
+.live-chrome span {
+    overflow: hidden;
+    margin-left: 8px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--vp-c-bg);
+    color: var(--vp-c-text-2);
+    font-family: var(--vp-font-family-mono);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.live-page {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-height: 214px;
+    padding: 16px 16px 18px;
+    color: var(--lv-ink);
+}
+
+.live-window.fresh .live-page {
+    animation: live-fresh 0.9s ease-out;
+}
+
+.vp-doc .live-title {
+    margin: 0 0 12px;
+    font-size: 22px;
+    font-weight: 650;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+}
+
+.live-label {
+    margin-bottom: 6px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.live-input {
+    width: 100%;
+    min-height: 36px;
+    padding: 6px 10px;
+    border: 1px solid var(--lv-control);
+    border-radius: 6px;
+    background: var(--lv-surface);
+    color: var(--lv-ink);
+    font-family: inherit;
+    font-size: 15px;
+}
+
+.live-btn {
+    min-height: 36px;
+    margin-top: 12px;
+    padding: 6px 14px;
+    border: 1px solid var(--lv-control);
+    border-radius: 6px;
+    background: var(--lv-surface);
+    color: var(--lv-ink);
+    font-size: 14px;
+    font-weight: 600;
+    transition: transform 0.1s, background-color 0.1s, filter 0.1s;
+}
+
+.live-btn.primary {
+    border-color: var(--lv-accent);
+    background: var(--lv-accent);
+    color: var(--lv-accent-ink);
+}
+
+.live-btn:hover:not(:disabled) {
+    filter: brightness(0.96);
+}
+
+.live-btn.pressed,
+.live-btn:active:not(:disabled) {
+    background: var(--lv-hair);
+    transform: translateY(1px) scale(0.97);
+}
+
+.live-btn.primary:active:not(:disabled) {
+    background: var(--lv-accent);
+}
+
+.live-input:focus-visible,
+.live-btn:focus-visible,
+.live-controls button:focus-visible {
+    outline: 2px solid var(--lv-accent);
+    outline-offset: 2px;
+}
+
+.vp-doc .live-callout {
+    position: relative;
+    align-self: stretch;
+    margin: 14px 0 0;
+    padding: 8px 12px 8px 40px;
+    border: 1px solid var(--lv-hair);
+    border-left: 3px solid var(--lv-ink-2);
+    border-radius: 8px;
+    background: var(--lv-surface);
+    font-size: 14px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    animation: live-pop 0.3s ease-out;
+}
+
+.live-callout::before {
+    content: "";
+    position: absolute;
+    top: 9px;
+    left: 11px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--lv-ink-2);
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+}
+
+.live-callout.good {
+    border-left-color: var(--lv-good);
+}
+
+.live-callout.good::before {
+    content: "\2713";
+    background: var(--lv-good);
+}
+
+.live-callout.warn {
+    border-left-color: var(--lv-warn);
+}
+
+.live-callout.warn::before {
+    content: "!";
+    background: var(--lv-warn);
+    color: #191919;
+}
+
+/* ------------------------------------------------------------------ the way between */
+
+.live-wire {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 12px;
+    min-width: 0;
+    padding-top: 26px;
+}
+
+.live-lane {
+    min-width: 0;
+    padding: 8px 10px 10px;
+    border: 1px dashed var(--vp-c-border);
+    border-radius: 10px;
+    color: var(--vp-c-text-2);
+    transition: border-color 0.25s, color 0.25s, background-color 0.25s;
+}
+
+.live-lane.done {
+    color: var(--vp-c-text-1);
+}
+
+.live-lane.on {
+    border-style: solid;
+    border-color: var(--vp-c-brand-1);
+    background: var(--vp-c-bg);
+    color: var(--vp-c-brand-1);
+}
+
+.vp-doc .live-lane-name {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 18px;
+}
+
+.vp-doc .live-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    min-height: 22px;
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.vp-doc .live-chips li {
+    overflow: hidden;
+    max-width: 100%;
+    margin: 0;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--vp-c-default-soft);
+    color: var(--vp-c-text-1);
+    font-size: 12px;
+    line-height: 20px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    animation: live-pop 0.25s ease-out;
+}
+
+.live-chips b {
+    font-family: var(--vp-font-family-mono);
+    font-weight: 500;
+}
+
+.live-arrow {
+    position: relative;
+    display: block;
+    height: 10px;
+    margin: 8px 0 0;
+}
+
+.live-lane.back .live-arrow {
+    margin: 0 0 8px;
+    transform: scaleX(-1);
+}
+
+.live-arrow::before {
+    content: "";
+    position: absolute;
+    top: 4px;
+    right: 7px;
+    left: 0;
+    height: 2px;
+    border-radius: 1px;
+    background: currentColor;
+}
+
+.live-arrow::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-left: 8px solid currentColor;
+}
+
+.live-arrow i {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--vp-c-brand-1);
+    opacity: 0;
+}
+
+.live-lane.on .live-arrow i,
+.live-way.on .live-arrow i {
+    animation: live-go 1.1s ease-in-out infinite;
+}
+
+.live-gate {
+    padding: 8px 12px 10px;
+    border: 1px solid var(--vp-c-divider);
+    border-radius: 10px;
+    background: var(--vp-c-bg);
+    transition: border-color 0.25s, box-shadow 0.25s;
+}
+
+.vp-doc .live-gate-name {
+    margin: 0 0 4px;
+    color: var(--vp-c-brand-1);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 20px;
+}
+
+.vp-doc .live-gate ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.vp-doc .live-gate li {
+    position: relative;
+    margin: 0;
+    padding-left: 20px;
+    color: var(--vp-c-text-2);
+    font-size: 12.5px;
+    line-height: 20px;
+}
+
+.live-gate li::before {
+    content: "";
+    position: absolute;
+    top: 6px;
+    left: 2px;
+    width: 8px;
+    height: 8px;
+    border: 1.5px solid var(--vp-c-text-3);
+    border-radius: 50%;
+    transition: opacity 0.2s;
+}
+
+.live-gate li::after {
+    content: "\2713";
+    position: absolute;
+    top: 0;
+    left: 0;
+    color: var(--vp-c-green-1);
+    font-size: 13px;
+    font-weight: 700;
+    opacity: 0;
+    transform: scale(0.4);
+    transition: opacity 0.2s, transform 0.2s;
+}
+
+.live-gate.done li {
+    color: var(--vp-c-text-1);
+}
+
+.live-gate.done li::before {
+    opacity: 0;
+}
+
+.live-gate.done li::after {
+    opacity: 1;
+    transform: none;
+}
+
+/* One question after the other gets its tick. */
+.live-gate.done li:nth-child(2)::before,
+.live-gate.done li:nth-child(2)::after {
+    transition-delay: 0.3s;
+}
+
+.live-gate.done li:nth-child(3)::before,
+.live-gate.done li:nth-child(3)::after {
+    transition-delay: 0.6s;
+}
+
+/* ------------------------------------------------------------------ the script */
+
+.live-code {
+    overflow-x: auto;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: var(--vp-code-block-bg);
+    transition: border-color 0.25s, box-shadow 0.25s;
+}
+
+.live-lines {
+    display: grid;
+    width: max-content;
+    min-width: 100%;
+    padding: 12px 0;
+    font-family: var(--vp-font-family-mono);
+    font-size: 13px;
+    line-height: 24px;
+}
+
+.live-line {
+    display: grid;
+    grid-template-columns: 38px auto 1fr;
+    align-items: center;
+    padding-right: 14px;
+    transition: background-color 0.25s, box-shadow 0.25s;
+}
+
+.live-line.now {
+    background: var(--vp-code-line-highlight-color);
+    box-shadow: inset 3px 0 0 var(--vp-c-brand-1);
+}
+
+.live-no {
+    padding-right: 12px;
+    color: var(--vp-code-line-number-color);
+    font-size: 12px;
+    text-align: right;
+    user-select: none;
+}
+
+.live-src {
+    color: var(--vp-code-block-color);
+    white-space: pre;
+    transition: opacity 0.25s;
+}
+
+.live-src span {
+    color: var(--shiki-light, inherit);
+}
+
+.dark .live-src span {
+    color: var(--shiki-dark, inherit);
+}
+
+.live-line.skipped .live-src {
+    opacity: 0.38;
+}
+
+.live-returns {
+    justify-self: start;
+    margin-left: 14px;
+    padding: 0 9px;
+    border-radius: 999px;
+    background: var(--vp-c-brand-soft);
+    color: var(--vp-c-brand-1);
+    font-family: var(--vp-font-family-base);
+    font-size: 12px;
+    line-height: 20px;
+    white-space: nowrap;
+    animation: live-pop 0.25s ease-out;
+}
+
+.live-returns b {
+    font-family: var(--vp-font-family-mono);
+    font-weight: 600;
+}
+
+.live-returns.off {
+    background: var(--vp-c-default-soft);
+    color: var(--vp-c-text-2);
+}
+
+/* ------------------------------------------------------------------ what happens, and the buttons */
+
+.live-foot {
+    display: flex;
+    align-items: center;
+    gap: 12px 20px;
+    padding: 12px 20px 14px;
+    border-top: 1px solid var(--vp-c-divider);
+    border-radius: 0 0 11px 11px;
+    background: var(--vp-c-bg);
+}
+
+.live-says {
+    flex: 1;
+    min-width: 0;
+}
+
+.vp-doc .live-step {
+    min-height: 44px;
+    margin: 0;
+    font-size: 15px;
+    line-height: 22px;
+}
+
+.live-count {
+    margin-right: 6px;
+    color: var(--vp-c-brand-1);
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.vp-doc .live-hint {
+    min-height: 20px;
+    margin: 2px 0 0;
+    color: var(--vp-c-text-2);
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.live-controls {
+    display: flex;
+    flex-shrink: 0;
+    gap: 8px;
+}
+
+.live-controls button {
+    height: 34px;
+    padding: 0 14px;
+    border: 1px solid var(--vp-c-divider);
+    border-radius: 17px;
+    background: var(--vp-c-bg-soft);
+    color: var(--vp-c-text-1);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: border-color 0.2s, background-color 0.2s, opacity 0.2s;
+}
+
+.live-controls button:hover:not(:disabled) {
+    border-color: var(--vp-c-brand-1);
+}
+
+.live-controls button:disabled {
+    cursor: default;
+    opacity: 0.45;
+}
+
+.live-controls button.main {
+    min-width: 96px;
+    border-color: transparent;
+    background: var(--vp-button-brand-bg);
+    color: var(--vp-button-brand-text);
+}
+
+.live-controls button.main:hover {
+    background: var(--vp-button-brand-hover-bg);
+}
+
+/* ------------------------------------------------------------------ a task that takes long */
+
+.live-task .live-stage {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.7fr) minmax(0, 0.9fr) minmax(0, 0.7fr) minmax(0, 0.9fr);
+    gap: 12px;
+}
+
+.live-task .live-page {
+    min-height: 186px;
+}
+
+.live-ways {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 22px;
+    min-width: 0;
+    padding-top: 26px;
+}
+
+.live-way {
+    display: block;
+    min-width: 0;
+    color: var(--vp-c-text-2);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 16px;
+    text-align: center;
+    transition: color 0.2s;
+}
+
+.live-way.on {
+    color: var(--vp-c-brand-1);
+}
+
+.live-way .live-arrow {
+    margin: 5px 0 0;
+}
+
+.live-way.left .live-arrow {
+    transform: scaleX(-1);
+}
+
+/* How long until the page looks again. */
+.live-until {
+    display: block;
+    overflow: hidden;
+    height: 3px;
+    margin-top: 6px;
+    border-radius: 2px;
+    background: var(--vp-c-default-soft);
+}
+
+.live-until i {
+    display: block;
+    height: 100%;
+    border-radius: 2px;
+    background: var(--vp-c-brand-1);
+    transition: width 0.1s linear;
+}
+
+.live-box {
+    flex: 1;
+    padding: 12px 14px 14px;
+    border: 1px solid var(--vp-c-divider);
+    border-radius: 10px;
+    background: var(--vp-c-bg);
+    transition: border-color 0.25s, box-shadow 0.25s;
+}
+
+.vp-doc .live-row {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 14px;
+    margin: 0;
+    font-family: var(--vp-font-family-mono);
+    font-size: 13px;
+    line-height: 24px;
+}
+
+.vp-doc .live-row dt {
+    margin: 0;
+    color: var(--vp-c-text-2);
+    font-weight: 400;
+}
+
+.vp-doc .live-row dd {
+    margin: 0;
+    font-weight: 600;
+    text-align: right;
+}
+
+.live-row dd.changed {
+    animation: live-mark 0.6s ease-out;
+}
+
+.vp-doc .live-does {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 20px;
+}
+
+.vp-doc .live-does + .live-does {
+    margin-top: 8px;
+    color: var(--vp-c-text-2);
+    font-size: 12.5px;
+}
+
+.live-gear {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    margin-right: 7px;
+    border: 2px solid var(--vp-c-text-3);
+    border-radius: 50%;
+    vertical-align: -1px;
+}
+
+.live-gear.turns {
+    border-color: var(--vp-c-brand-soft);
+    border-top-color: var(--vp-c-brand-1);
+    animation: live-turn 0.8s linear infinite;
+}
+
+.live-bar {
+    align-self: stretch;
+    overflow: hidden;
+    height: 8px;
+    margin: 4px 0 6px;
+    border-radius: 4px;
+    background: var(--lv-hair);
+}
+
+.live-bar i {
+    display: block;
+    height: 100%;
+    border-radius: 4px;
+    background: var(--lv-accent);
+    transition: width 0.35s ease-out;
+}
+
+.live-bar.unknown i {
+    width: 35%;
+    animation: live-slide 1.3s ease-in-out infinite;
+}
+
+.vp-doc .live-text {
+    margin: 0;
+    color: var(--lv-ink-2);
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.vp-doc .live-text.strong {
+    color: var(--lv-ink);
+}
+
+/* ------------------------------------------------------------------ motion */
+
+@keyframes live-pop {
+    from {
+        opacity: 0;
+        transform: translateY(4px) scale(0.96);
+    }
+}
+
+@keyframes live-go {
+    0% {
+        left: 0;
+        opacity: 0;
+    }
+
+    15%,
+    80% {
+        opacity: 1;
+    }
+
+    100% {
+        left: calc(100% - 16px);
+        opacity: 0;
+    }
+}
+
+@keyframes live-fresh {
+    from {
+        box-shadow: inset 0 0 0 999px var(--vp-c-brand-soft);
+    }
+
+    to {
+        box-shadow: inset 0 0 0 999px transparent;
+    }
+}
+
+@keyframes live-mark {
+    from {
+        color: var(--vp-c-brand-1);
+        transform: scale(1.12);
+    }
+}
+
+@keyframes live-turn {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes live-slide {
+    0% {
+        transform: translateX(-100%);
+    }
+
+    100% {
+        transform: translateX(290%);
+    }
+}
+
+/* ------------------------------------------------------------------ narrow: one part under the other */
+
+@container (max-width: 880px) {
+    .live-stage,
+    .live-task .live-stage {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 14px;
+        padding: 16px;
+    }
+
+    .live-click .live-part:first-child,
+    .live-wire,
+    .live-task .live-part,
+    .live-ways {
+        width: 100%;
+        max-width: 460px;
+        margin-inline: auto;
+    }
+
+    .live-wire {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 10px;
+        padding-top: 0;
+    }
+
+    .live-gate {
+        grid-column: 1 / -1;
+        order: 3;
+    }
+
+    .live-lane {
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* The arrows point down and up now: they are turned, and need room for it. */
+    .live-lane .live-arrow,
+    .live-lane.back .live-arrow {
+        width: 34px;
+        margin: 18px 0 14px 4px;
+        order: 9;
+        transform: rotate(90deg);
+    }
+
+    .live-lane.back .live-arrow {
+        transform: rotate(-90deg);
+    }
+
+    .live-ways {
+        flex-direction: row;
+        gap: 12px;
+        padding-top: 0;
+    }
+
+    .live-way {
+        flex: 1;
+    }
+
+    .live-way .live-arrow,
+    .live-way.left .live-arrow {
+        width: 30px;
+        margin: 16px auto 12px;
+        transform: rotate(90deg);
+    }
+
+    .live-way.left .live-arrow {
+        transform: rotate(-90deg);
+    }
+
+    .live-foot {
+        position: sticky;
+        bottom: 0;
+        flex-direction: column;
+        align-items: stretch;
+        padding: 10px 16px 12px;
+    }
+
+    .live-controls {
+        justify-content: flex-end;
+    }
+}
+
+@container (max-width: 520px) {
+    .live-lines {
+        font-size: 12px;
+    }
+
+    .live-line {
+        grid-template-columns: 32px minmax(0, 1fr);
+    }
+
+    .live-returns {
+        grid-column: 2;
+        margin: 0 0 4px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .live *,
+    .live *::before,
+    .live *::after {
+        animation: none !important;
+        transition: none !important;
+    }
+}

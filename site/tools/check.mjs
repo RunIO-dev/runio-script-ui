@@ -107,6 +107,18 @@ const shown = (pages.get('diagrams.html')?.html.match(/class="sui-diagram"/g) ??
 if (drawn === 0 || drawn !== shown) {
     problems.push(`diagrams/draw.mjs draws ${drawn} diagrams, and the page of all diagrams shows ${shown}`);
 }
+// The first page carries the two live pictures, drawn on the server already: the first with
+// every line of its script, the second with the row that the tool and the worker share.
+const home = pages.get('index.html')?.html ?? '';
+const scriptLines = read(join(site, 'samples/hello.php')).trimEnd().split('\n').length;
+const liveLines = (home.match(/class="live-line(?: [^"]*)?"/g) ?? []).length;
+if (!home.includes('live-click') || liveLines !== scriptLines) {
+    problems.push(`the first page must show the live picture of one click with the ${scriptLines} lines of samples/hello.php, and it shows ${liveLines}`);
+}
+if (!home.includes('live-task') || !home.includes('class="live-row"')) {
+    problems.push('the first page must show the live picture of a task that takes long, and it does not');
+}
+
 const reference = pages.get('reference/functions.html')?.ids ?? new Set();
 for (const [, name] of read(join(site, '../src/functions.php')).matchAll(/^function (\w+)\(/gm)) {
     if (!reference.has(name)) problems.push(`the page of all functions does not have ${name}()`);
@@ -134,4 +146,4 @@ if (problems.length > 0) {
     process.stderr.write(`The built site has ${problems.length} problem(s):\n` + problems.map((problem) => '  - ' + problem).join('\n') + '\n');
     process.exit(1);
 }
-process.stdout.write(`The built site is sound: ${pages.size} pages, ${shown} diagrams, ${readme.size} headings of the README to link to.\n`);
+process.stdout.write(`The built site is sound: ${pages.size} pages, ${shown} diagrams, 2 live pictures, ${readme.size} headings of the README to link to.\n`);

@@ -35,22 +35,11 @@ features:
 
 ## This script is this page
 
-<div class="side-by-side">
-<div>
+This is a whole tool: the page on the left, and all of its code on the right. Use the page, and watch what happens between the two.
 
-::: code-group
-<<< @/samples/hello.php [tools/hello.php]
-:::
+<LiveClick />
 
-</div>
-<div>
-
-![The page that the script makes: a field "Your name" that holds "Ava", a button "Greet", and under it the message "Hello, Ava."](/shots/hello.png){.shot}
-
-</div>
-</div>
-
-A click sends the form, and **the script runs again from the top**. This time `text()` returns what was typed, `button()` returns `true`, and `success()` puts the message on the page. That is the whole model. [How it works](/guide/how-it-works) shows it step by step.
+A click sends the form, and **the script runs again from the top**. This time `text()` returns what was typed, `button()` returns `true`, and `success()` puts the message on the page. That is the whole model. [How it works](/guide/how-it-works) says what follows from it.
 
 ## Install it
 
@@ -60,6 +49,14 @@ php vendor/bin/script-ui serve tools
 ```
 
 It needs PHP 8.2 or newer and no other package. The second line starts the server that comes with PHP, for your own computer. [Inside your application](/tutorials/your-application) shows how colleagues get in.
+
+## A task that takes long
+
+Some work does not fit into one run of a script: an export, an import of fifty thousand rows. A worker of yours does it, and the tool only shows how far it is. Press **Start the export**, and watch who writes and who reads.
+
+<LiveTask />
+
+The tool and the worker never talk to each other. They share one row in your storage. The fifth tutorial, [A task that takes long](/tutorials/long-task), builds this tool.
 
 ## What people build with it
 

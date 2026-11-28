@@ -1,6 +1,6 @@
 import { delimiter } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
-import { DIRECT_PORT, DIRECT_URL, PHP_SETTINGS_DIR, TOOLS_PORT, TOOLS_URL } from './tests/support.mjs';
+import { ACCESS_PORT, ACCESS_URL, DIRECT_PORT, DIRECT_URL, OWN_PORT, OWN_URL, PHP_SETTINGS_DIR, TOOLS_PORT, TOOLS_URL } from './tests/support.mjs';
 
 // PHP reads the settings in php/ after its own. The empty entry in front stands for the
 // folder it scans anyway, so nothing that is set up on the machine gets lost.
@@ -42,6 +42,22 @@ export default defineConfig({
             // temp folder: the folder that php.ini names is not writable on every machine.
             command: `php -d session.save_path= -S 127.0.0.1:${DIRECT_PORT} -t ../examples/direct`,
             url: `${DIRECT_URL}/hello.php`,
+            reuseExistingServer: false,
+            timeout: 30_000,
+        },
+        {
+            // A folder with a login check and a rule for who may open which tool. Without a
+            // login it answers "not allowed", which is all the test runner waits for.
+            command: `php ../bin/script-ui serve access --port=${ACCESS_PORT}`,
+            url: ACCESS_URL,
+            reuseExistingServer: false,
+            timeout: 30_000,
+        },
+        {
+            // Scripts that the web server runs by themselves, with the same two checks in a
+            // file that each of them includes. Without a login they answer "not allowed" too.
+            command: `php -d session.save_path= -S 127.0.0.1:${OWN_PORT} -t direct`,
+            url: `${OWN_URL}/open.php`,
             reuseExistingServer: false,
             timeout: 30_000,
         },

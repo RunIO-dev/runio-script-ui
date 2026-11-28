@@ -4,6 +4,10 @@ import { fresh, shows, start, stop, tick } from '../../../site/.vitepress/theme/
 import { markDocument, noHorizontalOverflow, PHONE, sameDocument, settled, watch } from '../../tests/support.mjs';
 import { SAMPLES_URL } from '../support.mjs';
 
+// From here on the clock of the page stands still, and time passes only when the test says so.
+// An installed clock alone keeps running beside the test: a slow machine then sees a later moment.
+const stopClock = (page) => page.clock.pauseAt(Date.now() + 60_000);
+
 // Every page is watched: a script error or a message on the error console fails the test.
 test.beforeEach(({ page }) => {
     watch(page);
@@ -234,6 +238,8 @@ test.describe('the picture of one click on the first page', () => {
     test('the steps are read out only when the visitor asked for them', async ({ page }) => {
         await page.clock.install();
         await page.goto('/');
+        await expect(scene(page).getByRole('button', { name: 'Play', exact: true })).toBeVisible();
+        await stopClock(page);
         await scene(page).locator('.live-window').scrollIntoViewIfNeeded();
         await expect(scene(page).getByRole('button', { name: 'Pause' })).toBeVisible();
         await page.clock.runFor(4_000);
@@ -257,6 +263,7 @@ test.describe('the picture of one click on the first page', () => {
         await page.emulateMedia({ reducedMotion: 'reduce' });
         await page.goto('/');
         await expect(scene(page).getByRole('button', { name: 'Play', exact: true })).toBeVisible();
+        await stopClock(page);
         await scene(page).locator('.live-window').scrollIntoViewIfNeeded();
         await page.clock.runFor(10_000);
 
@@ -268,6 +275,8 @@ test.describe('the picture of one click on the first page', () => {
     test('it plays by itself once, when it comes into view', async ({ page }) => {
         await page.clock.install();
         await page.goto('/');
+        await expect(scene(page).getByRole('button', { name: 'Play', exact: true })).toBeVisible();
+        await stopClock(page);
         await scene(page).locator('.live-window').scrollIntoViewIfNeeded();
 
         // The picture types the name itself and presses the button.
@@ -286,6 +295,7 @@ test.describe('the picture of one click on the first page', () => {
         await page.clock.install();
         await page.goto('/');
         await expect(scene(page).getByRole('button', { name: 'Play', exact: true })).toBeVisible();
+        await stopClock(page);
 
         // The field is filled before the picture is in view.
         await scene(page).getByLabel('Your name').evaluate((input) => {
@@ -329,6 +339,7 @@ test.describe('the picture of a long task on the first page', () => {
         await page.emulateMedia({ reducedMotion: 'reduce' });
         await page.goto('/');
         await expect(scene(page).getByRole('button', { name: 'Start the export' })).toBeEnabled();
+        await stopClock(page);
     });
 
     test('Start hands the work over, and the page is behind the row', async ({ page }) => {

@@ -243,7 +243,8 @@ final class DownloadTest extends ToolTestCase
         self::assertSame(500, $response->status);
         self::assertNull($response->header('Content-Disposition'));
         self::assertNull($response->header('X-Script-Ui-Download'));
-        self::assertStringNotContainsString('1001', $response->body);
+        // The first row of the file. Its number alone could turn up by chance in a token of the page.
+        self::assertStringNotContainsString('1001,Ava', $response->body);
         self::assertStringContainsString('could not be written to the log', $response->body);
     }
 
@@ -263,7 +264,7 @@ final class DownloadTest extends ToolTestCase
 
         self::assertSame(500, $response->status);
         self::assertNull($response->header('Content-Disposition'));
-        self::assertStringNotContainsString('1001', $response->body);
+        self::assertStringNotContainsString('1001,Ava', $response->body);
     }
 
     public function testALogThatAnswersNothingIsFine(): void

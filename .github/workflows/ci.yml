@@ -177,3 +177,29 @@ jobs:
             e2e/frameworks/playwright-report
             e2e/frameworks/test-results
           retention-days: 7
+
+  website:
+    name: Website (build and check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # npm runs code of other packages in this checkout.
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      # The build needs no PHP: the page of all functions is read from the doc comments as text.
+      # After VitePress, site/tools/check.mjs looks for what a build does not notice: a part of
+      # the README that the website reads in and that is gone, a link to a heading that was
+      # renamed, a tutorial that names a line of a demo tool that has moved.
+      - name: Build the website
+        working-directory: site
+        run: |
+          npm ci
+          npm run build

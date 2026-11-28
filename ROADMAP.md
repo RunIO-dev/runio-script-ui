@@ -40,7 +40,6 @@ Not approved yet. Each of these needs a decision that only the maintainer can ma
 
 - **R16: The website published by CI** with every release, with fresh pictures. CI builds and checks it already, and publishing is done by hand. It needs a key for the server in the settings of the repository. Later a public demo with data of its own for every visitor.
 - **R17: Packages for Laravel and Symfony.** A route, the session and the rights wired up around `respond()`, in place of the lines of the manual. Each would be a package and a repository of its own.
-- **R19: A short film of one click** on the first page of the website.
 
 ## Not planned
 

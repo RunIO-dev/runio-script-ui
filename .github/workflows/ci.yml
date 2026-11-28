@@ -104,3 +104,65 @@ jobs:
             e2e/playwright-report
             e2e/test-results
           retention-days: 7
+
+  frameworks:
+    name: Frameworks (Laravel ${{ matrix.laravel }}, Symfony ${{ matrix.symfony }}, PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: '1'
+      # The two applications are created outside the checkout: each holds a link back to it.
+      FRAMEWORK_APPS: ${{ runner.temp }}/framework-apps
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The oldest PHP the package supports, with the newest versions that run on it.
+          - php: '8.2'
+            laravel: '^12.0'
+            symfony: '7.4.*'
+          - php: '8.5'
+            laravel: '^13.0'
+            symfony: '8.1.*'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install Playwright
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      # A fresh Laravel and a fresh Symfony, with the library installed from this checkout.
+      - name: Set up Laravel and Symfony
+        working-directory: e2e
+        env:
+          LARAVEL: ${{ matrix.laravel }}
+          SYMFONY: ${{ matrix.symfony }}
+        run: node frameworks/setup.mjs
+
+      - name: Run the tools inside both
+        working-directory: e2e
+        run: npx playwright test -c frameworks
+
+      - name: Upload the report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frameworks-report-php-${{ matrix.php }}
+          path: |
+            e2e/frameworks/playwright-report
+            e2e/frameworks/test-results
+          retention-days: 7

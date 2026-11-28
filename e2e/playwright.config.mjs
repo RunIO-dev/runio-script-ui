@@ -1,6 +1,8 @@
 import { delimiter } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
-import { ACCESS_PORT, ACCESS_URL, DIRECT_PORT, DIRECT_URL, OWN_PORT, OWN_URL, PHP_SETTINGS_DIR, TOOLS_PORT, TOOLS_URL } from './tests/support.mjs';
+import {
+    ACCESS_PORT, ACCESS_URL, DIRECT_PORT, DIRECT_URL, OWN_PORT, OWN_URL, PHP_SETTINGS_DIR, TOOLS_PORT, TOOLS_URL, WEB_ROOT_PORT, WEB_ROOT_URL,
+} from './tests/support.mjs';
 
 // PHP reads the settings in php/ after its own. The empty entry in front stands for the
 // folder it scans anyway, so nothing that is set up on the machine gets lost.
@@ -58,6 +60,13 @@ export default defineConfig({
             // file that each of them includes. Without a login they answer "not allowed" too.
             command: `php -d session.save_path= -S 127.0.0.1:${OWN_PORT} -t direct`,
             url: `${OWN_URL}/open.php`,
+            reuseExistingServer: false,
+            timeout: 30_000,
+        },
+        {
+            // A folder of tools that lies in the web root, next to the script that serves it.
+            command: `php -d session.save_path= -S 127.0.0.1:${WEB_ROOT_PORT} -t webroot`,
+            url: WEB_ROOT_URL,
             reuseExistingServer: false,
             timeout: 30_000,
         },

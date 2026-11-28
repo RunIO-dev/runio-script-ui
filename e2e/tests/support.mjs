@@ -4,10 +4,12 @@ export const TOOLS_PORT = Number(process.env.E2E_TOOLS_PORT ?? 8775);
 export const DIRECT_PORT = Number(process.env.E2E_DIRECT_PORT ?? 8776);
 export const ACCESS_PORT = Number(process.env.E2E_ACCESS_PORT ?? 8777);
 export const OWN_PORT = Number(process.env.E2E_OWN_PORT ?? 8778);
+export const WEB_ROOT_PORT = Number(process.env.E2E_WEB_ROOT_PORT ?? 8779);
 export const TOOLS_URL = `http://127.0.0.1:${TOOLS_PORT}`;
 export const DIRECT_URL = `http://127.0.0.1:${DIRECT_PORT}`;
 export const ACCESS_URL = `http://127.0.0.1:${ACCESS_PORT}`;
 export const OWN_URL = `http://127.0.0.1:${OWN_PORT}`;
+export const WEB_ROOT_URL = `http://127.0.0.1:${WEB_ROOT_PORT}`;
 
 export const EXAMPLES_DIR = fileURLToPath(new URL('../../examples/', import.meta.url));
 /** The copy of the example tools that the tests run against. See prepare-demo.mjs. */

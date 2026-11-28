@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ACCESS_URL, OWN_URL } from './support.mjs';
+import { ACCESS_URL, OWN_URL, WEB_ROOT_URL } from './support.mjs';
 
 // The folder of these tests is e2e/access, served the way the README shows, with settings in
 // _config.php: a login check that reads a cookie, and a rule for who may open which tool.
@@ -139,6 +139,40 @@ test.describe('a script on its own', () => {
 
         expect(response.status()).toBe(403);
         await expect(said(page)).toHaveText('You do not have access to this page.');
+    });
+});
+
+// A web server runs a file of its web root by its name, and serve() has no say then. The
+// library cannot stop that. It tells whoever sets the tools up, on the list, where error
+// details are shown: here that is a browser on the same computer, with no login check.
+test.describe('a folder of tools in the web root', () => {
+    const note = (page) => page.locator('.sui-warning');
+
+    test('is pointed out on the list', async ({ page }) => {
+        await page.goto(WEB_ROOT_URL);
+
+        await expect(cards(page)).toHaveText(['Say hello']);
+        await expect(note(page)).toContainText('lies in the web root');
+        await expect(note(page).locator('code')).toHaveText(/[\\/]e2e[\\/]webroot[\\/]tools$/);
+
+        // On the page of a tool there is nothing to say again.
+        await page.getByRole('link', { name: 'Say hello' }).click();
+        await expect(heading(page)).toHaveText('Say hello');
+        await expect(note(page)).toHaveCount(0);
+    });
+
+    test('is not claimed of the server that comes with the library', async ({ page, context }) => {
+        // "script-ui serve" answers every address through one script, so no file is run by
+        // its name there, wherever the folder lies. The folder of these tools does lie in
+        // the folder that the server was started in.
+        await as(context, 'ava');
+        await page.goto(ACCESS_URL);
+        await expect(cards(page)).toHaveText(['Refund orders', 'Sales report']);
+        await expect(note(page)).toHaveCount(0);
+
+        await page.goto('/');
+        await expect(page.locator('a.sui-card').first()).toBeVisible();
+        await expect(note(page)).toHaveCount(0);
     });
 });
 

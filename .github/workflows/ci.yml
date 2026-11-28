@@ -117,8 +117,6 @@ jobs:
     timeout-minutes: 20
     env:
       CI: '1'
-      # The two applications are created outside the checkout: each holds a link back to it.
-      FRAMEWORK_APPS: ${{ runner.temp }}/framework-apps
     strategy:
       fail-fast: false
       matrix:
@@ -155,6 +153,7 @@ jobs:
           npx playwright install --with-deps chromium
 
       # A fresh Laravel and a fresh Symfony, with the library installed from this checkout.
+      # They are created in the temp folder of the system, outside the checkout: each holds a link back to it.
       - name: Set up Laravel and Symfony
         working-directory: e2e
         env:

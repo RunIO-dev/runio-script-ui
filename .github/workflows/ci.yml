@@ -42,7 +42,9 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: mbstring
+          # pdo_sqlite: some tests read a table from a real database. intl: one
+          # test of the search needs it. Neither is needed to use the library.
+          extensions: mbstring, intl, pdo_sqlite
           coverage: none
 
       - name: Install dependencies
@@ -59,8 +61,9 @@ jobs:
       - name: Validate composer.json
         run: composer validate --strict
 
+      # A test that is left out here would not run anywhere.
       - name: PHPUnit
-        run: vendor/bin/phpunit
+        run: vendor/bin/phpunit --fail-on-skipped
 
   browser:
     name: Browser (Playwright, example tools)

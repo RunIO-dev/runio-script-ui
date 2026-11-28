@@ -1,7 +1,8 @@
 import { delimiter } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 import {
-    ACCESS_PORT, ACCESS_URL, DIRECT_PORT, DIRECT_URL, OWN_PORT, OWN_URL, PHP_SETTINGS_DIR, TOOLS_PORT, TOOLS_URL, WEB_ROOT_PORT, WEB_ROOT_URL,
+    ACCESS_PORT, ACCESS_URL, DIRECT_PORT, DIRECT_URL, OWN_PORT, OWN_URL, PHP_SETTINGS_DIR, RESPOND_PORT, RESPOND_URL, TOOLS_PORT, TOOLS_URL,
+    WEB_ROOT_PORT, WEB_ROOT_URL,
 } from './tests/support.mjs';
 
 // PHP reads the settings in php/ after its own. The empty entry in front stands for the
@@ -67,6 +68,15 @@ export default defineConfig({
             // A folder of tools that lies in the web root, next to the script that serves it.
             command: `php -d session.save_path= -S 127.0.0.1:${WEB_ROOT_PORT} -t webroot`,
             url: WEB_ROOT_URL,
+            reuseExistingServer: false,
+            timeout: 30_000,
+        },
+        {
+            // A stand-in for an application built on a framework: it calls respond(), sends
+            // the page itself and keeps a session of its own. Every address goes to one script.
+            // PHP holds output back here and prints no errors, as most servers are set up to do.
+            command: `php -d output_buffering=4096 -d display_errors=0 -S 127.0.0.1:${RESPOND_PORT} -t respond/public respond/public/index.php`,
+            url: `${RESPOND_URL}/tools`,
             reuseExistingServer: false,
             timeout: 30_000,
         },

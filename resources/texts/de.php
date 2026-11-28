@@ -14,6 +14,7 @@ return [
     'page.update' => 'Aktualisieren',
     'page.offline' => 'Der Server hat nicht geantwortet. Prüfen Sie, ob er läuft, und versuchen Sie es erneut. Falls Sie abgemeldet wurden, laden Sie die Seite neu.',
     'index.empty' => 'Noch keine Werkzeuge. Legen Sie eine PHP-Datei in {folder} ab, dann erscheint sie hier.',
+    'index.none_allowed' => 'Hier gibt es kein Werkzeug, das Sie öffnen dürfen.',
 
     // The question a button asks first
     'confirm.title' => 'Bitte bestätigen',
@@ -95,6 +96,9 @@ return [
     'error.login_failed_text' => 'Bis sie wieder funktioniert, wird niemand eingelassen. Die Details stehen im Fehlerprotokoll des Servers.',
     'error.denied' => 'Nicht erlaubt',
     'error.denied_text' => 'Sie haben keinen Zugriff auf diese Seite.',
+    'error.tool_denied_text' => 'Sie dürfen dieses Werkzeug nicht öffnen.',
+    'error.access_failed' => 'Die Zugriffsprüfung ist fehlgeschlagen',
+    'error.access_failed_text' => 'Bis sie wieder funktioniert, wird niemand eingelassen. Die Details stehen im Fehlerprotokoll des Servers.',
     'error.method' => 'Methode nicht erlaubt',
     'error.method_text' => 'Diese Seite beantwortet GET- und POST-Anfragen.',
     'error.expired' => 'Diese Seite ist abgelaufen',

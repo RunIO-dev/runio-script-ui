@@ -38,7 +38,7 @@ final class Runtime
     /**
      * @param array<array-key,mixed>|null $texts
      */
-    public static function configure(?callable $auth, ?callable $log, ?bool $debug, ?string $name, ?string $language = null, ?array $texts = null, ?string $uploads = null): void
+    public static function configure(?callable $auth, ?callable $log, ?bool $debug, ?string $name, ?string $language = null, ?array $texts = null, ?string $uploads = null, ?callable $allow = null): void
     {
         if (self::$page !== null) {
             // Accepting this quietly would be dangerous: a login check added here
@@ -46,11 +46,11 @@ final class Runtime
             throw new \LogicException(
                 'configure() has to be called before the first thing is drawn. '
                 . 'When the tools are served with serve(), pass the settings to serve() instead. '
-                . 'To limit one tool to some users, check user() inside the tool.',
+                . 'To limit one tool to some users, pass allow: to serve() or to configure(), or check user() inside the tool.',
             );
         }
 
-        self::$config = self::config()->with($auth, $log, $debug, $name, $language, $texts, $uploads);
+        self::$config = self::config()->with($auth, $log, $debug, $name, $language, $texts, $uploads, $allow);
     }
 
     /** The page being drawn. On a web request without one, the page is started here. */
@@ -72,6 +72,7 @@ final class Runtime
         ?string $language = null,
         ?array $texts = null,
         ?string $uploads = null,
+        ?callable $allow = null,
     ): void {
         if (self::$page !== null) {
             throw new \LogicException('serve() cannot be called from inside a tool.');
@@ -80,7 +81,7 @@ final class Runtime
 
         $request = Request::fromGlobals();
         $kernel = new Kernel(
-            self::config()->with($auth, $log, $debug, $name, $language, $texts, $uploads),
+            self::config()->with($auth, $log, $debug, $name, $language, $texts, $uploads, $allow),
             new NativeSession($request->secure),
         );
 
@@ -153,7 +154,9 @@ final class Runtime
         // apart by Kernel::savedAt().)
         $stateKey = $toolId . '~' . substr(hash('sha256', $script . "\n" . $request->path), 0, 12);
 
-        $page = $kernel->begin($request, $toolId, $selfUrl, null, $stateKey);
+        // The access check, when there is one, is asked about the file and not about
+        // the id: see Kernel::askedAs().
+        $page = $kernel->begin($request, $toolId, $selfUrl, null, $stateKey, $script);
         if ($page instanceof Response) {
             $page->send();
             exit;

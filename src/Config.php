@@ -23,6 +23,14 @@ final class Config
     public readonly ?\Closure $log;
 
     /**
+     * Who may open which tool. It receives what the login check returned (null
+     * when that only said true, or when there is none) and the id of a tool,
+     * and answers true or false. Without it everybody who gets past the login
+     * check may open every tool.
+     */
+    public readonly ?\Closure $allow;
+
+    /**
      * @param bool|null              $debug    show error details in the page. null means: only without a login check,
      *                                         where nobody but this computer gets in
      * @param string|null            $name     the name of the tool collection, shown in the header and on the index page.
@@ -32,6 +40,7 @@ final class Config
      * @param array<array-key,mixed> $texts    your own built-in texts: language => (id => text)
      * @param string|null            $uploads  the folder that keeps uploaded files until a tool is done with them.
      *                                         null means a folder of its own inside PHP's temp folder
+     * @param callable|null          $allow    who may open which tool: see the property
      */
     public function __construct(
         ?callable $auth = null,
@@ -41,11 +50,13 @@ final class Config
         public readonly ?string $language = null,
         public readonly array $texts = [],
         public readonly ?string $uploads = null,
+        ?callable $allow = null,
     ) {
         Texts::check($language, $texts);
 
         $this->auth = $auth === null ? null : $auth(...);
         $this->log = $log === null ? null : $log(...);
+        $this->allow = $allow === null ? null : $allow(...);
     }
 
     /**
@@ -61,6 +72,7 @@ final class Config
         ?string $language = null,
         ?array $texts = null,
         ?string $uploads = null,
+        ?callable $allow = null,
     ): self {
         return new self(
             $auth ?? $this->auth,
@@ -70,6 +82,7 @@ final class Config
             $language ?? $this->language,
             $texts ?? $this->texts,
             $uploads ?? $this->uploads,
+            $allow ?? $this->allow,
         );
     }
 

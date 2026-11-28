@@ -79,6 +79,36 @@ final class ToolFinderTest extends TestCase
         }
     }
 
+    public function testAFolderWithTheNameOfAToolIsNotATool(): void
+    {
+        $this->write('refund.php', "<?php\n// Refund\n");
+        mkdir($this->dir . '/archive.php');
+
+        try {
+            $finder = new ToolFinder($this->dir);
+
+            self::assertSame(['refund'], array_keys($finder->all()));
+            self::assertNull($finder->find('archive'));
+        } finally {
+            rmdir($this->dir . '/archive.php');
+        }
+    }
+
+    public function testTheNameOfAFileSaysWhichToolItIs(): void
+    {
+        self::assertSame('refund', ToolFinder::idOf('refund.php'));
+        self::assertSame('bulk-import_v2', ToolFinder::idOf('bulk-import_v2.php'));
+        self::assertSame('2024', ToolFinder::idOf('2024.php'));
+
+        // Not the name of a tool: a helper, another ending, another case, a
+        // name with something in it that an address should not carry.
+        foreach (['_bootstrap.php', 'refund.PHP', 'refund.phtml', 'refund', 'Refund.php', 'my report.php', 'report.v2.php', '.php', '../refund.php', "refund.php\n"] as $name) {
+            self::assertNull(ToolFinder::idOf($name), $name);
+        }
+        self::assertNull(ToolFinder::idOf(str_repeat('a', 65) . '.php'));
+        self::assertSame(str_repeat('a', 64), ToolFinder::idOf(str_repeat('a', 64) . '.php'));
+    }
+
     public function testAFolderThatDoesNotExistHasNoTools(): void
     {
         $finder = new ToolFinder($this->dir . '/nowhere');

@@ -22,6 +22,7 @@ return [
     'page.update' => 'تحديث',
     'page.offline' => 'لم يستجب الخادم. تأكد من أنه يعمل ثم حاول مرة أخرى. إذا انتهت جلستك فأعد تحميل الصفحة.',
     'index.empty' => 'لا توجد أدوات بعد. ضع ملف PHP في {folder} وسيظهر هنا.',
+    'index.none_allowed' => 'لا توجد هنا أداة يُسمح لك بفتحها.',
 
     // The question a button asks first
     'confirm.title' => 'يرجى التأكيد',
@@ -103,6 +104,9 @@ return [
     'error.login_failed_text' => 'لن يُسمح لأحد بالدخول حتى يعمل التحقق من جديد. التفاصيل في سجل أخطاء الخادم.',
     'error.denied' => 'غير مسموح',
     'error.denied_text' => 'ليست لديك صلاحية الوصول إلى هذه الصفحة.',
+    'error.tool_denied_text' => 'لا يُسمح لك بفتح هذه الأداة.',
+    'error.access_failed' => 'فشل التحقق من الصلاحية',
+    'error.access_failed_text' => 'لن يُسمح لأحد بالدخول حتى يعمل التحقق من جديد. التفاصيل في سجل أخطاء الخادم.',
     'error.method' => 'الطريقة غير مسموحة',
     'error.method_text' => 'هذه الصفحة تستجيب لطلبات GET و POST.',
     'error.expired' => 'انتهت صلاحية هذه الصفحة',

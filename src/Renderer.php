@@ -72,13 +72,17 @@ final class Renderer
      * @param array<array-key,Tool>   $tools
      * @param \Closure(string):string $urlFor
      */
-    public static function index(array $tools, \Closure $urlFor, Config $config, ?string $user, string $directory, string $nonce): string
+    public static function index(array $tools, \Closure $urlFor, Config $config, ?string $user, string $directory, string $nonce, bool $more = false): string
     {
         $texts = $config->builtInTexts();
         $name = $config->name($texts);
         $body = '<div class="sui-flow"><h1 class="sui-title" dir="auto">' . Text::e($name) . '</h1>';
 
-        if ($tools === []) {
+        if ($tools === [] && $more) {
+            // The folder has tools, and this user may open none of them. The hint
+            // below is for whoever sets the tools up, and it names a folder of the server.
+            $body .= '<div class="sui-callout sui-info" role="status" dir="auto">' . Text::e($texts->get('index.none_allowed')) . '</div>';
+        } elseif ($tools === []) {
             // The text is escaped first. Only then the folder goes in, marked as code.
             $body .= '<div class="sui-callout sui-info" role="status" dir="auto">' . str_replace(
                 '{folder}',

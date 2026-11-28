@@ -19,6 +19,7 @@ return [
     'page.update' => 'Update',
     'page.offline' => 'The server did not answer. Check that it is running, then try again. If you were logged out, reload the page.',
     'index.empty' => 'No tools yet. Put a PHP file into {folder} and it shows up here.',
+    'index.none_allowed' => 'There is no tool here that you may open.',
 
     // The question a button asks first
     'confirm.title' => 'Please confirm',
@@ -100,6 +101,9 @@ return [
     'error.login_failed_text' => 'Nobody is let in until it works again. The details are in the error log of the server.',
     'error.denied' => 'Not allowed',
     'error.denied_text' => 'You do not have access to this page.',
+    'error.tool_denied_text' => 'You may not open this tool.',
+    'error.access_failed' => 'The access check failed',
+    'error.access_failed_text' => 'Nobody is let in until it works again. The details are in the error log of the server.',
     'error.method' => 'Method not allowed',
     'error.method_text' => 'This page answers GET and POST requests.',
     'error.expired' => 'This page has expired',

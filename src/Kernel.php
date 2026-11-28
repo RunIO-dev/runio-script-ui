@@ -45,6 +45,7 @@ final class Kernel
      * @param string|null $selfUrl  the address of this tool, where its form posts to; the request path by default
      * @param string|null $homeUrl  the address of the list of tools, if there is one
      * @param string|null $stateKey what the tool saves is filed under this; the tool id by default
+     * @param string|null $file     the script that the web server runs, when the tool is one
      */
     public function handle(
         Request $request,
@@ -53,8 +54,9 @@ final class Kernel
         ?string $selfUrl = null,
         ?string $homeUrl = null,
         ?string $stateKey = null,
+        ?string $file = null,
     ): Response {
-        $page = $this->begin($request, $toolId, $selfUrl, $homeUrl, $stateKey);
+        $page = $this->begin($request, $toolId, $selfUrl, $homeUrl, $stateKey, $file);
         if ($page instanceof Response) {
             return $page;
         }
@@ -84,21 +86,44 @@ final class Kernel
         }
 
         if ($route['id'] === null) {
+            // The list shows what this user may open, and nothing about the rest.
+            $all = $finder->all();
+            $open = [];
+            foreach ($all as $id => $tool) {
+                $may = $this->allows($user['who'], $tool->id);
+                if ($may instanceof Response) {
+                    return $may;
+                }
+                if ($may) {
+                    $open[$id] = $tool;
+                }
+            }
             $nonce = self::nonce();
 
             return new Response(200, Renderer::index(
-                $finder->all(),
+                $open,
                 $route['url'],
                 $this->config,
                 $user['name'],
                 $finder->directory,
                 $nonce,
+                count($open) < count($all),
             ), self::headers($nonce));
         }
 
         $tool = $finder->find($route['id']);
         if ($tool === null) {
             return $this->message(404, 'error.not_found', 'error.no_tool', [$route['home'], 'page.all_tools']);
+        }
+
+        // Before anything of the tool runs, whatever the request is: a page view,
+        // a pressed button, a download, or a request of the page script.
+        $may = $this->allows($user['who'], $tool->id);
+        if ($may instanceof Response) {
+            return $may;
+        }
+        if (!$may) {
+            return $this->message(403, 'error.denied', 'error.tool_denied_text', [$route['home'], 'page.all_tools']);
         }
 
         $page = $this->open($request, $tool->id, $route['url']($tool->id), $route['home'], $user['name'], $tool->id);
@@ -116,6 +141,8 @@ final class Kernel
     /**
      * Checks the request and prepares the page. Returns a response instead when
      * the request is refused or already answered (a redirect).
+     *
+     * @param string|null $file the script that the web server runs, when the tool is one
      */
     public function begin(
         Request $request,
@@ -123,10 +150,21 @@ final class Kernel
         ?string $selfUrl = null,
         ?string $homeUrl = null,
         ?string $stateKey = null,
+        ?string $file = null,
     ): Page|Response {
         $user = $this->gate($request);
         if ($user instanceof Response) {
             return $user;
+        }
+
+        // The same question as for a tool of a folder, and before anything else too.
+        $askedAs = $this->config->allow === null ? $toolId : self::askedAs($toolId, $file);
+        $may = $askedAs === null ? false : $this->allows($user['who'], $askedAs);
+        if ($may instanceof Response) {
+            return $may;
+        }
+        if (!$may) {
+            return $this->message(403, 'error.denied', 'error.tool_denied_text', $homeUrl === null ? null : [$homeUrl, 'page.all_tools']);
         }
 
         return $this->open($request, $toolId, $selfUrl ?? $request->path, $homeUrl, $user['name'], $stateKey ?? $toolId);
@@ -261,13 +299,19 @@ final class Kernel
     /**
      * Who is asking, or the response that turns them away.
      *
-     * @return array{name: ?string}|Response
+     * "name" is what user() gives a tool: a text. "who" is what the login check
+     * returned, as it is. The access check gets that, so that it can ask the
+     * application's own user about roles. A login check that only says yes
+     * names nobody, and "who" is null then: true is equal to every name in a
+     * loose comparison, and no rule should open a tool by that accident.
+     *
+     * @return array{name: ?string, who: mixed}|Response
      */
     private function gate(Request $request): array|Response
     {
         if ($this->config->auth === null) {
             if (Guard::isLocal($request)) {
-                return ['name' => null];
+                return ['name' => null, 'who' => null];
             }
 
             return $this->message(403, 'error.local_only', 'error.local_only_text');
@@ -293,7 +337,109 @@ final class Kernel
             default => null,
         };
 
-        return ['name' => $name === null ? null : mb_substr(mb_scrub($name, 'UTF-8'), 0, 200, 'UTF-8')];
+        return ['name' => $name === null ? null : mb_substr(mb_scrub($name, 'UTF-8'), 0, 200, 'UTF-8'), 'who' => $result === true ? null : $result];
+    }
+
+    /**
+     * May this user open this tool? The application says, when it gave a check
+     * for it. Only a plain yes opens a tool and only a plain no refuses it. Any
+     * other answer is a mistake in the check, and a mistake opens nothing: the
+     * page says that the check failed, and the error log says why.
+     *
+     * @return bool|Response the answer, or the page to send instead
+     */
+    private function allows(mixed $who, string $toolId): bool|Response
+    {
+        if ($this->config->allow === null) {
+            return true;
+        }
+
+        try {
+            $answer = self::call($this->config->allow, $who, $toolId);
+        } catch (\Throwable $error) {
+            error_log(sprintf('Script UI: the access check failed for the tool "%s": %s', $toolId, $error));
+
+            return $this->message(500, 'error.access_failed', 'error.access_failed_text');
+        }
+
+        if (!is_bool($answer)) {
+            error_log(sprintf(
+                'Script UI: the access check has to answer true or false. For the tool "%s" it answered %s. Nobody is let in.',
+                $toolId,
+                self::describeAnswer($answer),
+            ));
+
+            return $this->message(500, 'error.access_failed', 'error.access_failed_text');
+        }
+
+        return $answer;
+    }
+
+    /**
+     * A wrong answer of the access check, for the error log: short, on one line,
+     * and with its type, since 1 and "1" and true look alike otherwise.
+     */
+    private static function describeAnswer(mixed $answer): string
+    {
+        if ($answer === null) {
+            return 'null';
+        }
+
+        if (is_int($answer) || is_float($answer)) {
+            return var_export($answer, true) . ' (' . get_debug_type($answer) . ')';
+        }
+
+        if (is_string($answer)) {
+            return '"' . self::oneLine($answer, 60) . '" (string)';
+        }
+
+        return 'a value of the type ' . get_debug_type($answer);
+    }
+
+    /** A text that may come from anywhere, made fit for one line of the error log. */
+    private static function oneLine(string $text, int $length): string
+    {
+        $text = (string) preg_replace('/[\x00-\x1F\x7F]+/', ' ', mb_scrub($text, 'UTF-8'));
+        $short = mb_substr($text, 0, $length, 'UTF-8');
+
+        return $short . ($short === $text ? '' : '…');
+    }
+
+    /**
+     * The name under which the access check is asked about a script on its own:
+     * the one its file would have as a tool of a folder ("my_report" for
+     * my_report.php). Rules are written with those names, and the name a page
+     * goes by is made for other things ("my-report").
+     *
+     * null: no rule can know this script, so it stays closed. That is a file
+     * name that no tool of a folder can have, or a file that is not there: a
+     * web server may hand over more of the address than the name of the script.
+     */
+    private static function askedAs(string $toolId, ?string $file): ?string
+    {
+        if ($file === null) {
+            // A tool that is a function and not a file. Its id is all there is to ask about.
+            return ToolFinder::idOf($toolId . '.php');
+        }
+
+        if (!is_file($file)) {
+            error_log(sprintf(
+                'Script UI: the script "%s" was not opened. The web server named a file that is not there, so the access check cannot be asked about it.',
+                self::oneLine($file, 200),
+            ));
+
+            return null;
+        }
+
+        $id = ToolFinder::idOf(basename($file));
+        if ($id === null) {
+            error_log(sprintf(
+                'Script UI: the script "%s" was not opened. Where an access check is set, the file name of a script has to be made of lower-case letters, digits, "-" and "_", and end in ".php", like that of a tool in a folder. The check is asked about that name.',
+                self::oneLine(basename($file), 200),
+            ));
+        }
+
+        return $id;
     }
 
     private function open(Request $request, string $toolId, string $selfUrl, ?string $homeUrl, ?string $user, string $stateKey): Page|Response

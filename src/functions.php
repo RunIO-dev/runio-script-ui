@@ -564,6 +564,9 @@ function user(): ?string
  * @param string|null                 $uploads  the folder that keeps uploaded files until a tool is done with them.
  *                                              It must not be a folder the web server serves. By default a folder
  *                                              of its own inside PHP's temp folder
+ * @param callable|null               $allow    who may open which script: receives what the login check returned, and
+ *                                              the id of the script (its file name without ".php"), and returns true
+ *                                              or false. See serve()
  */
 function configure(
     ?callable $auth = null,
@@ -573,8 +576,9 @@ function configure(
     ?string $language = null,
     ?array $texts = null,
     ?string $uploads = null,
+    ?callable $allow = null,
 ): void {
-    Runtime::configure($auth, $log, $debug, $name, $language, $texts, $uploads);
+    Runtime::configure($auth, $log, $debug, $name, $language, $texts, $uploads, $allow);
 }
 
 /**
@@ -617,6 +621,12 @@ function clean_uploads(?string $folder = null): int
  * @param string|null                 $uploads  the folder that keeps uploaded files until a tool is done with them.
  *                                              It must not be a folder the web server serves. By default a folder
  *                                              of its own inside PHP's temp folder
+ * @param callable|null               $allow    who may open which tool: receives what the login check returned (a name,
+ *                                              a number or your user object; null when it only said true, or when
+ *                                              there is none), and the id of a tool (its file name without ".php"),
+ *                                              and returns true or false. A tool that is not allowed is left out of
+ *                                              the list, and answers "Not allowed" before anything of it runs. Without
+ *                                              it everybody who gets past the login check may open every tool
  */
 function serve(
     string $directory,
@@ -628,6 +638,7 @@ function serve(
     ?string $language = null,
     ?array $texts = null,
     ?string $uploads = null,
+    ?callable $allow = null,
 ): void {
-    Runtime::serve($directory, $auth, $log, $name, $debug, $base, $language, $texts, $uploads);
+    Runtime::serve($directory, $auth, $log, $name, $debug, $base, $language, $texts, $uploads, $allow);
 }

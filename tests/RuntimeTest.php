@@ -55,6 +55,23 @@ final class RuntimeTest extends ToolTestCase
         self::assertFalse($config->debug);
     }
 
+    public function testConfigureTakesTheAccessCheckToo(): void
+    {
+        self::assertNull(Runtime::config()->allow);
+
+        // In a file that every script includes: one rule for all of them.
+        configure(allow: static fn (mixed $user, string $tool): bool => $tool === 'refund');
+        configure(name: 'Back office');
+
+        $kernel = $this->kernelOf(Runtime::config());
+        $tool = static function (): void {
+            title('A tool');
+        };
+
+        self::assertSame(200, $kernel->handle(new Request('GET', '/refund.php'), 'refund', $tool)->status);
+        self::assertSame(403, $kernel->handle(new Request('GET', '/payroll.php'), 'payroll', $tool)->status);
+    }
+
     public function testConfigureSetsTheLanguageAndOwnTexts(): void
     {
         configure(language: 'de');

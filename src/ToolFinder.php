@@ -40,6 +40,21 @@ final class ToolFinder
         return $tools;
     }
 
+    /**
+     * The id of the tool that a file of this name is: "refund" for "refund.php".
+     * null when no tool has such a file name.
+     */
+    public static function idOf(string $fileName): ?string
+    {
+        if (!str_ends_with($fileName, '.php')) {
+            return null;
+        }
+
+        $id = substr($fileName, 0, -4);
+
+        return preg_match(self::ID, $id) === 1 ? $id : null;
+    }
+
     public function find(string $id): ?Tool
     {
         // The id is looked up in the list of real file names. It is never glued
@@ -56,12 +71,8 @@ final class ToolFinder
 
         $ids = [];
         foreach (scandir($this->directory) ?: [] as $name) {
-            if (!str_ends_with($name, '.php')) {
-                continue;
-            }
-
-            $id = substr($name, 0, -4);
-            if (preg_match(self::ID, $id) === 1 && is_file($this->directory . DIRECTORY_SEPARATOR . $name)) {
+            $id = self::idOf($name);
+            if ($id !== null && is_file($this->directory . DIRECTORY_SEPARATOR . $name)) {
                 $ids[] = $id;
             }
         }

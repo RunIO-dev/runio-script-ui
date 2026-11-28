@@ -346,11 +346,12 @@ table($queue->jobs());
 **A folder of tools.** Put this in a script behind your web server:
 
 ```php
-require __DIR__ . '/vendor/autoload.php';
-require __DIR__ . '/bootstrap.php';            // starts your session, connects your database
+// public/admin.php: the only file of all this that lies in the web root
+require __DIR__ . '/../vendor/autoload.php';
+require __DIR__ . '/../bootstrap.php';         // starts your session, connects your database
 
 Runio\ScriptUi\serve(
-    __DIR__ . '/tools',
+    __DIR__ . '/../tools',
     auth: fn () => $_SESSION['admin_email'] ?? null,   // who is asking, or null to refuse
     log: fn (array $entry) => $auditLog->write($entry), // called for every button a user presses and every file a user downloads
     name: 'Back office',
@@ -361,13 +362,17 @@ An entry is an array with `time`, `user`, `tool`, `action` (the label of the but
 
 Every PHP file in the folder becomes a tool, listed on an index page. The first comment in a file is its title, more comment lines are its description. Files that start with `_` are helpers and are never served.
 
+**Keep the folder of tools out of the web root**, next to `vendor/`. Only the script above belongs where the web server looks for files. A file that the web server runs by itself never passes `serve()`, so nobody asks `auth:` or `allow:` about it. That goes for the helper files in the folder too.
+
+When the folder has to lie in the web root, close it in the web server. With Apache 2.4 that is a file `.htaccess` in the folder with the line `Require all denied` (it needs `AllowOverride`). With nginx it is `location ^~ /tools/ { deny all; }`. Then try it: `/tools/refund.php` has to answer 403 or 404.
+
 With a login check, error details go to the error log and not into the page. Pass `debug: true` where you develop.
 
 **Who may open which tool.** The login check lets somebody in, and then every tool is open to them. `allow:` decides for one user and one tool:
 
 ```php
 Runio\ScriptUi\serve(
-    __DIR__ . '/tools',
+    __DIR__ . '/../tools',
     auth: fn () => $_SESSION['admin_email'] ?? null,
     allow: fn (mixed $user, string $tool) => $permissions->has($user, 'tool.' . $tool),
 );
@@ -392,14 +397,14 @@ The texts the library writes itself ("Yes", "Cancel", "Reset", "No rows.") come 
 To use one language on every page, set it:
 
 ```php
-Runio\ScriptUi\serve(__DIR__ . '/tools', language: 'de');
+Runio\ScriptUi\serve(__DIR__ . '/../tools', language: 'de');
 ```
 
 Your own words for built-in texts, or a language that is not built in, go into `texts:`. All texts and their ids are in [`resources/texts/en.php`](resources/texts/en.php). What you leave out stays English.
 
 ```php
 Runio\ScriptUi\serve(
-    __DIR__ . '/tools',
+    __DIR__ . '/../tools',
     language: 'fr',
     texts: ['fr' => ['confirm.yes' => 'Oui', 'confirm.no' => 'Annuler', 'page.reset' => 'Réinitialiser']],
 );
@@ -412,7 +417,7 @@ Pages that are not a tool have no title to follow: the list of tools and pages s
 ## What the library does for safety
 
 - **No login check, no outside access.** Without `auth`, tools only answer to a browser on the computer they run on. The request must come from a loopback address, with a local host name, and must not look passed on (proxy headers, HTTP/1.0, `Connection: close`). No check of this kind can see through every proxy or tunnel, so anything that can be reached from outside needs `auth`.
-- **A tool can be closed to some users.** `allow:` is asked before anything of a tool runs, on every request, and only a plain `true` opens the tool. Without `allow:` every tool is open to everybody who gets past the login check.
+- **A tool can be closed to some users.** `allow:` is asked before anything of a tool runs, on every request, and only a plain `true` opens the tool. Without `allow:` every tool is open to everybody who gets past the login check. Both checks are settings of `serve()`: a tool file that the web server runs by itself knows nothing of them, which is why the folder of tools stays out of the web root.
 - **Forged requests are refused.** Every form carries a token. A button only counts on a form that was sent from the page itself. The "Reset" link carries a code of its own.
 - **Everything is escaped.** Labels, table cells and messages are text, never HTML. Output printed with `echo` is shown as text too.
 - **A strict Content-Security-Policy** on every page: no inline styles, no inline handlers, nothing from other sites, no framing.

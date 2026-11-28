@@ -20,6 +20,7 @@ return [
     'page.offline' => 'The server did not answer. Check that it is running, then try again. If you were logged out, reload the page.',
     'index.empty' => 'No tools yet. Put a PHP file into {folder} and it shows up here.',
     'index.none_allowed' => 'There is no tool here that you may open.',
+    'index.in_web_root' => 'The folder of tools, {folder}, lies in the web root. The web server can run a tool file by its name, and then the login check and the access check of serve() are not asked. Move the folder out of the web root, or close it in the web server. You see this note because error details are shown here.',
 
     // The question a button asks first
     'confirm.title' => 'Please confirm',

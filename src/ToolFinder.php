@@ -41,6 +41,26 @@ final class ToolFinder
     }
 
     /**
+     * Does this folder of tools lie in the given folder, or is it that folder?
+     * Both are followed to where they really are, so a link in between counts.
+     */
+    public function liesIn(string $folder): bool
+    {
+        // realpath('') is the folder PHP works in, which nobody asked about.
+        $outer = $folder === '' ? false : realpath($folder);
+        $own = realpath($this->directory);
+        if ($outer === false || $own === false) {
+            return false;
+        }
+
+        $outer = rtrim($outer, '/\\') . DIRECTORY_SEPARATOR;
+        $own = rtrim($own, '/\\') . DIRECTORY_SEPARATOR;
+
+        // Windows does not tell "Tools" from "tools".
+        return DIRECTORY_SEPARATOR === '\\' ? stripos($own, $outer) === 0 : str_starts_with($own, $outer);
+    }
+
+    /**
      * The id of the tool that a file of this name is: "refund" for "refund.php".
      * null when no tool has such a file name.
      */

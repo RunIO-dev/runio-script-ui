@@ -71,12 +71,24 @@ final class Renderer
      *
      * @param array<array-key,Tool>   $tools
      * @param \Closure(string):string $urlFor
+     * @param bool                    $more      the folder has tools that this user may not open
+     * @param bool                    $inWebRoot the folder lies where the web server hands out files, and this
+     *                                           reader is the one to tell
      */
-    public static function index(array $tools, \Closure $urlFor, Config $config, ?string $user, string $directory, string $nonce, bool $more = false): string
+    public static function index(array $tools, \Closure $urlFor, Config $config, ?string $user, string $directory, string $nonce, bool $more = false, bool $inWebRoot = false): string
     {
         $texts = $config->builtInTexts();
         $name = $config->name($texts);
         $body = '<div class="sui-flow"><h1 class="sui-title" dir="auto">' . Text::e($name) . '</h1>';
+
+        if ($inWebRoot) {
+            // The text is escaped first. Only then the folder goes in, marked as code.
+            $body .= '<div class="sui-callout sui-warning" role="status" dir="auto">' . str_replace(
+                '{folder}',
+                '<code dir="ltr">' . Text::e($directory) . '</code>',
+                Text::e($texts->get('index.in_web_root')),
+            ) . '</div>';
+        }
 
         if ($tools === [] && $more) {
             // The folder has tools, and this user may open none of them. The hint

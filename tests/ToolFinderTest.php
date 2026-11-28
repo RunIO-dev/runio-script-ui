@@ -109,6 +109,26 @@ final class ToolFinderTest extends TestCase
         self::assertSame(str_repeat('a', 64), ToolFinder::idOf(str_repeat('a', 64) . '.php'));
     }
 
+    public function testItKnowsWhetherItLiesInAnotherFolder(): void
+    {
+        $finder = new ToolFinder($this->dir . '/sub');
+
+        self::assertTrue($finder->liesIn($this->dir));
+        self::assertTrue($finder->liesIn($this->dir . '/'));
+        self::assertTrue($finder->liesIn($this->dir . '/sub'), 'a folder lies in itself');
+        self::assertTrue($finder->liesIn($this->dir . '/sub/../sub'));
+
+        self::assertFalse((new ToolFinder($this->dir))->liesIn($this->dir . '/sub'));
+        // The name only starts the same.
+        self::assertFalse($finder->liesIn($this->dir . '/su'));
+        // realpath('') is the folder PHP works in. An empty path is no folder here,
+        // also for tools that do lie in the folder PHP works in.
+        self::assertFalse($finder->liesIn(''));
+        self::assertFalse((new ToolFinder((string) getcwd()))->liesIn(''));
+        self::assertFalse($finder->liesIn($this->dir . '/gone'));
+        self::assertFalse((new ToolFinder($this->dir . '/gone'))->liesIn($this->dir));
+    }
+
     public function testAFolderThatDoesNotExistHasNoTools(): void
     {
         $finder = new ToolFinder($this->dir . '/nowhere');

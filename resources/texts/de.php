@@ -15,6 +15,7 @@ return [
     'page.offline' => 'Der Server hat nicht geantwortet. Prüfen Sie, ob er läuft, und versuchen Sie es erneut. Falls Sie abgemeldet wurden, laden Sie die Seite neu.',
     'index.empty' => 'Noch keine Werkzeuge. Legen Sie eine PHP-Datei in {folder} ab, dann erscheint sie hier.',
     'index.none_allowed' => 'Hier gibt es kein Werkzeug, das Sie öffnen dürfen.',
+    'index.in_web_root' => 'Der Ordner mit den Werkzeugen, {folder}, liegt im Web-Root. Der Webserver kann eine Werkzeugdatei über ihren Namen direkt ausführen, und dann werden die Anmeldeprüfung und die Zugriffsprüfung von serve() nicht gefragt. Legen Sie den Ordner außerhalb des Web-Roots ab oder sperren Sie ihn im Webserver. Sie sehen diesen Hinweis, weil hier Fehlerdetails angezeigt werden.',
 
     // The question a button asks first
     'confirm.title' => 'Bitte bestätigen',

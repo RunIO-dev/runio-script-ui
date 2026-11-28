@@ -69,10 +69,12 @@ final class Kernel
     /**
      * Serves a folder of tool files: the list of tools, or the tool the address names.
      *
-     * @param string|null $base null: tools are chosen with "?_tool=id" on the current address.
-     *                          A path such as "" or "/admin/tools": tools live at "{base}/{id}".
+     * @param string|null $base    null: tools are chosen with "?_tool=id" on the current address.
+     *                             A path such as "" or "/admin/tools": tools live at "{base}/{id}".
+     * @param string|null $webRoot the folder the web server hands files out from by their names,
+     *                             when it does that. The list says so when the tools lie in it
      */
-    public function serve(Request $request, ToolFinder $finder, ?string $base = null): Response
+    public function serve(Request $request, ToolFinder $finder, ?string $base = null, ?string $webRoot = null): Response
     {
         // First of all: who is asking. Nobody learns which tools exist before that.
         $user = $this->gate($request);
@@ -108,6 +110,9 @@ final class Kernel
                 $finder->directory,
                 $nonce,
                 count($open) < count($all),
+                // A web server runs a file of its web root by its name, past this method
+                // and its checks. That is said to whoever sets the tools up, and nobody else.
+                $webRoot !== null && $this->showsDetails($request) && $finder->liesIn($webRoot),
             ), self::headers($nonce));
         }
 
@@ -294,6 +299,17 @@ final class Kernel
         $nonce = self::nonce();
 
         return new Response($status, Renderer::tool($page, $this->config, $this->token(), $nonce), self::headers($nonce));
+    }
+
+    /**
+     * Is this a place for error details and for notes about the setup? By
+     * default only where nobody but the developer gets in: no login check, and
+     * a request from this computer. With a login check other people use the
+     * tools, and "looks local" proves too little.
+     */
+    private function showsDetails(Request $request): bool
+    {
+        return $this->config->debug ?? ($this->config->auth === null && Guard::isLocal($request));
     }
 
     /**
@@ -533,10 +549,7 @@ final class Kernel
             $isPost,
             $in,
             $user,
-            // Error details by default only where nobody but the developer gets in:
-            // no login check, and a request from this computer. With a login check
-            // other people use the tools, and "looks local" proves too little.
-            $this->config->debug ?? ($this->config->auth === null && Guard::isLocal($request)),
+            $this->showsDetails($request),
             $selfUrl,
             $homeUrl,
             $carried,

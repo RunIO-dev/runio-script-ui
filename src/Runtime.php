@@ -88,7 +88,24 @@ final class Runtime
         // If a tool calls exit, the page it drew so far is still sent.
         self::hook();
 
-        $kernel->serve($request, new ToolFinder($directory), $base)->send();
+        $kernel->serve($request, new ToolFinder($directory), $base, self::webRoot())->send();
+    }
+
+    /**
+     * The folder that the web server hands files out from by their names, or
+     * null where it does not do that.
+     */
+    private static function webRoot(): ?string
+    {
+        // "script-ui serve" sends every address to one script, whatever file it
+        // names. That server says where the tools are in this variable.
+        if (PHP_SAPI === 'cli-server' && getenv('SCRIPT_UI_TOOLS') !== false) {
+            return null;
+        }
+
+        $root = $_SERVER['DOCUMENT_ROOT'] ?? null;
+
+        return is_string($root) && $root !== '' ? $root : null;
     }
 
     /**

@@ -366,7 +366,7 @@ Every PHP file in the folder becomes a tool, listed on an index page. The first 
 
 When the folder has to lie in the web root, close it in the web server. With Apache 2.4 that is a file `.htaccess` in the folder with the line `Require all denied` (it needs `AllowOverride`). With nginx it is `location ^~ /tools/ { deny all; }`. Then try it: `/tools/refund.php` has to answer 403 or 404.
 
-The list of tools says so when the folder lies in the web root. It says it only where error details are shown: on your own computer without a login check, or with `debug: true`. The library cannot see what the web server was told, so the note stays while the folder lies there.
+The list of tools says so when the folder lies in the web root. It says it only where error details are shown: on your own computer without a login check, or with `debug: true`. The library cannot see what the web server was told, so the note stays while the folder lies there. No note is not a proof that the folder is closed. Where the web server runs on another machine or in another container, PHP may not see the web root at all, and a link from the web root to the folder is not seen either.
 
 With a login check, error details go to the error log and not into the page. Pass `debug: true` where you develop.
 

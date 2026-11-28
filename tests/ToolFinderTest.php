@@ -129,6 +129,41 @@ final class ToolFinderTest extends TestCase
         self::assertFalse((new ToolFinder($this->dir . '/gone'))->liesIn($this->dir));
     }
 
+    public function testAPathThatCannotBeReadIsNoFolderAndNoError(): void
+    {
+        $finder = new ToolFinder($this->dir . '/sub');
+
+        // A byte that no path may hold. PHP throws on it, and a list of tools
+        // must not fall over a path that a web server handed in.
+        self::assertFalse($finder->liesIn($this->dir . "\0"));
+        self::assertFalse((new ToolFinder($this->dir . "/sub\0"))->liesIn($this->dir));
+    }
+
+    public function testAFolderThatPhpMayNotLookAtSaysNothingIntoThePage(): void
+    {
+        if (DIRECTORY_SEPARATOR === '\\') {
+            self::markTestSkipped('The folder this test asks about is one of Linux and macOS.');
+        }
+
+        // Where open_basedir is set, PHP answers "false" for a path outside it,
+        // and prints a warning too. The warning would land in front of the page.
+        // The setting cannot be taken back, so another PHP is started for it.
+        $project = dirname(__DIR__);
+        $script = $this->dir . '/ask.php';
+        file_put_contents($script, '<?php require ' . var_export($project . '/vendor/autoload.php', true) . ';'
+            . ' var_dump((new Runio\\ScriptUi\\ToolFinder(' . var_export($this->dir . '/sub', true) . '))->liesIn("/usr"));'
+            . ' var_dump((new Runio\\ScriptUi\\ToolFinder("/usr"))->liesIn(' . var_export($this->dir, true) . '));');
+
+        $command = escapeshellarg(PHP_BINARY)
+            . ' -d display_errors=1 -d error_reporting=-1'
+            . ' -d open_basedir=' . escapeshellarg($project . PATH_SEPARATOR . $this->dir)
+            . ' ' . escapeshellarg($script) . ' 2>&1';
+        exec($command, $output, $status);
+
+        self::assertSame(0, $status, implode("\n", $output));
+        self::assertSame(['bool(false)', 'bool(false)'], $output);
+    }
+
     public function testAFolderThatDoesNotExistHasNoTools(): void
     {
         $finder = new ToolFinder($this->dir . '/nowhere');

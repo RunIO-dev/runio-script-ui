@@ -46,10 +46,9 @@ final class ToolFinder
      */
     public function liesIn(string $folder): bool
     {
-        // realpath('') is the folder PHP works in, which nobody asked about.
-        $outer = $folder === '' ? false : realpath($folder);
-        $own = realpath($this->directory);
-        if ($outer === false || $own === false) {
+        $outer = self::whereItIs($folder);
+        $own = self::whereItIs($this->directory);
+        if ($outer === null || $own === null) {
             return false;
         }
 
@@ -58,6 +57,22 @@ final class ToolFinder
 
         // Windows does not tell "Tools" from "tools".
         return DIRECTORY_SEPARATOR === '\\' ? stripos($own, $outer) === 0 : str_starts_with($own, $outer);
+    }
+
+    /** Where a folder really is. null for a path that PHP cannot look at, or may not. */
+    private static function whereItIs(string $path): ?string
+    {
+        // An empty path is the folder PHP works in for realpath(), which nobody
+        // asked about. A path with a zero byte makes PHP throw.
+        if ($path === '' || str_contains($path, "\0")) {
+            return null;
+        }
+
+        // Outside open_basedir PHP answers false and prints a warning as well.
+        // Printed here, it would land in front of the page.
+        $real = @realpath($path);
+
+        return $real === false ? null : $real;
     }
 
     /**

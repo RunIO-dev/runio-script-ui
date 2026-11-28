@@ -366,6 +366,8 @@ Every PHP file in the folder becomes a tool, listed on an index page. The first 
 
 When the folder has to lie in the web root, close it in the web server. With Apache 2.4 that is a file `.htaccess` in the folder with the line `Require all denied` (it needs `AllowOverride`). With nginx it is `location ^~ /tools/ { deny all; }`. Then try it: `/tools/refund.php` has to answer 403 or 404.
 
+The list of tools says so when the folder lies in the web root. It says it only where error details are shown: on your own computer without a login check, or with `debug: true`. The library cannot see what the web server was told, so the note stays while the folder lies there.
+
 With a login check, error details go to the error log and not into the page. Pass `debug: true` where you develop.
 
 **Who may open which tool.** The login check lets somebody in, and then every tool is open to them. `allow:` decides for one user and one tool:
@@ -388,7 +390,7 @@ A file name is an address, and "Not allowed" is another answer than "There is no
 
 By default tools are chosen with `?_tool=refund`. With `base: '/admin/tools'` they get clean addresses such as `/admin/tools/refund` (send those addresses to the script in your web server configuration).
 
-**One script on its own.** A script that the web server runs directly works too. Call `Runio\ScriptUi\configure(auth: ...)` in a file every tool includes, before anything is drawn. See [`examples/direct/hello.php`](examples/direct/hello.php). `configure()` takes `allow:` too. A script on its own is asked about by its file name: `payroll` for `payroll.php`. Then the name has to be one that a tool of a folder could have (lower-case letters, digits, `-` and `_`), or the script stays closed. Both checks are asked when the script calls its first function of the library. Put `title()` at the top: what stands above it runs for everybody.
+**One script on its own.** A script that the web server runs directly works too. Call `Runio\ScriptUi\configure(auth: ...)` in a file every tool includes, before anything is drawn. See [`examples/direct/hello.php`](examples/direct/hello.php). `configure()` takes `allow:` too. A script on its own is asked about by its file name: `payroll` for `payroll.php`. Then the name has to be one that a tool of a folder could have (lower-case letters, digits, `-` and `_`), or the script stays closed. Both checks are asked when the script calls its first function of the library. Put `title()` at the top: what stands above it runs for everybody. A script that shows several pages, such as an `index.php` with `?page=`, is one script, and it is asked about as `index`.
 
 ### Languages
 

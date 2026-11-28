@@ -22,6 +22,7 @@ Every fact has one home. A page of the site either holds it or reads it in.
 | The diagrams | `diagrams/draw.mjs` | it writes one `diagrams/<name>.md` each |
 | What changed, What comes next | `../CHANGELOG.md`, `../ROADMAP.md` | read in whole |
 | The pictures in `public/shots/` | the running demo and `samples/` | `cd ../e2e && node site-shots.mjs` |
+| The live pictures of the first page | `.vitepress/theme/live/` | `<LiveClick />` and `<LiveTask />` on a page, see below |
 
 `npm run dev` and `npm run build` write the generated files first. They are not kept in git. The pictures are kept, because taking them needs PHP and a browser.
 
@@ -35,7 +36,25 @@ The version in the menu is the newest one that the changelog names.
 - a picture is missing, or a link on a page points to an anchor that is not there;
 - a link to a heading of the README names a heading the README does not have;
 - a diagram or a function is missing on its page;
-- a tutorial names a line of a demo tool that no longer holds what the tutorial says.
+- a tutorial names a line of a demo tool that no longer holds what the tutorial says;
+- the first page does not carry its two live pictures.
+
+## The live pictures of the first page
+
+The first page has two pictures that a visitor can use: one click in `samples/hello.php`, and a task that takes long. Their files are in `.vitepress/theme/live/`:
+
+- `click.js` and `task.js` say what happens, as plain data and without a browser. `npm test` tries them, and `npm run build` starts with it.
+- `LiveClick.vue` and `LiveTask.vue` draw it, and `live.css` is their look.
+- `hello.data.js` reads the lines of `samples/hello.php` when the site is built. A step of the picture finds its line by its text, and the build stops when that line is gone.
+
+The pictures are simulations, so they must say what the library does. A second set of tests uses them in a browser, and runs the real `samples/hello.php` with the same inputs to compare:
+
+```bash
+npm run build
+cd ../e2e && npx playwright test -c site
+```
+
+Run it after a change to the pictures, to `samples/hello.php`, or to how the library sends a form. It needs PHP and the browser of the other browser tests.
 
 ## What `npm audit` says
 

@@ -10,6 +10,7 @@ use Runio\ScriptUi\Http\Request;
 use Runio\ScriptUi\Http\Response;
 use Runio\ScriptUi\Kernel;
 use Runio\ScriptUi\Session\FrameworkSession;
+use Runio\ScriptUi\Session\Session;
 
 use function Runio\ScriptUi\button;
 use function Runio\ScriptUi\multiselect;
@@ -212,6 +213,50 @@ final class FrameworkSessionTest extends TestCase
         }))->save();
     }
 
+    public function testTheKernelHasTheSessionOfAnApplicationSavedWhenAToolEndedPhp(): void
+    {
+        // PHP is ending, and the application never gets to save its session.
+        $laravel = new LaravelLikeSession();
+        (new Kernel(new Config(), new FrameworkSession($laravel)))->persist();
+        self::assertSame(1, $laravel->saved);
+
+        // A session of another kind saves itself, as PHP's own does. It is left alone.
+        $own = new class () extends ArraySessionWithSave {
+        };
+        (new Kernel(new Config(), $own))->persist();
+        self::assertSame(0, $own->saved);
+    }
+
+    public function testASessionThatCannotBeSavedGoesToTheLogAndStopsNothing(): void
+    {
+        $session = new class () extends LaravelLikeSession {
+            public function save(): void
+            {
+                throw new \RuntimeException("the disk is full\nat /srv/app/storage" . str_repeat('x', 400));
+            }
+        };
+        $log = (string) tempnam(sys_get_temp_dir(), 'script-ui-log-');
+        $before = ini_set('error_log', $log);
+
+        try {
+            // The page is still to be sent after this. An error here would cost it.
+            (new Kernel(new Config(), new FrameworkSession($session)))->persist();
+            $written = (string) file_get_contents($log);
+        } finally {
+            ini_set('error_log', (string) $before);
+            unlink($log);
+        }
+
+        self::assertStringContainsString(
+            'Script UI: the session of the application could not be saved after a tool ended PHP: the disk is full at /srv/app/storage',
+            $written,
+        );
+        // One line, however long the message was.
+        self::assertSame(1, substr_count(trim($written), "\n") + 1);
+        self::assertStringContainsString('…', $written);
+        self::assertLessThan(500, strlen(trim($written)));
+    }
+
     public function testAToolKeepsItsStateInASessionThatIsKeptAsJson(): void
     {
         $laravel = new JsonSession();
@@ -251,6 +296,30 @@ final class FrameworkSessionTest extends TestCase
         $second = $run(new Request('POST', '/refund', [], ['_token' => $token[1], '_click' => 'go', 'note' => 'x', 'amount' => '1', 'why' => []]));
         self::assertSame(200, $second->status);
         self::assertStringContainsString('Done: x / 1 /', $second->body);
+    }
+}
+
+/** A session of the library's own kind that could be saved, and is not asked to. */
+abstract class ArraySessionWithSave implements Session
+{
+    public int $saved = 0;
+
+    public function get(string $key, mixed $default = null): mixed
+    {
+        return $default;
+    }
+
+    public function set(string $key, mixed $value): void
+    {
+    }
+
+    public function remove(string $key): void
+    {
+    }
+
+    public function save(): void
+    {
+        $this->saved++;
     }
 }
 

@@ -6,6 +6,7 @@ namespace Runio\ScriptUi;
 
 use Runio\ScriptUi\Http\Request;
 use Runio\ScriptUi\Http\Response;
+use Runio\ScriptUi\Session\FrameworkSession;
 use Runio\ScriptUi\Session\Session;
 use Runio\ScriptUi\Signal\Stop;
 
@@ -183,6 +184,10 @@ final class Kernel
         $previous = Runtime::enter($page, $this);
         $restore = self::quiet($page->debug);
         $page->capture();
+        // exit runs none of the blocks below, and this is what notices it.
+        $onLeave = new OnLeave(function () use ($page): void {
+            $this->afterExit($page);
+        });
 
         try {
             $tool();
@@ -191,9 +196,40 @@ final class Kernel
         } catch (\Throwable $error) {
             $page->fail($error);
         } finally {
+            // First of all: from here on the page is not the current one any
+            // more, whatever happens next. Only exit never gets here.
+            Runtime::leave($previous);
             $page->release();
             $restore();
-            Runtime::leave($previous);
+        }
+    }
+
+    /**
+     * Called whenever execute() is left. When its page is still the current
+     * one, the tool ended PHP with exit: the page it drew so far is finished
+     * and sent now, and not when PHP shuts down. An application may close its
+     * session as the first thing of the shutdown (Symfony does that with PHP's
+     * own session), and what the tool keeps would come too late for it.
+     */
+    private function afterExit(Page $page): void
+    {
+        if (!Runtime::isCurrent($page)) {
+            // The run ended in a normal way. Or a page inside this one was the
+            // current one, and that one has answered.
+            return;
+        }
+        // Nothing is current from here on: not for a page around this one, and
+        // not for the shutdown of PHP, which would send the page once more.
+        Runtime::leave([null, null]);
+
+        try {
+            $page->release();
+            $response = $this->finish($page);
+            $this->persist();
+            $response->send();
+        } catch (\Throwable $error) {
+            // PHP is ending, and nobody is left to catch this.
+            error_log('Script UI: the page of a tool that ended PHP could not be sent: ' . self::oneLine($error->getMessage(), 300));
         }
     }
 
@@ -223,6 +259,25 @@ final class Kernel
                 }
             }
         };
+    }
+
+    /**
+     * Writes the session of an application now, where it can be told to. For a
+     * tool that ended PHP: the application is not there any more to do it, and
+     * what the tool keeps would be lost. PHP's own session writes itself.
+     */
+    public function persist(): void
+    {
+        if (!$this->session instanceof FrameworkSession) {
+            return;
+        }
+
+        try {
+            $this->session->save();
+        } catch (\Throwable $error) {
+            // PHP is ending, and the page is still to be sent. It says nothing of this.
+            error_log('Script UI: the session of the application could not be saved after a tool ended PHP: ' . self::oneLine($error->getMessage(), 300));
+        }
     }
 
     /** Saves what must be kept and turns the page into a response. */

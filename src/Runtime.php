@@ -30,6 +30,9 @@ final class Runtime
 
     private static bool $hooked = false;
 
+    /** The web server runs the script itself, and the page is sent when the script ends. */
+    private static bool $direct = false;
+
     public static function config(): Config
     {
         return self::$config ??= new Config();
@@ -87,7 +90,7 @@ final class Runtime
             new NativeSession($request->secure),
         );
 
-        // If a tool calls exit, the page it drew so far is still sent.
+        // After a fatal error inside a tool the page it drew so far is still sent.
         self::hook();
 
         $kernel->serve($request, new ToolFinder($directory), $base, self::webRoot())->send();
@@ -130,12 +133,19 @@ final class Runtime
         [self::$page, self::$kernel] = $previous;
     }
 
+    /** Is this the page that is being drawn right now? */
+    public static function isCurrent(Page $page): bool
+    {
+        return self::$page === $page;
+    }
+
     /** Forgets everything. For tests. */
     public static function reset(): void
     {
         self::$config = null;
         self::$page = null;
         self::$kernel = null;
+        self::$direct = false;
     }
 
     /** Direct mode: the script was opened in the browser and just called its first function. */
@@ -182,6 +192,7 @@ final class Runtime
         }
 
         self::enter($page, $kernel);
+        self::$direct = true;
         // Stays in force until the script ends. That is when the page is sent.
         Kernel::quiet($page->debug);
         $page->capture();
@@ -197,7 +208,11 @@ final class Runtime
         return $page;
     }
 
-    /** When PHP shuts down with a page still open, finish it and send it. */
+    /**
+     * When PHP shuts down with a page still open, finish it and send it. That
+     * is a script on its own that came to its end, or a fatal error in any tool.
+     * (A served tool that calls exit is seen earlier: Kernel::afterExit().)
+     */
     private static function hook(): void
     {
         if (self::$hooked) {
@@ -215,14 +230,27 @@ final class Runtime
             self::$kernel = null;
 
             $fatal = error_get_last();
-            if ($page->failure() === null
-                && $fatal !== null
-                && in_array($fatal['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR], true)) {
-                $page->fail(new \ErrorException($fatal['message'], 0, $fatal['type'], $fatal['file'], $fatal['line']));
+            if ($fatal !== null && !in_array($fatal['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR], true)) {
+                $fatal = null;
+            }
+            // A script on its own comes here when it ends, in whatever way. A
+            // served tool comes here in one way only: PHP broke down inside it.
+            // (Its normal end and exit are seen in Kernel::execute().) The last
+            // error does not always say so: a warning in an earlier step of the
+            // shutdown takes the place of the fatal error.
+            $died = $fatal !== null || !self::$direct;
+            if ($died && $page->failure() === null) {
+                $page->fail($fatal !== null
+                    ? new \ErrorException($fatal['message'], 0, $fatal['type'], $fatal['file'], $fatal['line'])
+                    : new \ErrorException('PHP ended while the tool ran. The error log of PHP says why.'));
             }
 
             $page->release();
-            $kernel->finish($page)->send();
+            $response = $kernel->finish($page);
+            // PHP is ending. An application that keeps the session never gets to
+            // save it, and what the page keeps was just written into it.
+            $kernel->persist();
+            $response->send();
         });
     }
 

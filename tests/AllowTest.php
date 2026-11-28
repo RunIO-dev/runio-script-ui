@@ -556,6 +556,7 @@ final class AllowTest extends ToolTestCase
     {
         // Not a file at all: the id is what the check is asked about, and it
         // has to be one that a tool of a folder could have.
+        $log = $this->captureErrorLog();
         $this->with($this->rules());
         $ran = false;
         $tool = static function () use (&$ran): void {
@@ -565,6 +566,10 @@ final class AllowTest extends ToolTestCase
         self::assertSame(403, $this->kernel()->handle(new Request('GET', '/x'), 'Refund Orders', $tool)->status);
         self::assertSame([], $this->asked);
         self::assertFalse($ran);
+        // Closed for everybody, and whoever looks after the server reads why.
+        $said = (string) file_get_contents($log);
+        self::assertStringContainsString('Script UI: the tool "Refund Orders" was not opened.', $said);
+        self::assertStringContainsString('lower-case letters, digits, "-" and "_"', $said);
 
         self::assertSame(200, $this->kernel()->handle(new Request('GET', '/x'), 'refund', $tool)->status);
         self::assertSame([['ava', 'refund']], $this->asked);

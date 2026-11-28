@@ -435,7 +435,15 @@ final class Kernel
     {
         if ($file === null) {
             // A tool that is a function and not a file. Its id is all there is to ask about.
-            return ToolFinder::idOf($toolId . '.php');
+            $id = ToolFinder::idOf($toolId . '.php');
+            if ($id === null) {
+                error_log(sprintf(
+                    'Script UI: the tool "%s" was not opened. Where an access check is set, the id of a tool has to be made of lower-case letters, digits, "-" and "_", like the file name of a tool in a folder. The check is asked about that id.',
+                    self::oneLine($toolId, 200),
+                ));
+            }
+
+            return $id;
         }
 
         if (!is_file($file)) {

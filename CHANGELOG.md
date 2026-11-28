@@ -6,13 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- `respond()` hands the page back instead of sending it, for an application built on Symfony or Laravel: a controller makes the response of its framework from the status, the headers and the body. `session:` keeps what the tools keep in the session of the application. Tried inside Laravel 12 and 13 and Symfony 7.4 and 8.1.
 - `variables:` in `serve()` gives every tool of a folder variables by name.
 - `user()` and the log name a user object of Symfony or Laravel by its identifier (`getUserIdentifier()`, `getAuthIdentifier()`), when the login check returns one.
 - The list of tools says when the folder of tools lies in the web root, where a web server runs a tool file by its name and past the checks of `serve()`. The note shows only where error details are shown.
 - `allow:` in `serve()` and `configure()` says who may open which tool. It gets what the login check returned and the id of a tool. A tool that is not allowed is left out of the list and answers "Not allowed" before anything of it runs. Only a plain `true` opens a tool, and the question is asked on every request.
 
+### Security
+- What the library keeps in a session belongs to the user the login check named. When another name shows up in the same session, as after a login without a logout before it, the saved inputs, the uploaded files, the waiting messages and the token of the forms are dropped. Before, they went to whoever used the session next.
+
 ### Changed
+- A served tool that ends PHP with `exit` gets its page sent at that moment, and no longer when PHP shuts down.
 - The list of tools is at the base as `base:` is written. With `base: '/admin/tools'` the links to the list now lead to `/admin/tools` and no longer to `/admin/tools/`. End the base with a slash to keep the old address.
+
+### Fixed
+- After a fatal error in a served tool the page reports the failure also when another shutdown function raised a warning first. Before, that warning hid the error, and the half-drawn page was sent as if all was well.
 
 ## [0.1.0] - 2026-11-27
 

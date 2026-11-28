@@ -403,6 +403,78 @@ By default tools are chosen with `?_tool=refund`. With `base: '/admin/tools'` th
 
 **One script on its own.** A script that the web server runs directly works too. Call `Runio\ScriptUi\configure(auth: ...)` in a file every tool includes, before anything is drawn. See [`examples/direct/hello.php`](examples/direct/hello.php). `configure()` takes `allow:` too. A script on its own is asked about by its file name: `payroll` for `payroll.php`. Then the name has to be one that a tool of a folder could have (lower-case letters, digits, `-` and `_`), or the script stays closed. Both checks are asked when the script calls its first function of the library. Put `title()` at the top: what stands above it runs for everybody. A script that shows several pages, such as an `index.php` with `?page=`, is one script, and it is asked about as `index`.
 
+### Inside Symfony and Laravel
+
+`serve()` sends the page itself. A framework wants to send it: a controller returns a response, and the framework adds its cookies and headers on the way out. `respond()` takes everything `serve()` takes. It works out the same page and hands it back, with `->status`, `->headers` and `->body`. One route leads every address under `base:` to it. The folder of tools lies next to `src/` or `app/`, outside the web root.
+
+Symfony:
+
+```php
+// src/Controller/ToolsController.php
+use function Runio\ScriptUi\respond;
+
+final class ToolsController extends AbstractController
+{
+    #[Route('/admin/tools/{tool}', defaults: ['tool' => ''], methods: ['GET', 'POST'])]
+    public function tools(Request $request): Response
+    {
+        $page = respond(
+            $this->getParameter('kernel.project_dir') . '/tools',
+            base: '/admin/tools',
+            auth: fn () => $this->getUser(),
+            allow: fn ($user, string $tool) => $tool !== 'payroll' || $this->isGranted('ROLE_PAYROLL'),
+            session: $request->getSession(),
+        );
+
+        return new Response($page->body, $page->status, $page->headers);
+    }
+}
+```
+
+Laravel:
+
+```php
+// routes/web.php
+use function Runio\ScriptUi\respond;
+
+Route::match(['get', 'post'], '/admin/tools/{tool?}', function (Request $request) {
+    $page = respond(
+        base_path('tools'),
+        base: '/admin/tools',
+        auth: fn () => $request->user(),
+        allow: fn ($user, string $tool) => Gate::forUser($user)->allows('open-tool', $tool),
+        session: $request->session(),
+    );
+
+    return response($page->body, $page->status, $page->headers);
+})->block();
+```
+
+```php
+// bootstrap/app.php, inside withMiddleware()
+$middleware->validateCsrfTokens(except: ['admin/tools', 'admin/tools/*']);
+```
+
+Pass all of `$page->headers` on. They carry the rule that lets the script of the page run.
+
+**The session.** With `session:` the tools keep what they keep in the session of your application, under the one key `_script_ui`, and a logout ends it. Without it they use PHP's own session. In Laravel that is a second session next to Laravel's, and a logout of Laravel does not end it.
+
+**The user.** `auth:` returns the user object of the framework, and `allow:` gets that object. `user()` and the log name it by `getUserIdentifier()` in Symfony and by `getAuthIdentifier()` in Laravel, which is the key of the row unless your model says otherwise. To show an email instead, return it: `auth: fn () => $request->user()?->email`. Then `allow:` gets the email too.
+
+**Laravel checks every form for its own token.** The forms of the tools carry the token of the library, and the library checks it on every request. So the route is taken out of Laravel's check, with the line for `bootstrap/app.php` above. Without it Laravel 12 answers every pressed button with "419 Page Expired". Laravel 13 lets a button through when the browser says that the request comes from the same site. Browsers say that on HTTPS and on localhost only, so the line is needed there as well.
+
+**Laravel does not lock its session.** Two requests of one user at the same moment each write the whole session, and the later one wins. What a tool kept in the other is lost then, for instance when a page that refreshes itself and a click meet. `->block()` lets the second wait for the first. It needs a cache that can lock, such as file, database or Redis. Symfony keeps its session in PHP's own by default, which locks.
+
+**Errors.** The error handling of the framework stays in charge. Laravel makes an error of every PHP warning, and Symfony does in its dev environment: a warning in a tool then ends the run, and the page says that the tool failed. After a fatal error the framework shows its own error page.
+
+**End a run with `stop()`, not with `exit`.** `exit` ends the framework together with the tool. The page is still sent and what the tool keeps is saved, but nothing of the framework runs after that line. In Laravel the lock of `->block()` is not given back, and the next click of that user waits until it runs out, which is 10 seconds.
+
+**Another Content-Security-Policy.** The page brings its own. A browser applies every policy it gets, so a second one that your application adds to all its responses blocks the script and the styles of the page. Leave this route out of it.
+
+**What does not work.** `respond()` takes the request from PHP itself (`$_SERVER`, `$_GET`, `$_POST` and `$_FILES`). The test client of a framework does not fill those in, so a tool cannot be opened with `$client->request()` or `$this->get()`. `respond()` says so with an exception. Try a tool in a browser test. Servers that keep PHP running between requests, such as Laravel Octane, RoadRunner, Swoole and FrankenPHP in worker mode, are not supported.
+
+**What was tried.** Laravel 12 and 13 and Symfony 7.4 and 8.1, as they are after a fresh install, on PHP's built-in web server. The suite in [`e2e/frameworks`](e2e/frameworks) runs the same tools inside each of them. Not tried with a framework: php-fpm, Apache and nginx, Symfony's prod environment, and a user that comes from a database.
+
 ### Languages
 
 The texts the library writes itself ("Yes", "Cancel", "Reset", "No rows.") come in English, Arabic and German. Each page follows the language its title is written in, so a tool with an Arabic title is Arabic throughout and runs right to left. Call `title()` first: what is drawn before it does not know the language yet.
@@ -431,6 +503,7 @@ Pages that are not a tool have no title to follow: the list of tools and pages s
 
 - **No login check, no outside access.** Without `auth`, tools only answer to a browser on the computer they run on. The request must come from a loopback address, with a local host name, and must not look passed on (proxy headers, HTTP/1.0, `Connection: close`). No check of this kind can see through every proxy or tunnel, so anything that can be reached from outside needs `auth`.
 - **A tool can be closed to some users.** `allow:` is asked before anything of a tool runs, on every request, and only a plain `true` opens the tool. Without `allow:` every tool is open to everybody who gets past the login check. Both checks are settings of `serve()`: a tool file that the web server runs by itself knows nothing of them, which is why the folder of tools stays out of the web root.
+- **What a tool keeps belongs to one user.** The inputs, the uploaded files and the messages that the library keeps in a session are dropped when the login check names another user in that session, as after a login without a logout before it. The forms of the user before are not taken any more. A login check that names nobody cannot tell users apart.
 - **Forged requests are refused.** Every form carries a token. A button only counts on a form that was sent from the page itself. The "Reset" link carries a code of its own.
 - **Everything is escaped.** Labels, table cells and messages are text, never HTML. Output printed with `echo` is shown as text too.
 - **A strict Content-Security-Policy** on every page: no inline styles, no inline handlers, nothing from other sites, no framing.
@@ -456,7 +529,7 @@ What stays your job: decide who may open which tool (`allow:`) and who may do wh
 - Every tab of `tabs()` runs on every run. There is no way yet to run only the open one, and a link cannot open a tab or an expander.
 - `refresh()` runs the whole script and swaps the whole content. There is no way yet to refresh one part of a page, and the server pushes nothing: the page asks. When something above the place you look at grows or shrinks, the page moves under your eyes.
 - Charts are bar and line charts with one axis and at most 8 series.
-- State lives in the PHP session. Two browser tabs of the same tool share saved inputs. A session remembers the inputs of the 50 tools that were used last.
+- State lives in the session: PHP's own, or the one you pass to `respond()` with `session:`. Two browser tabs of the same tool share saved inputs. A session remembers the inputs of the 50 tools that were used last.
 - A script that runs on its own (without `serve()`) is told apart by its file and its path. Tools that share both and differ only in the query string (`index.php?page=refund`) work, but they do not remember their inputs separately.
 
 ## Development and tests
@@ -482,7 +555,17 @@ npx playwright install chromium
 npx playwright test
 ```
 
-They drive the example tools in a real browser: the refund flow from the first key press to the audit log, downloads, uploads up to a file that is dragged onto the page, the charts, the Arabic page, a dark theme, a phone-sized window and the page without JavaScript. They start their own two servers on ports 8775 and 8776 and work on a copy of the example tools, so a demo that is running keeps its data.
+They drive the example tools in a real browser: the refund flow from the first key press to the audit log, downloads, uploads up to a file that is dragged onto the page, the charts, the Arabic page, a dark theme, a phone-sized window and the page without JavaScript. They start their own servers on ports 8775 to 8780 and work on a copy of the example tools, so a demo that is running keeps its data.
+
+The same kind of tools run inside a real Laravel and a real Symfony in a suite of its own. It downloads the two applications with Composer first, into a folder outside this repository, which takes a minute or two:
+
+```bash
+cd e2e
+node frameworks/setup.mjs
+npx playwright test -c frameworks
+```
+
+`LARAVEL='^12.0' SYMFONY='7.4.*' node frameworks/setup.mjs` chooses other versions. The two servers use the ports 8781 and 8782.
 
 ## License
 

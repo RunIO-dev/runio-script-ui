@@ -133,9 +133,17 @@ test('an answer that a tool prints by itself is handed back like a page', async 
     expect(response.headers()['content-type']).toBe('text/plain; charset=utf-8');
     // Each header once: the application adds its headers to those PHP holds already.
     expect(response.headers()['x-tool']).toBe('own');
-    // Only what the tool set was taken. What the application had set before is as it was.
-    expect((await response.headersArray()).filter((header) => 'x-app-early' === header.name.toLowerCase()).map((header) => header.value))
-        .toEqual(['one', 'two']);
+    // Only what the tool set was taken. What the application had set before is as it was,
+    // also under a name that the tool added a line to.
+    const lines = async (name) => (await response.headersArray())
+        .filter((header) => name === header.name.toLowerCase()).map((header) => header.value);
+    expect(await lines('x-app-early')).toEqual(['one', 'two', 'three']);
+    // A header that the tool replaced stays replaced.
+    expect(await lines('x-app-mode')).toEqual(['tool']);
+    // And one that the tool did not touch is there once, as before.
+    expect(await lines('x-app-kept')).toEqual(['once']);
+    // A response holds one value for a name: two lines of the tool come as one list.
+    expect(await lines('x-tool-list')).toEqual(['a, b']);
     expect(response.headers()['x-buffers']).toBe('1 before, 1 after');
     expect(await response.text()).toBe('An answer of the tool itself.');
     // Cookies stay with PHP, which sends every one of them.

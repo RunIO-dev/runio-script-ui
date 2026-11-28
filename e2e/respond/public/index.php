@@ -156,6 +156,8 @@ if ($path === '/logout') {
 // Headers the application sets early, before the controller runs. They are its own.
 header('X-App-Early: one', false);
 header('X-App-Early: two', false);
+header('X-App-Mode: application');
+header('X-App-Kept: once');
 
 // The controller.
 $buffers = ob_get_level();

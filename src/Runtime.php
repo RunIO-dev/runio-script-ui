@@ -190,18 +190,38 @@ final class Runtime
      */
     private static function takeHeaders(array $before): array
     {
+        $now = headers_list();
         $headers = [];
-        foreach (array_diff(headers_list(), $before) as $line) {
+        // A name in lower case => the name as the tool wrote it first.
+        $names = [];
+        foreach (array_diff($now, $before) as $line) {
             $parts = explode(':', $line, 2);
-            // A cookie may come several times, and a response holds one value
-            // for a name. Cookies stay with PHP, which sends them as well.
-            if (count($parts) === 2 && strcasecmp(trim($parts[0]), 'Set-Cookie') !== 0) {
-                $headers[trim($parts[0])] = trim($parts[1]);
+            $name = trim($parts[0]);
+            $known = strtolower($name);
+            // A cookie cannot share a line with another one. Cookies stay with
+            // PHP, which sends them as well.
+            if (count($parts) !== 2 || $known === 'set-cookie') {
+                continue;
             }
+
+            // A response holds one value for a name. Several lines of one
+            // header mean the same as one line that lists their values.
+            $names[$known] ??= $name;
+            $value = trim($parts[1]);
+            $headers[$names[$known]] = isset($headers[$names[$known]]) ? $headers[$names[$known]] . ', ' . $value : $value;
         }
 
-        foreach (array_keys($headers) as $name) {
+        foreach ($names as $name) {
             header_remove($name);
+        }
+
+        // PHP lets go of every line of a name at once. A line that the
+        // application had set under such a name, and that the tool left as it
+        // was, goes back.
+        foreach (array_intersect($before, $now) as $line) {
+            if (isset($names[strtolower(trim(explode(':', $line, 2)[0]))])) {
+                header($line, false);
+            }
         }
 
         return $headers;

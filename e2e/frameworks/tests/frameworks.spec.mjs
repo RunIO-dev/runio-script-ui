@@ -173,6 +173,9 @@ for (const app of APPS) {
             // would get the type the framework puts on its own pages, and "<b>" would be bold.
             expect(response.status()).toBe(200);
             expect(response.headers()['content-type']).toBe('text/plain; charset=utf-8');
+            // The response of a framework holds one value for a name: the two lines come as one list.
+            expect((await response.headersArray()).filter((header) => 'x-tool-list' === header.name.toLowerCase()).map((header) => header.value))
+                .toEqual(['a, b']);
             expect(await response.text()).toBe('An answer of the tool itself: <b>not HTML</b>.');
         });
 
